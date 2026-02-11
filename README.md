@@ -1,160 +1,242 @@
-# Canvas Editor
+# Canvas Editor - Minimal Core
 
-A Canva-like visual editor built with Next.js (App Router), TypeScript, React, and Konva.
+Canvas Editor พื้นฐานสำหรับการเรียนรู้ สร้างด้วย **Next.js**, **TypeScript**, **React-Konva**, และ **Zustand**
 
-## Features
+## Features พื้นฐานที่รองรับ
 
-- ✅ **Multi-selection**: Shift-click, marquee select, multi-drag
-- ✅ **Transform controls**: Resize, rotate with Konva.Transformer
-- ✅ **Undo/Redo**: Operation-based history
-- ✅ **Auto-save**: Automatic saving to localStorage
-- ✅ **Keyboard shortcuts**: Comprehensive keyboard support
-- ✅ **Alignment tools**: Align left/center/right/top/middle/bottom
-- ✅ **Layer management**: Bring to front, send to back
-- ✅ **Inspector panel**: Edit properties of selected elements
-- ✅ **Zoom & Pan**: Mouse wheel zoom, Space+drag pan
-- ✅ **Multiple node types**: Rectangle, Ellipse, Text, Image, Video
+- ✅ **ลาก (Drag)** - ลาก nodes ไปมาบน canvas
+- ✅ **เพิ่ม Node** - เพิ่ม rect, ellipse, text, image, video
+- ✅ **Selection** - เลือก node เดียว หรือหลาย nodes (marquee select)
+- ✅ **Transform** - ย่อขยาย/หมุน nodes
+- ✅ **Group Selection** - ลากคลุมเลือกหลาย nodes
+- ✅ **Text Editing** - double-click เพื่อแก้ไขข้อความ
+- ✅ **Video Overlay** - แสดง video ทับ canvas
+- ✅ **Undo/Redo** - ย้อนกลับ/ทำซ้ำ
+- ✅ **Pan & Zoom** - เลื่อน & ซูม canvas
+- ✅ **Snap** - จัดตำแหน่งอัตโนมัติ
+- ✅ **Auto-save** - บันทึกลง localStorage อัตโนมัติ
 
-## Getting Started
+## โครงสร้างโปรเจค
 
-### Installation
-
-```bash
-npm install
+```
+src/features/editor/
+├── EditorClient.tsx          # Component หลัก + keyboard shortcuts
+├── core/
+│   ├── doc/
+│   │   ├── types.ts          # Type definitions (Node, Document, etc.)
+│   │   └── migrate.ts        # สร้าง empty document
+│   ├── commands/
+│   │   ├── index.ts          # Export ทุก commands
+│   │   ├── insert.ts         # เพิ่ม nodes (rect, ellipse, text, image, video)
+│   │   ├── selection.ts      # selectAll, clearSelection
+│   │   ├── transform.ts      # commitMove, commitTransform, nudgeSelection
+│   │   ├── edit.ts           # editNode (แก้ไข properties)
+│   │   └── clipboard.ts      # copy, cut, paste, delete, duplicate
+│   ├── geometry/
+│   │   ├── bounds.ts         # คำนวณ bounds
+│   │   ├── hitTest.ts        # หา node ที่คลิก
+│   │   └── snap.ts           # snap เข้ากับ node อื่น
+│   └── history/
+│       ├── ops.ts            # Operation types + inverseOp
+│       └── historyStore.ts   # Undo/Redo store
+├── stores/
+│   ├── docStore.ts           # Document state
+│   ├── selectionStore.ts     # Selection state
+│   ├── viewStore.ts          # Viewport (pan/zoom)
+│   ├── toolStore.ts          # Active tool
+│   ├── textEditStore.ts      # Text editing state
+│   └── snapGuidesStore.ts    # Snap guide lines
+└── renderer/
+    ├── konva/
+    │   ├── KonvaCanvas.tsx   # Canvas หลัก
+    │   ├── RenderNodes.tsx   # Render ทุก nodes
+    │   ├── EventBridge.ts    # จัดการ mouse events
+    │   ├── SelectionController.tsx  # Transform handles
+    │   └── GuidesLayer.tsx   # เส้น snap guides
+    └── overlays/
+        ├── OverlayRoot.tsx   # รวม overlays
+        ├── TextEditOverlay.tsx  # Modal แก้ไขข้อความ
+        └── VideoOverlay.tsx  # Video player
 ```
 
-### Development
+## Data Flow
 
-```bash
-npm run dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000) to see the application.
-
-### Build
-
-```bash
-npm run build
-npm start
+User Action
+    │
+    ▼
+EventBridge (mouse events) ──► Commands (insert, transform, etc.)
+    │                              │
+    │                              ▼
+    │                         HistoryStore.commit(op)
+    │                              │
+    │                              ▼
+    │                         applyOperation()
+    │                              │
+    ▼                              ▼
+Stores (doc, selection, view) ◄───┘
+    │
+    ▼
+React re-render
+    │
+    ▼
+Konva Canvas (RenderNodes, SelectionController)
 ```
 
 ## Keyboard Shortcuts
 
-- **Ctrl/Cmd + Z**: Undo
-- **Ctrl/Cmd + Shift + Z** or **Ctrl/Cmd + Y**: Redo
-- **Ctrl/Cmd + A**: Select all
-- **Ctrl/Cmd + C**: Copy
-- **Ctrl/Cmd + X**: Cut
-- **Ctrl/Cmd + V**: Paste
-- **Delete/Backspace**: Delete selected
-- **Escape**: Clear selection
-- **Arrow keys**: Nudge selected (Shift = 10px)
-- **Space + Drag**: Pan canvas
-- **Mouse wheel**: Zoom (cursor-centered)
+| Keys                  | Action            |
+| --------------------- | ----------------- |
+| Ctrl+Z                | Undo              |
+| Ctrl+Y / Ctrl+Shift+Z | Redo              |
+| Ctrl+A                | เลือกทั้งหมด      |
+| Ctrl+C                | Copy              |
+| Ctrl+X                | Cut               |
+| Ctrl+V                | Paste             |
+| Delete / Backspace    | ลบ                |
+| Escape                | ยกเลิกเลือก       |
+| Arrow Keys            | เลื่อน nodes 1px  |
+| Shift + Arrow Keys    | เลื่อน nodes 10px |
 
-## Project Structure
+## การใช้งาน
 
-```
-src/
-├── app/                          # Next.js App Router
-│   ├── dashboard/                # Document list
-│   ├── editor/[docId]/           # Editor page
-│   └── api/                      # API routes (placeholder)
-│
-├── features/editor/              # Main editor feature
-│   ├── EditorClient.tsx          # Editor entry with keyboard shortcuts
-│   ├── EditorLayout.tsx          # Layout with panels
-│   │
-│   ├── core/                     # Core logic
-│   │   ├── doc/                  # Document types & schema
-│   │   ├── commands/             # Command pattern for actions
-│   │   ├── history/              # Undo/redo operations
-│   │   ├── geometry/             # Bounds, hit-test, snap, transforms
-│   │   └── io/                   # Export utilities
-│   │
-│   ├── stores/                   # Zustand state management
-│   │   ├── docStore.ts           # Document state
-│   │   ├── selectionStore.ts    # Selection state
-│   │   ├── viewStore.ts          # Viewport state
-│   │   ├── toolStore.ts          # Active tool
-│   │   ├── uiStore.ts            # UI state (panels, modals)
-│   │   └── assetsStore.ts        # Assets management
-│   │
-│   ├── renderer/                 # Rendering layer
-│   │   ├── konva/                # Konva canvas & shapes
-│   │   │   ├── KonvaCanvas.tsx
-│   │   │   ├── RenderNodes.tsx
-│   │   │   ├── SelectionController.tsx
-│   │   │   ├── GuidesLayer.tsx
-│   │   │   └── EventBridge.ts
-│   │   └── overlays/             # DOM overlays (text edit, video)
-│   │
-│   ├── ui/                       # UI components
-│   │   ├── TopBar/               # Toolbar with tools & controls
-│   │   ├── LeftPanel/            # Elements & assets panels
-│   │   ├── RightPanel/           # Inspector & layers panels
-│   │   ├── Modals/               # Modal dialogs
-│   │   └── Toasts/               # Toast notifications
-│   │
-│   └── assets/                   # Asset management
-│       ├── imageCache.ts
-│       └── fontLoader.ts
-│
-├── services/                     # External services
-│   └── api/                      # API clients
-│       ├── docs.service.ts       # Document persistence (localStorage)
-│       ├── assets.service.ts
-│       └── export.service.ts
-│
-└── shared/                       # Shared utilities
-    ├── utils/
-    └── styles/
+### 1. เริ่มต้น Development
+
+```bash
+npm install
+npm run dev
 ```
 
-## Architecture
+เปิด http://localhost:3000/editor/demo
 
-### State Management
+### 2. เพิ่ม Node ด้วยโค้ด
 
-- **Zustand** with Immer for immutable state updates
-- Separate stores for different concerns (document, selection, view, tools, UI)
+```typescript
+import {
+  insertRect,
+  insertText,
+  insertEllipse,
+} from "@/features/editor/core/commands";
 
-### Command Pattern
+// เพิ่มสี่เหลี่ยม
+insertRect(500, 300, 100, 100);
 
-All user actions are executed through commands that can be undone/redone:
+// เพิ่มข้อความ
+insertText(600, 400, "Hello World");
 
-- `InsertOp`, `DeleteOp`, `MoveOp`, `TransformOp`, `EditOp`, `ArrangeOp`
+// เพิ่มวงรี
+insertEllipse(700, 500, 150, 100);
+```
 
-### Coordinate System
+### 3. แก้ไข Node
 
-- **Center-based coordinates**: All nodes use (x, y) as their center point
-- Konva shapes use `offsetX` and `offsetY` set to half dimensions
-- This ensures proper rotation and scaling behavior
+```typescript
+import { editNode } from "@/features/editor/core/commands";
 
-### Multi-Selection & Transform
+// เปลี่ยนสี
+editNode("node_abc123", { fill: "#ff0000" });
 
-- Selection proxy rectangle for multi-selection
-- Konva.Transformer applies delta transforms to all selected nodes
-- Transform committed on `onTransformEnd` to history
+// เปลี่ยนข้อความ
+editNode("node_text456", { text: "New Text", fontSize: 32 });
+```
 
-### Persistence
+### 4. Transform Node
 
-- Documents stored in localStorage via `docsService`
-- Auto-save on operation commit (debounced)
-- Schema validation with Zod
+```typescript
+import { commitTransform } from "@/features/editor/core/commands";
 
-## Future Enhancements
+// ย่อขยาย + หมุน
+commitTransform([
+  {
+    id: "node_abc123",
+    changes: {
+      width: 200,
+      height: 150,
+      rotation: 45,
+    },
+  },
+]);
+```
 
-- [ ] Server-side persistence API
-- [ ] Real-time collaboration
-- [ ] More shape types (polygon, star, path)
-- [ ] Grouping & hierarchy
-- [ ] Effects & filters
-- [ ] Export to PDF, SVG
-- [ ] Template library
-- [ ] Animation timeline
-- [ ] Plugin system
+## Node Types
+
+### BaseNode (ทุก node มี)
+
+```typescript
+{
+  id: string; // รหัสเฉพาะ
+  type: NodeType; // "rect" | "ellipse" | "text" | "image" | "video"
+  x: number; // ตำแหน่ง X (กึ่งกลาง)
+  y: number; // ตำแหน่ง Y (กึ่งกลาง)
+  width: number;
+  height: number;
+  rotation: number; // องศา
+  opacity: number; // 0-1
+  locked: boolean;
+  visible: boolean;
+}
+```
+
+### RectNode
+
+```typescript
+{
+  ...BaseNode,
+  type: "rect",
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+  cornerRadius?: number;
+}
+```
+
+### EllipseNode
+
+```typescript
+{
+  ...BaseNode,
+  type: "ellipse",
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+}
+```
+
+### TextNode
+
+```typescript
+{
+  ...BaseNode,
+  type: "text",
+  text: string;
+  fontSize: number;
+  fontFamily: string;
+  fill: string;
+  fontStyle?: "normal" | "bold" | "italic";
+  align?: "left" | "center" | "right";
+}
+```
+
+### ImageNode
+
+```typescript
+{
+  ...BaseNode,
+  type: "image",
+  src: string;  // URL รูปภาพ
+}
+```
+
+### VideoNode
+
+```typescript
+{
+  ...BaseNode,
+  type: "video",
+  src: string;  // URL วิดีโอ
+}
+```
 
 ## License
 
 MIT
-# authering-tool-structure

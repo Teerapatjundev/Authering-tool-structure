@@ -1,13 +1,29 @@
+/**
+ * ===============================================
+ * HISTORY STORE - ระบบ Undo/Redo
+ * ===============================================
+ *
+ * จัดการ history สำหรับ undo/redo operations
+ *
+ * โครงสร้าง:
+ * - past: Stack ของ operations ที่ทำไปแล้ว (สำหรับ undo)
+ * - future: Stack ของ operations ที่ undo ไปแล้ว (สำหรับ redo)
+ *
+ * Flow:
+ * 1. ทำ action → commit(op) → push to past, clear future
+ * 2. Undo → pop from past, apply inverse, push to future
+ * 3. Redo → pop from future, apply, push to past
+ */
+
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { Operation, inverseOp } from "./ops";
 import { useDocStore } from "../../stores/docStore";
+import { inverseOp, Operation } from "./ops";
 
 interface HistoryState {
   past: Operation[];
   future: Operation[];
 
-  // Actions
   commit: (op: Operation) => void;
   undo: () => void;
   redo: () => void;
@@ -21,21 +37,28 @@ export const useHistoryStore = create<HistoryState>()(
     past: [],
     future: [],
 
+    /**
+     * บันทึก operation ใหม่
+     * - เพิ่ม op เข้า past
+     * - ลบ future ทั้งหมด (redo จะไม่ได้แล้ว)
+     * - Apply operation
+     * - Auto-save
+     */
     commit: (op: Operation) => {
       set((state) => {
         state.past.push(op);
-        state.future = []; // Clear redo stack
+        state.future = [];
       });
 
-      // Apply operation
       applyOperation(op);
-
-      // Auto-save
       useDocStore.getState().autoSave();
     },
 
+    /**
+     * Undo operation ล่าสุด
+     */
     undo: () => {
-      const { past, future } = get();
+      const { past } = get();
       if (past.length === 0) return;
 
       const op = past[past.length - 1];
@@ -50,6 +73,9 @@ export const useHistoryStore = create<HistoryState>()(
       useDocStore.getState().autoSave();
     },
 
+    /**
+     * Redo operation ที่ undo ไป
+     */
     redo: () => {
       const { future } = get();
       if (future.length === 0) return;
@@ -74,21 +100,27 @@ export const useHistoryStore = create<HistoryState>()(
   })),
 );
 
+/**
+ * Apply operation ไปยัง document
+ * @param op - Operation ที่ต้องการ apply
+ */
 function applyOperation(op: Operation): void {
-  const { doc, updateNodes, addNode, removeNodes, setNodes } =
-    useDocStore.getState();
+  const { doc, updateNodes, addNode, removeNodes } = useDocStore.getState();
   if (!doc) return;
 
   switch (op.type) {
     case "insert":
+      // เพิ่ม nodes
       op.nodes.forEach((node) => addNode(node));
       break;
 
     case "delete":
+      // ลบ nodes
       removeNodes(op.nodeIds);
       break;
 
     case "move":
+      // ย้าย nodes
       updateNodes(
         op.updates.map((u) => ({
           id: u.id,
@@ -98,6 +130,7 @@ function applyOperation(op: Operation): void {
       break;
 
     case "transform":
+      // Transform nodes (resize, rotate)
       updateNodes(
         op.updates.map((u) => ({
           id: u.id,
@@ -107,21 +140,13 @@ function applyOperation(op: Operation): void {
       break;
 
     case "edit":
+      // แก้ไข properties
       updateNodes([
         {
           id: op.nodeId,
           changes: op.newProps,
         },
       ]);
-      break;
-
-    case "arrange":
-      // Reorder nodes
-      const nodeMap = new Map(doc.nodes.map((n) => [n.id, n]));
-      const newNodes = op.newOrder
-        .map((id) => nodeMap.get(id)!)
-        .filter(Boolean);
-      setNodes(newNodes);
       break;
   }
 }

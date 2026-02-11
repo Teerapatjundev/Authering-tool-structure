@@ -1,6 +1,14 @@
-"use client";
+/**
+ * ===============================================
+ * OVERLAY ROOT - รวม Overlays ทั้งหมด
+ * ===============================================
+ *
+ * Container สำหรับ overlays ที่แสดงทับ canvas:
+ * - TextEditOverlay: modal แก้ไขข้อความ
+ * - VideoOverlay: video elements
+ */
 
-// Overlays root component
+"use client";
 
 import { TextEditOverlay } from "./TextEditOverlay";
 import { VideoOverlay } from "./VideoOverlay";
@@ -8,8 +16,8 @@ import { VideoOverlay } from "./VideoOverlay";
 export function OverlayRoot() {
   return (
     <>
-      <TextEditOverlay />
       <VideoOverlay />
+      <TextEditOverlay />
     </>
   );
 }

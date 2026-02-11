@@ -1,7 +1,17 @@
-// Insert commands
+/**
+ * ===============================================
+ * INSERT COMMANDS - คำสั่งเพิ่ม Node
+ * ===============================================
+ *
+ * คำสั่งสำหรับเพิ่ม nodes ใหม่ลงใน canvas:
+ * - insertRect: เพิ่มสี่เหลี่ยม
+ * - insertEllipse: เพิ่มวงรี
+ * - insertText: เพิ่มข้อความ
+ * - insertImage: เพิ่มรูปภาพ
+ * - insertVideo: เพิ่มวิดีโอ
+ */
 
 import {
-  Node,
   RectNode,
   EllipseNode,
   TextNode,
@@ -12,6 +22,13 @@ import { generateNodeId } from "@/shared/utils/id";
 import { useHistoryStore } from "../history/historyStore";
 import { InsertOp } from "../history/ops";
 
+/**
+ * เพิ่มสี่เหลี่ยมลงใน canvas
+ * @param x - ตำแหน่ง X (กึ่งกลาง)
+ * @param y - ตำแหน่ง Y (กึ่งกลาง)
+ * @param width - ความกว้าง
+ * @param height - ความสูง
+ */
 export function insertRect(
   x: number,
   y: number,
@@ -29,21 +46,18 @@ export function insertRect(
     opacity: 1,
     locked: false,
     visible: true,
-    fill: "#3b82f6",
-    stroke: "#1e40af",
+    fill: "#3b82f6", // น้ำเงิน
+    stroke: "#1e40af", // ขอบน้ำเงินเข้ม
     strokeWidth: 2,
     cornerRadius: 0,
   };
 
-  const op: InsertOp = {
-    type: "insert",
-    timestamp: Date.now(),
-    nodes: [node],
-  };
-
-  useHistoryStore.getState().commit(op);
+  commitInsert([node]);
 }
 
+/**
+ * เพิ่มวงรีลงใน canvas
+ */
 export function insertEllipse(
   x: number,
   y: number,
@@ -61,20 +75,17 @@ export function insertEllipse(
     opacity: 1,
     locked: false,
     visible: true,
-    fill: "#10b981",
-    stroke: "#059669",
+    fill: "#10b981", // เขียว
+    stroke: "#059669", // ขอบเขียวเข้ม
     strokeWidth: 2,
   };
 
-  const op: InsertOp = {
-    type: "insert",
-    timestamp: Date.now(),
-    nodes: [node],
-  };
-
-  useHistoryStore.getState().commit(op);
+  commitInsert([node]);
 }
 
+/**
+ * เพิ่มข้อความลงใน canvas
+ */
 export function insertText(x: number, y: number, text = "Text"): void {
   const node: TextNode = {
     id: generateNodeId(),
@@ -95,15 +106,13 @@ export function insertText(x: number, y: number, text = "Text"): void {
     align: "left",
   };
 
-  const op: InsertOp = {
-    type: "insert",
-    timestamp: Date.now(),
-    nodes: [node],
-  };
-
-  useHistoryStore.getState().commit(op);
+  commitInsert([node]);
 }
 
+/**
+ * เพิ่มรูปภาพลงใน canvas
+ * @param src - URL ของรูปภาพ
+ */
 export function insertImage(
   x: number,
   y: number,
@@ -125,15 +134,13 @@ export function insertImage(
     src,
   };
 
-  const op: InsertOp = {
-    type: "insert",
-    timestamp: Date.now(),
-    nodes: [node],
-  };
-
-  useHistoryStore.getState().commit(op);
+  commitInsert([node]);
 }
 
+/**
+ * เพิ่มวิดีโอลงใน canvas
+ * @param src - URL ของวิดีโอ
+ */
 export function insertVideo(
   x: number,
   y: number,
@@ -155,11 +162,21 @@ export function insertVideo(
     src,
   };
 
+  commitInsert([node]);
+}
+
+// ===============================================
+// HELPER FUNCTION
+// ===============================================
+
+/** Commit insert operation ไปยัง history */
+function commitInsert(
+  nodes: (RectNode | EllipseNode | TextNode | ImageNode | VideoNode)[],
+): void {
   const op: InsertOp = {
     type: "insert",
     timestamp: Date.now(),
-    nodes: [node],
+    nodes,
   };
-
   useHistoryStore.getState().commit(op);
 }

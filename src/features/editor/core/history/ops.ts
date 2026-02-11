@@ -1,31 +1,44 @@
-// Operation types for history
+/**
+ * ===============================================
+ * HISTORY OPERATIONS
+ * ===============================================
+ *
+ * ประเภทของ Operation สำหรับระบบ Undo/Redo
+ * ทุก operation ต้องสามารถ reverse (inverse) ได้
+ *
+ * Operations:
+ * - insert: เพิ่ม node
+ * - delete: ลบ node
+ * - move: ย้าย node
+ * - transform: เปลี่ยน size/rotation
+ * - edit: แก้ไขคุณสมบัติอื่นๆ
+ */
 
 import { Node } from "../doc/types";
 
-export type OpType =
-  | "insert"
-  | "delete"
-  | "move"
-  | "transform"
-  | "edit"
-  | "arrange";
+// ประเภทของ Operation
+export type OpType = "insert" | "delete" | "move" | "transform" | "edit";
 
+// Base interface ที่ทุก operation มี
 export interface BaseOp {
   type: OpType;
   timestamp: number;
 }
 
+// เพิ่ม nodes ใหม่
 export interface InsertOp extends BaseOp {
   type: "insert";
   nodes: Node[];
 }
 
+// ลบ nodes
 export interface DeleteOp extends BaseOp {
   type: "delete";
   nodeIds: string[];
-  deletedNodes: Node[]; // For undo
+  deletedNodes: Node[]; // เก็บไว้สำหรับ undo
 }
 
+// ย้าย nodes
 export interface MoveOp extends BaseOp {
   type: "move";
   updates: Array<{
@@ -37,6 +50,7 @@ export interface MoveOp extends BaseOp {
   }>;
 }
 
+// เปลี่ยน size/rotation
 export interface TransformOp extends BaseOp {
   type: "transform";
   updates: Array<{
@@ -46,6 +60,7 @@ export interface TransformOp extends BaseOp {
   }>;
 }
 
+// แก้ไขคุณสมบัติอื่นๆ (เช่น text, fill)
 export interface EditOp extends BaseOp {
   type: "edit";
   nodeId: string;
@@ -53,23 +68,18 @@ export interface EditOp extends BaseOp {
   newProps: Partial<Node>;
 }
 
-export interface ArrangeOp extends BaseOp {
-  type: "arrange";
-  oldOrder: string[];
-  newOrder: string[];
-}
+// รวม Operation ทั้งหมด
+export type Operation = InsertOp | DeleteOp | MoveOp | TransformOp | EditOp;
 
-export type Operation =
-  | InsertOp
-  | DeleteOp
-  | MoveOp
-  | TransformOp
-  | EditOp
-  | ArrangeOp;
-
+/**
+ * สร้าง Operation ที่ตรงข้าม (สำหรับ Undo)
+ * @param op - Operation ที่ต้องการ reverse
+ * @returns Operation ที่ตรงข้าม
+ */
 export function inverseOp(op: Operation): Operation {
   switch (op.type) {
     case "insert":
+      // Inverse ของ insert คือ delete
       return {
         type: "delete",
         timestamp: Date.now(),
@@ -78,6 +88,7 @@ export function inverseOp(op: Operation): Operation {
       };
 
     case "delete":
+      // Inverse ของ delete คือ insert
       return {
         type: "insert",
         timestamp: Date.now(),
@@ -85,6 +96,7 @@ export function inverseOp(op: Operation): Operation {
       };
 
     case "move":
+      // สลับ old กับ new
       return {
         type: "move",
         timestamp: Date.now(),
@@ -98,6 +110,7 @@ export function inverseOp(op: Operation): Operation {
       };
 
     case "transform":
+      // สลับ oldProps กับ newProps
       return {
         type: "transform",
         timestamp: Date.now(),
@@ -109,20 +122,13 @@ export function inverseOp(op: Operation): Operation {
       };
 
     case "edit":
+      // สลับ oldProps กับ newProps
       return {
         type: "edit",
         timestamp: Date.now(),
         nodeId: op.nodeId,
         oldProps: op.newProps,
         newProps: op.oldProps,
-      };
-
-    case "arrange":
-      return {
-        type: "arrange",
-        timestamp: Date.now(),
-        oldOrder: op.newOrder,
-        newOrder: op.oldOrder,
       };
   }
 }

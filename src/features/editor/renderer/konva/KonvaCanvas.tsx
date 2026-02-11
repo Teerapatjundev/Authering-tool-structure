@@ -1,18 +1,33 @@
+/**
+ * ===============================================
+ * KONVA CANVAS - Canvas หลัก
+ * ===============================================
+ *
+ * Component หลักที่ render canvas โดยใช้ Konva
+ *
+ * โครงสร้าง Layers:
+ * 1. Content Layer: พื้นหลังและ nodes ทั้งหมด
+ * 2. Selection Layer: Transformer handles และ snap guides
+ *
+ * Features:
+ * - Pan & Zoom (wheel + drag)
+ * - Render nodes (rect, ellipse, text, image, video)
+ * - Selection & Transform handles
+ * - Snap guides
+ */
+
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Stage, Layer } from "react-konva";
+import { Stage, Layer, Rect, Group } from "react-konva";
+import Konva from "konva";
 import { useViewStore } from "../../stores/viewStore";
 import { useDocStore } from "../../stores/docStore";
-import { useSelectionStore } from "../../stores/selectionStore";
-import { useToolStore } from "../../stores/toolStore";
 import { RenderNodes } from "./RenderNodes";
-import { Rect } from "react-konva";
-import Konva from "konva";
-import { SelectionController } from "./SelectionController";
 import { GuidesLayer } from "./GuidesLayer";
-import { GridLayer } from "./GridLayer";
+import { MarqueeLayer } from "./MarqueeLayer";
 import { EventBridge } from "./EventBridge";
+import { SelectionController } from "./SelectionController";
 
 interface KonvaCanvasProps {
   width: number;
@@ -25,61 +40,69 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
   const { doc } = useDocStore();
   const nodes = doc?.nodes || [];
 
+  // อัพเดท canvas size
   useEffect(() => {
-    // Set canvas size in view store
     useViewStore.getState().setCanvasSize(width, height);
   }, [width, height]);
 
+  // แสดง loading ถ้ายังไม่มี document
   if (!doc) {
     return (
       <div className="flex items-center justify-center w-full h-full bg-gray-100">
-        <p className="text-gray-500">Loading document...</p>
+        <p className="text-gray-500">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-full h-full relative bg-gradient-to-br from-red-400 via-white to-blue-400 overflow-hidden flex items-center justify-center">
-      {/* White canvas page with border */}
-      <div
-        className="relative bg-white shadow-2xl border-8 border-red-600"
-        style={{ width: "1920px", height: "1080px" }}
+    <div className="relative w-full h-full overflow-hidden bg-gray-200">
+      {/* Canvas container */}
+      <Stage
+        ref={stageRef}
+        width={width}
+        height={height}
+        scaleX={viewport.zoom}
+        scaleY={viewport.zoom}
+        x={viewport.x}
+        y={viewport.y}
       >
-        <Stage
-          ref={stageRef}
-          width={width}
-          height={height}
-          scaleX={viewport.zoom}
-          scaleY={viewport.zoom}
-          x={viewport.x}
-          y={viewport.y}
-        >
-          {/* Grid layer */}
-          <Layer>
-            <GridLayer canvasWidth={1920} canvasHeight={1080} />
-          </Layer>
+        {/* Layer 1: Content (background + nodes) */}
+        <Layer>
+          {/* พื้นหลัง canvas */}
+          <Rect
+            x={0}
+            y={0}
+            width={doc.width}
+            height={doc.height}
+            fill={doc.backgroundColor || "#ffffff"}
+            shadowColor="black"
+            shadowBlur={10}
+            shadowOpacity={0.3}
+            shadowOffsetX={5}
+            shadowOffsetY={5}
+          />
 
-          {/* Canvas background & content layer */}
-          <Layer>
-            <Rect
-              x={0}
-              y={0}
-              width={1920}
-              height={1080}
-              fill={doc.backgroundColor || "#ffffff"}
-            />
+          {/* Group ที่ clip content ให้อยู่ภายใน document bounds */}
+          <Group
+            clipFunc={(ctx) => {
+              ctx.rect(0, 0, doc.width, doc.height);
+            }}
+          >
+            {/* Render ทุก nodes */}
             <RenderNodes nodes={nodes} />
-          </Layer>
+          </Group>
+        </Layer>
 
-          {/* Selection & guides layer */}
-          <Layer>
-            <SelectionController stageRef={stageRef} />
-            <GuidesLayer />
-          </Layer>
-        </Stage>
+        {/* Layer 2: Selection & Guides & Marquee */}
+        <Layer>
+          <SelectionController stageRef={stageRef} />
+          <GuidesLayer />
+          <MarqueeLayer />
+        </Layer>
+      </Stage>
 
-        <EventBridge stageRef={stageRef} width={width} height={height} />
-      </div>
+      {/* Event handler (mouse/keyboard events) */}
+      <EventBridge stageRef={stageRef} width={width} height={height} />
     </div>
   );
 }

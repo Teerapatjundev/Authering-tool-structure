@@ -1,35 +1,51 @@
-// Core document types
+/**
+ * ===============================================
+ * CANVAS EDITOR - TYPE DEFINITIONS
+ * ===============================================
+ *
+ * โครงสร้างข้อมูลหลักของ Canvas Editor
+ * - Node: วัตถุต่างๆ บน canvas (rect, ellipse, text, image, video)
+ * - Document: เอกสารที่เก็บ nodes ทั้งหมด
+ * - Viewport: ตำแหน่งและ zoom ของมุมมอง
+ * - Bounds: กรอบพื้นที่ (x, y, width, height)
+ *
+ * หมายเหตุ: Node ใช้ CENTER-based coordinates
+ * (x, y คือตำแหน่งกึ่งกลางของ node)
+ */
 
-export type NodeType =
-  | "rect"
-  | "ellipse"
-  | "text"
-  | "image"
-  | "video"
-  | "group";
+// ประเภทของ Node ที่รองรับ
+export type NodeType = "rect" | "ellipse" | "text" | "image" | "video";
 
+// ===============================================
+// BASE NODE - คุณสมบัติพื้นฐานที่ทุก Node มี
+// ===============================================
 export interface BaseNode {
-  id: string;
-  type: NodeType;
-  x: number; // CENTER x
-  y: number; // CENTER y
-  width: number;
-  height: number;
-  rotation: number;
-  opacity: number;
-  locked: boolean;
-  visible: boolean;
-  name?: string;
+  id: string; // รหัสเฉพาะของ node
+  type: NodeType; // ประเภทของ node
+  x: number; // ตำแหน่ง X (กึ่งกลาง)
+  y: number; // ตำแหน่ง Y (กึ่งกลาง)
+  width: number; // ความกว้าง
+  height: number; // ความสูง
+  rotation: number; // มุมหมุน (องศา)
+  opacity: number; // ความโปร่งใส (0-1)
+  locked: boolean; // ล็อคไม่ให้แก้ไข
+  visible: boolean; // แสดง/ซ่อน
 }
 
+// ===============================================
+// NODE TYPES - ประเภทต่างๆ ของ Node
+// ===============================================
+
+// สี่เหลี่ยม
 export interface RectNode extends BaseNode {
   type: "rect";
-  fill: string;
-  stroke?: string;
-  strokeWidth?: number;
-  cornerRadius?: number;
+  fill: string; // สีพื้น
+  stroke?: string; // สีขอบ
+  strokeWidth?: number; // ความหนาขอบ
+  cornerRadius?: number; // ความโค้งมุม
 }
 
+// วงรี
 export interface EllipseNode extends BaseNode {
   type: "ellipse";
   fill: string;
@@ -37,62 +53,58 @@ export interface EllipseNode extends BaseNode {
   strokeWidth?: number;
 }
 
+// ข้อความ
 export interface TextNode extends BaseNode {
   type: "text";
-  text: string;
-  fontSize: number;
-  fontFamily: string;
-  fill: string;
+  text: string; // เนื้อหาข้อความ
+  fontSize: number; // ขนาดตัวอักษร
+  fontFamily: string; // ฟอนต์
+  fill: string; // สีตัวอักษร
   fontStyle?: "normal" | "bold" | "italic";
   align?: "left" | "center" | "right";
-  verticalAlign?: "top" | "middle" | "bottom";
 }
 
+// รูปภาพ
 export interface ImageNode extends BaseNode {
   type: "image";
-  src: string;
-  cropX?: number;
-  cropY?: number;
-  cropWidth?: number;
-  cropHeight?: number;
+  src: string; // URL ของรูปภาพ
 }
 
+// วิดีโอ
 export interface VideoNode extends BaseNode {
   type: "video";
-  src: string;
-  posterSrc?: string;
+  src: string; // URL ของวิดีโอ
 }
 
-export interface GroupNode extends BaseNode {
-  type: "group";
-  children: string[]; // child node IDs
-}
+// รวม Node ทุกประเภท
+export type Node = RectNode | EllipseNode | TextNode | ImageNode | VideoNode;
 
-export type Node =
-  | RectNode
-  | EllipseNode
-  | TextNode
-  | ImageNode
-  | VideoNode
-  | GroupNode;
-
+// ===============================================
+// DOCUMENT - เอกสารที่เก็บข้อมูลทั้งหมด
+// ===============================================
 export interface Document {
   id: string;
   title: string;
   version: number;
   nodes: Node[];
-  width: number;
-  height: number;
+  width: number; // ความกว้าง canvas
+  height: number; // ความสูง canvas
   backgroundColor: string;
   updatedAt: number;
 }
 
+// ===============================================
+// VIEWPORT - มุมมอง (pan & zoom)
+// ===============================================
 export interface Viewport {
-  x: number;
-  y: number;
-  zoom: number;
+  x: number; // offset X (pan)
+  y: number; // offset Y (pan)
+  zoom: number; // ระดับ zoom
 }
 
+// ===============================================
+// BOUNDS - กรอบพื้นที่
+// ===============================================
 export interface Bounds {
   x: number;
   y: number;

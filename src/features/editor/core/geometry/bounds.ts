@@ -1,10 +1,25 @@
-import { Node } from "../doc/types";
-import type { Bounds } from "../doc/types";
+/**
+ * ===============================================
+ * BOUNDS & GEOMETRY UTILITIES
+ * ===============================================
+ *
+ * ฟังก์ชันสำหรับคำนวณพื้นที่และตำแหน่งของ Node
+ * - getNodeBounds: หากรอบพื้นที่ของ node
+ * - boundsIntersect: ตรวจสอบว่า 2 พื้นที่ซ้อนทับกัน
+ * - boundsContainsPoint: ตรวจสอบว่าจุดอยู่ในพื้นที่
+ * - getMultiSelectionBounds: หากรอบพื้นที่รวมของ nodes หลายตัว
+ */
+
+import { Node, Bounds } from "../doc/types";
 
 export type { Bounds };
 
+/**
+ * หากรอบพื้นที่ของ node (แปลงจาก center-based เป็น top-left)
+ * @param node - Node ที่ต้องการหากรอบ
+ * @returns Bounds ของ node
+ */
 export function getNodeBounds(node: Node): Bounds {
-  // Nodes use CENTER-based coordinates
   return {
     x: node.x - node.width / 2,
     y: node.y - node.height / 2,
@@ -13,10 +28,10 @@ export function getNodeBounds(node: Node): Bounds {
   };
 }
 
-export function getNodeCenter(node: Node): { x: number; y: number } {
-  return { x: node.x, y: node.y };
-}
-
+/**
+ * ตรวจสอบว่า 2 พื้นที่ซ้อนทับกันหรือไม่
+ * ใช้สำหรับ marquee selection (ลากคลุมเลือก)
+ */
 export function boundsIntersect(a: Bounds, b: Bounds): boolean {
   return !(
     a.x + a.width < b.x ||
@@ -26,6 +41,10 @@ export function boundsIntersect(a: Bounds, b: Bounds): boolean {
   );
 }
 
+/**
+ * ตรวจสอบว่าจุดอยู่ในพื้นที่หรือไม่
+ * ใช้สำหรับ hit testing (คลิกโดน node ไหน)
+ */
 export function boundsContainsPoint(
   bounds: Bounds,
   x: number,
@@ -39,6 +58,10 @@ export function boundsContainsPoint(
   );
 }
 
+/**
+ * หากรอบพื้นที่รวมของ nodes หลายตัว
+ * ใช้สำหรับ multi-selection transform
+ */
 export function getMultiSelectionBounds(nodes: Node[]): Bounds | null {
   if (nodes.length === 0) return null;
 
@@ -60,14 +83,5 @@ export function getMultiSelectionBounds(nodes: Node[]): Bounds | null {
     y: minY,
     width: maxX - minX,
     height: maxY - minY,
-  };
-}
-
-export function expandBounds(bounds: Bounds, amount: number): Bounds {
-  return {
-    x: bounds.x - amount,
-    y: bounds.y - amount,
-    width: bounds.width + amount * 2,
-    height: bounds.height + amount * 2,
   };
 }

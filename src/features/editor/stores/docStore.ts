@@ -1,3 +1,19 @@
+/**
+ * ===============================================
+ * DOCUMENT STORE - จัดการ Document
+ * ===============================================
+ *
+ * State หลักที่เก็บ document และ nodes ทั้งหมด
+ *
+ * Actions:
+ * - loadDoc: โหลด document จาก localStorage
+ * - addNode: เพิ่ม node ใหม่
+ * - removeNodes: ลบ nodes
+ * - updateNode: อัพเดท node เดียว
+ * - updateNodes: อัพเดทหลาย nodes
+ * - autoSave: บันทึกอัตโนมัติ (debounced)
+ */
+
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { Document, Node } from "../core/doc/types";
@@ -9,22 +25,18 @@ interface DocState {
   doc: Document | null;
   isLoading: boolean;
   isSaving: boolean;
-  error: string | null;
 
-  // Actions
   loadDoc: (docId: string) => Promise<void>;
   setDoc: (doc: Document) => void;
-  updateNode: (nodeId: string, updates: Partial<Node>) => void;
   addNode: (node: Node) => void;
-  removeNode: (nodeId: string) => void;
   removeNodes: (nodeIds: string[]) => void;
+  updateNode: (nodeId: string, updates: Partial<Node>) => void;
   updateNodes: (updates: Array<{ id: string; changes: Partial<Node> }>) => void;
-  setNodes: (nodes: Node[]) => void;
-  setDocTitle: (title: string) => void;
   saveDoc: () => void;
   autoSave: () => void;
 }
 
+// Debounced save function
 const debouncedSave = debounce((get: () => DocState) => {
   const state = get();
   if (state.doc) {
@@ -37,31 +49,53 @@ export const useDocStore = create<DocState>()(
     doc: null,
     isLoading: false,
     isSaving: false,
-    error: null,
 
+    /**
+     * โหลด document หรือสร้างใหม่ถ้าไม่มี
+     */
     loadDoc: async (docId: string) => {
-      set({ isLoading: true, error: null });
-      try {
-        let doc = docsService.getDoc(docId);
-        if (!doc) {
-          // Create new document
-          doc = createEmptyDocument(docId, "Untitled");
-          docsService.saveDoc(doc);
-        }
-        set({ doc: doc as Document, isLoading: false });
-      } catch (error) {
-        set({
-          error:
-            error instanceof Error ? error.message : "Failed to load document",
-          isLoading: false,
-        });
+      set({ isLoading: true });
+
+      let doc = docsService.getDoc(docId);
+      if (!doc) {
+        // สร้าง document ใหม่
+        doc = createEmptyDocument(docId, "Untitled");
+        docsService.saveDoc(doc);
       }
+
+      set({ doc: doc as Document, isLoading: false });
     },
 
     setDoc: (doc: Document) => {
       set({ doc });
     },
 
+    /**
+     * เพิ่ม node ใหม่
+     */
+    addNode: (node: Node) => {
+      set((state) => {
+        if (!state.doc) return;
+        state.doc.nodes.push(node);
+        state.doc.updatedAt = Date.now();
+      });
+    },
+
+    /**
+     * ลบ nodes ตาม IDs
+     */
+    removeNodes: (nodeIds: string[]) => {
+      set((state) => {
+        if (!state.doc) return;
+        const idsSet = new Set(nodeIds);
+        state.doc.nodes = state.doc.nodes.filter((n) => !idsSet.has(n.id));
+        state.doc.updatedAt = Date.now();
+      });
+    },
+
+    /**
+     * อัพเดท node เดียว
+     */
     updateNode: (nodeId: string, updates: Partial<Node>) => {
       set((state) => {
         if (!state.doc) return;
@@ -73,31 +107,9 @@ export const useDocStore = create<DocState>()(
       });
     },
 
-    addNode: (node: Node) => {
-      set((state) => {
-        if (!state.doc) return;
-        state.doc.nodes.push(node);
-        state.doc.updatedAt = Date.now();
-      });
-    },
-
-    removeNode: (nodeId: string) => {
-      set((state) => {
-        if (!state.doc) return;
-        state.doc.nodes = state.doc.nodes.filter((n) => n.id !== nodeId);
-        state.doc.updatedAt = Date.now();
-      });
-    },
-
-    removeNodes: (nodeIds: string[]) => {
-      set((state) => {
-        if (!state.doc) return;
-        const idsSet = new Set(nodeIds);
-        state.doc.nodes = state.doc.nodes.filter((n) => !idsSet.has(n.id));
-        state.doc.updatedAt = Date.now();
-      });
-    },
-
+    /**
+     * อัพเดทหลาย nodes พร้อมกัน
+     */
     updateNodes: (updates: Array<{ id: string; changes: Partial<Node> }>) => {
       set((state) => {
         if (!state.doc) return;
@@ -111,43 +123,27 @@ export const useDocStore = create<DocState>()(
       });
     },
 
-    setNodes: (nodes: Node[]) => {
-      set((state) => {
-        if (!state.doc) return;
-        state.doc.nodes = nodes;
-        state.doc.updatedAt = Date.now();
-      });
-    },
-
-    setDocTitle: (title: string) => {
-      set((state) => {
-        if (!state.doc) return;
-        state.doc.title = title;
-        state.doc.updatedAt = Date.now();
-      });
-      get().autoSave();
-    },
-
+    /**
+     * บันทึก document ลง localStorage
+     */
     saveDoc: () => {
       const state = get();
       if (!state.doc) return;
 
       set({ isSaving: true });
-      try {
-        docsService.saveDoc({
-          id: state.doc.id,
-          title: state.doc.title,
-          nodes: state.doc.nodes,
-          version: state.doc.version,
-          updatedAt: state.doc.updatedAt,
-        });
-        set({ isSaving: false });
-      } catch (error) {
-        console.error("Save failed:", error);
-        set({ isSaving: false });
-      }
+      docsService.saveDoc({
+        id: state.doc.id,
+        title: state.doc.title,
+        nodes: state.doc.nodes,
+        version: state.doc.version,
+        updatedAt: state.doc.updatedAt,
+      });
+      set({ isSaving: false });
     },
 
+    /**
+     * บันทึกอัตโนมัติ (debounced 1 วินาที)
+     */
     autoSave: () => {
       debouncedSave(get);
     },

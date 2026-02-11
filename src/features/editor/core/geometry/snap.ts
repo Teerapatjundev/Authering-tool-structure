@@ -1,22 +1,30 @@
+/**
+ * ===============================================
+ * SNAP - การจัดตำแหน่งอัตโนมัติ
+ * ===============================================
+ *
+ * ฟังก์ชันสำหรับ snap node เข้ากับ node อื่น
+ * เมื่อลาก node ใกล้กับ node อื่น จะ snap เข้าหากัน
+ */
+
 import { Node } from "../doc/types";
 
+const SNAP_THRESHOLD = 8; // ระยะที่จะเริ่ม snap (pixels)
+
 export interface SnapResult {
-  x: number;
-  y: number;
-  snappedX: boolean;
-  snappedY: boolean;
-  guidesX: number[];
-  guidesY: number[];
+  x: number; // ตำแหน่ง X ที่ snap แล้ว
+  y: number; // ตำแหน่ง Y ที่ snap แล้ว
+  snappedX: boolean; // snap ในแนว X หรือไม่
+  snappedY: boolean; // snap ในแนว Y หรือไม่
 }
 
-export interface SnapGuide {
-  type: "vertical" | "horizontal";
-  position: number;
-  offset: number; // how far from the snap position
-}
-
-const SNAP_THRESHOLD = 8;
-
+/**
+ * คำนวณตำแหน่ง snap ของ node
+ * @param node - Node ที่กำลังลาก
+ * @param allNodes - Nodes ทั้งหมดใน canvas
+ * @param dragDelta - ระยะที่ลากไป (dx, dy)
+ * @returns ตำแหน่งที่ snap แล้ว
+ */
 export function snapNode(
   node: Node,
   allNodes: Node[],
@@ -29,25 +37,21 @@ export function snapNode(
   let snappedY = targetY;
   let didSnapX = false;
   let didSnapY = false;
-  const guidesX: number[] = [];
-  const guidesY: number[] = [];
 
-  // Simple center-to-center snapping
+  // Snap center-to-center กับ node อื่น
   for (const other of allNodes) {
     if (other.id === node.id || !other.visible) continue;
 
-    // Snap X
+    // Snap แกน X (แนวตั้ง)
     if (!didSnapX && Math.abs(targetX - other.x) < SNAP_THRESHOLD) {
       snappedX = other.x;
       didSnapX = true;
-      guidesX.push(other.x);
     }
 
-    // Snap Y
+    // Snap แกน Y (แนวนอน)
     if (!didSnapY && Math.abs(targetY - other.y) < SNAP_THRESHOLD) {
       snappedY = other.y;
       didSnapY = true;
-      guidesY.push(other.y);
     }
 
     if (didSnapX && didSnapY) break;
@@ -58,7 +62,5 @@ export function snapNode(
     y: snappedY,
     snappedX: didSnapX,
     snappedY: didSnapY,
-    guidesX,
-    guidesY,
   };
 }
