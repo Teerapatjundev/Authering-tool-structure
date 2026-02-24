@@ -31,6 +31,31 @@ export interface SnapGuideInfo {
   end: number;
 }
 
+// =============================================
+// Equal Spacing Types
+// =============================================
+
+export interface SpacingSegment {
+  /** จุดเริ่มต้นบนแกนหลัก (x สำหรับ horizontal, y สำหรับ vertical) */
+  from: number;
+  /** จุดสิ้นสุดบนแกนหลัก */
+  to: number;
+  /** จุดกึ่งกลางบนแกนตั้งฉาก */
+  crossCenter: number;
+  /** จุดเริ่มต้นบนแกนตั้งฉาก */
+  crossStart: number;
+  /** จุดสิ้นสุดบนแกนตั้งฉาก */
+  crossEnd: number;
+}
+
+export interface EqualSpacingGuide {
+  axis: "horizontal" | "vertical";
+  /** ค่าระยะห่างที่เท่ากัน */
+  gap: number;
+  /** ส่วนที่แสดง gap แต่ละช่อง */
+  segments: SpacingSegment[];
+}
+
 export interface SnapResult {
   /** dx ที่ปรับ snap แล้ว */
   dx: number;
@@ -40,6 +65,8 @@ export interface SnapResult {
   snappedY: boolean;
   /** เส้น guides ที่ต้องแสดง */
   guides: SnapGuideInfo[];
+  /** เส้นแสดง equal spacing (padding) */
+  spacingGuides: EqualSpacingGuide[];
 }
 
 // =============================================
@@ -104,7 +131,7 @@ export function snapNodes(
   canvasHeight: number,
 ): SnapResult {
   if (movingNodes.length === 0) {
-    return { dx, dy, snappedX: false, snappedY: false, guides: [] };
+    return { dx, dy, snappedX: false, snappedY: false, guides: [], spacingGuides: [] };
   }
 
   const movingIds = new Set(movingNodes.map((n) => n.id));
@@ -153,6 +180,67 @@ export function snapNodes(
       { value: sp.centerY, refStart: sp.left, refEnd: sp.right },
       { value: sp.bottom, refStart: sp.left, refEnd: sp.right },
     );
+  }
+
+  // ----- Equal spacing snap candidates -----
+  const staticNodesOnly = allNodes.filter(
+    (n) => !movingIds.has(n.id) && n.visible,
+  );
+
+  // Horizontal equal spacing
+  const sortedStaticByX = [...staticNodesOnly].sort(
+    (a, b) => a.x - a.width / 2 - (b.x - b.width / 2),
+  );
+
+  for (let i = 0; i < sortedStaticByX.length - 1; i++) {
+    const A = sortedStaticByX[i];
+    const B = sortedStaticByX[i + 1];
+
+    const aRight = A.x + A.width / 2;
+    const aLeft = A.x - A.width / 2;
+    const bLeft = B.x - B.width / 2;
+    const bRight = B.x + B.width / 2;
+    const gap = bLeft - aRight;
+
+    if (gap <= 0) continue;
+
+    const refStart = Math.min(A.y - A.height / 2, B.y - B.height / 2);
+    const refEnd = Math.max(A.y + A.height / 2, B.y + B.height / 2);
+
+    // วางทางขวาของ B ระยะห่างเท่ากัน (M.left = bRight + gap)
+    xCandidates.push({ value: bRight + gap, refStart, refEnd });
+    // วางทางซ้ายของ A ระยะห่างเท่ากัน (M.right = aLeft - gap)
+    xCandidates.push({ value: aLeft - gap, refStart, refEnd });
+    // วางตรงกลางระหว่าง A กับ B (M.center = midpoint)
+    xCandidates.push({ value: (aRight + bLeft) / 2, refStart, refEnd });
+  }
+
+  // Vertical equal spacing
+  const sortedStaticByY = [...staticNodesOnly].sort(
+    (a, b) => a.y - a.height / 2 - (b.y - b.height / 2),
+  );
+
+  for (let i = 0; i < sortedStaticByY.length - 1; i++) {
+    const A = sortedStaticByY[i];
+    const B = sortedStaticByY[i + 1];
+
+    const aBottom = A.y + A.height / 2;
+    const aTop = A.y - A.height / 2;
+    const bTop = B.y - B.height / 2;
+    const bBottom = B.y + B.height / 2;
+    const gap = bTop - aBottom;
+
+    if (gap <= 0) continue;
+
+    const refStart = Math.min(A.x - A.width / 2, B.x - B.width / 2);
+    const refEnd = Math.max(A.x + A.width / 2, B.x + B.width / 2);
+
+    // วางด้านล่าง B ระยะห่างเท่ากัน
+    yCandidates.push({ value: bBottom + gap, refStart, refEnd });
+    // วางด้านบน A ระยะห่างเท่ากัน
+    yCandidates.push({ value: aTop - gap, refStart, refEnd });
+    // วางตรงกลางระหว่าง A กับ B
+    yCandidates.push({ value: (aBottom + bTop) / 2, refStart, refEnd });
   }
 
   // ----- ทดสอบ snap กับทุก moving node -----
@@ -259,13 +347,222 @@ export function snapNodes(
     });
   }
 
+  // ----- ตรวจจับ equal spacing -----
+  const finalMovingNodes = movingNodes.map((n) => ({
+    ...n,
+    x: n.x + finalDx,
+    y: n.y + finalDy,
+  }));
+
+  const allFinalVisible = [
+    ...staticNodesOnly,
+    ...finalMovingNodes.filter((n) => n.visible),
+  ];
+
+  const spacingGuides = detectEqualSpacing(allFinalVisible, movingIds);
+
   return {
     dx: finalDx,
     dy: finalDy,
     snappedX: !!bestSnapX,
     snappedY: !!bestSnapY,
     guides,
+    spacingGuides,
   };
+}
+
+// =============================================
+// Equal Spacing Detection
+// =============================================
+
+/** ระยะ threshold สำหรับตรวจจับ equal spacing */
+const SPACING_THRESHOLD = 3;
+
+/**
+ * ตรวจจับเมื่อ nodes 3 ตัวขึ้นไปเรียงกันและมีระยะห่างเท่ากัน
+ * @param allNodes - nodes ทั้งหมดที่ตำแหน่งสุดท้าย
+ * @param movingIds - IDs ของ nodes ที่กำลังลาก
+ */
+function detectEqualSpacing(
+  allNodes: Node[],
+  movingIds: Set<string>,
+): EqualSpacingGuide[] {
+  const visibleNodes = allNodes.filter((n) => n.visible);
+  if (visibleNodes.length < 3) return [];
+
+  const guides: EqualSpacingGuide[] = [];
+
+  // === Horizontal equal spacing ===
+  const sortedByX = [...visibleNodes].sort(
+    (a, b) => a.x - a.width / 2 - (b.x - b.width / 2),
+  );
+
+  for (let start = 0; start < sortedByX.length - 2; start++) {
+    const first = sortedByX[start];
+    const second = sortedByX[start + 1];
+
+    const firstRight = first.x + first.width / 2;
+    const secondLeft = second.x - second.width / 2;
+    const refGap = secondLeft - firstRight;
+
+    if (refGap < 1) continue;
+
+    // ขยาย sequence ออกไปเท่าที่ gap เท่ากัน
+    let end = start + 1;
+    while (end < sortedByX.length - 1) {
+      const curr = sortedByX[end];
+      const next = sortedByX[end + 1];
+      const currRight = curr.x + curr.width / 2;
+      const nextLeft = next.x - next.width / 2;
+      const gap = nextLeft - currRight;
+
+      if (Math.abs(gap - refGap) <= SPACING_THRESHOLD) {
+        end++;
+      } else {
+        break;
+      }
+    }
+
+    if (end - start + 1 >= 3) {
+      const nodesInSeq = sortedByX.slice(start, end + 1);
+      const hasMoving = nodesInSeq.some((n) => movingIds.has(n.id));
+
+      if (hasMoving) {
+        const segments: SpacingSegment[] = [];
+
+        for (let i = start; i < end; i++) {
+          const left = sortedByX[i];
+          const right = sortedByX[i + 1];
+
+          const lRight = left.x + left.width / 2;
+          const rLeft = right.x - right.width / 2;
+
+          const lTop = left.y - left.height / 2;
+          const lBottom = left.y + left.height / 2;
+          const rTop = right.y - right.height / 2;
+          const rBottom = right.y + right.height / 2;
+
+          const overlapTop = Math.max(lTop, rTop);
+          const overlapBottom = Math.min(lBottom, rBottom);
+
+          let crossCenter: number, crossStart: number, crossEnd: number;
+          if (overlapTop < overlapBottom) {
+            // มี vertical overlap
+            crossCenter = (overlapTop + overlapBottom) / 2;
+            crossStart = overlapTop;
+            crossEnd = overlapBottom;
+          } else {
+            // ไม่มี overlap → ใช้ค่าเฉลี่ย
+            crossCenter = (left.y + right.y) / 2;
+            crossStart = Math.min(lTop, rTop);
+            crossEnd = Math.max(lBottom, rBottom);
+          }
+
+          segments.push({
+            from: lRight,
+            to: rLeft,
+            crossCenter,
+            crossStart,
+            crossEnd,
+          });
+        }
+
+        guides.push({
+          axis: "horizontal",
+          gap: refGap,
+          segments,
+        });
+      }
+
+      // ข้ามไปที่ท้าย sequence เพื่อไม่ให้ซ้ำ
+      start = end - 1;
+    }
+  }
+
+  // === Vertical equal spacing ===
+  const sortedByY = [...visibleNodes].sort(
+    (a, b) => a.y - a.height / 2 - (b.y - b.height / 2),
+  );
+
+  for (let start = 0; start < sortedByY.length - 2; start++) {
+    const first = sortedByY[start];
+    const second = sortedByY[start + 1];
+
+    const firstBottom = first.y + first.height / 2;
+    const secondTop = second.y - second.height / 2;
+    const refGap = secondTop - firstBottom;
+
+    if (refGap < 1) continue;
+
+    let end = start + 1;
+    while (end < sortedByY.length - 1) {
+      const curr = sortedByY[end];
+      const next = sortedByY[end + 1];
+      const currBottom = curr.y + curr.height / 2;
+      const nextTop = next.y - next.height / 2;
+      const gap = nextTop - currBottom;
+
+      if (Math.abs(gap - refGap) <= SPACING_THRESHOLD) {
+        end++;
+      } else {
+        break;
+      }
+    }
+
+    if (end - start + 1 >= 3) {
+      const nodesInSeq = sortedByY.slice(start, end + 1);
+      const hasMoving = nodesInSeq.some((n) => movingIds.has(n.id));
+
+      if (hasMoving) {
+        const segments: SpacingSegment[] = [];
+
+        for (let i = start; i < end; i++) {
+          const top = sortedByY[i];
+          const bottom = sortedByY[i + 1];
+
+          const tBottom = top.y + top.height / 2;
+          const bTop = bottom.y - bottom.height / 2;
+
+          const tLeft = top.x - top.width / 2;
+          const tRight = top.x + top.width / 2;
+          const bLeft = bottom.x - bottom.width / 2;
+          const bRight = bottom.x + bottom.width / 2;
+
+          const overlapLeft = Math.max(tLeft, bLeft);
+          const overlapRight = Math.min(tRight, bRight);
+
+          let crossCenter: number, crossStart: number, crossEnd: number;
+          if (overlapLeft < overlapRight) {
+            crossCenter = (overlapLeft + overlapRight) / 2;
+            crossStart = overlapLeft;
+            crossEnd = overlapRight;
+          } else {
+            crossCenter = (top.x + bottom.x) / 2;
+            crossStart = Math.min(tLeft, bLeft);
+            crossEnd = Math.max(tRight, bRight);
+          }
+
+          segments.push({
+            from: tBottom,
+            to: bTop,
+            crossCenter,
+            crossStart,
+            crossEnd,
+          });
+        }
+
+        guides.push({
+          axis: "vertical",
+          gap: refGap,
+          segments,
+        });
+      }
+
+      start = end - 1;
+    }
+  }
+
+  return guides;
 }
 
 /**

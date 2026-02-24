@@ -13,27 +13,35 @@
 "use client";
 
 import { create } from "zustand";
-import { SnapGuideInfo } from "../core/geometry/snap";
+import { SnapGuideInfo, EqualSpacingGuide } from "../core/geometry/snap";
 
 export type { SnapGuideInfo as SnapGuide };
 
 interface SnapGuidesState {
   guides: SnapGuideInfo[];
+  spacingGuides: EqualSpacingGuide[];
 
   setGuides: (guides: SnapGuideInfo[]) => void;
+  setSpacingGuides: (guides: EqualSpacingGuide[]) => void;
   clearGuides: () => void;
 }
 
 export const useSnapGuidesStore = create<SnapGuidesState>((set) => ({
   guides: [],
+  spacingGuides: [],
 
   /** ตั้งค่าเส้น guides */
   setGuides: (guides: SnapGuideInfo[]) => {
     set({ guides });
   },
 
+  /** ตั้งค่า spacing guides */
+  setSpacingGuides: (spacingGuides: EqualSpacingGuide[]) => {
+    set({ spacingGuides });
+  },
+
   /** ลบเส้น guides ทั้งหมด */
   clearGuides: () => {
-    set({ guides: [] });
+    set({ guides: [], spacingGuides: [] });
   },
 }));

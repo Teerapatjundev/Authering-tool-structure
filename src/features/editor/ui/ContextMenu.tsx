@@ -21,7 +21,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
 import { useContextMenuStore } from "../stores/contextMenuStore";
 import { useSelectionStore } from "../stores/selectionStore";
 import { useDocStore } from "../stores/docStore";
@@ -152,6 +152,9 @@ interface SubMenuProps {
 function SubMenu({ label, icon, children }: SubMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parentRef = useRef<HTMLDivElement>(null);
+  const subRef = useRef<HTMLDivElement>(null);
+  const [subStyle, setSubStyle] = useState<React.CSSProperties>({});
 
   const handleEnter = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -162,8 +165,37 @@ function SubMenu({ label, icon, children }: SubMenuProps) {
     timeoutRef.current = setTimeout(() => setIsOpen(false), 150);
   };
 
+  // ปรับตำแหน่ง SubMenu ไม่ให้ทะลุขอบจอ
+  useLayoutEffect(() => {
+    if (!isOpen || !subRef.current || !parentRef.current) return;
+    const sub = subRef.current.getBoundingClientRect();
+    const parent = parentRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const pad = 8;
+
+    const style: React.CSSProperties = {};
+
+    // ถ้าทะลุขวา → เปิดไปทางซ้ายแทน
+    if (parent.right + sub.width + 4 > vw - pad) {
+      style.left = "auto";
+      style.right = "100%";
+      style.marginLeft = 0;
+      style.marginRight = 4;
+    }
+
+    // ถ้าทะลุล่าง → เลื่อนขึ้น
+    if (sub.bottom > vh - pad) {
+      style.top = "auto";
+      style.bottom = 0;
+    }
+
+    setSubStyle(style);
+  }, [isOpen]);
+
   return (
     <div
+      ref={parentRef}
       className="relative"
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
@@ -179,7 +211,11 @@ function SubMenu({ label, icon, children }: SubMenuProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute left-full top-0 ml-1 bg-white border border-gray-200 rounded-lg shadow-xl min-w-[160px] py-1 z-[9999]">
+        <div
+          ref={subRef}
+          className="absolute left-full top-0 ml-1 bg-white border border-gray-200 rounded-lg shadow-xl min-w-[160px] py-1 z-[9999]"
+          style={subStyle}
+        >
           {children}
         </div>
       )}
@@ -230,6 +266,7 @@ export function ContextMenu() {
   const { getSelectedIds } = useSelectionStore();
   const { doc } = useDocStore();
   const menuRef = useRef<HTMLDivElement>(null);
+  const [adjustedPos, setAdjustedPos] = useState({ x: 0, y: 0 });
 
   // =============================================
   // คลิกนอกเมนู → ปิด
@@ -255,6 +292,38 @@ export function ContextMenu() {
       document.removeEventListener("touchstart", handleClickOutside);
     };
   }, [isOpen, close]);
+
+  // =============================================
+  // ปรับตำแหน่งเมนูไม่ให้ทะลุขอบจอ
+  // =============================================
+  useLayoutEffect(() => {
+    if (!isOpen || !menuRef.current) {
+      setAdjustedPos({ x, y });
+      return;
+    }
+    const rect = menuRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const pad = 8; // ระยะขอบ
+
+    let ax = x;
+    let ay = y;
+
+    // ทะลุขวา
+    if (ax + rect.width > vw - pad) {
+      ax = vw - rect.width - pad;
+    }
+    // ทะลุล่าง
+    if (ay + rect.height > vh - pad) {
+      ay = vh - rect.height - pad;
+    }
+    // ทะลุซ้าย
+    if (ax < pad) ax = pad;
+    // ทะลุบน
+    if (ay < pad) ay = pad;
+
+    setAdjustedPos({ x: ax, y: ay });
+  }, [isOpen, x, y]);
 
   // =============================================
   // Escape → ปิด
@@ -297,8 +366,8 @@ export function ContextMenu() {
   // =============================================
   const menuStyle: React.CSSProperties = {
     position: "fixed",
-    left: x,
-    top: y,
+    left: adjustedPos.x,
+    top: adjustedPos.y,
     zIndex: 9999,
   };
 

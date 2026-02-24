@@ -20,6 +20,10 @@
  * - Ctrl+C: Copy
  * - Ctrl+X: Cut
  * - Ctrl+V: Paste
+ * - Alt+Drag: Duplicate แล้วลาก (แบบ Canva)
+ * - Ctrl+S: Save
+ * - Ctrl+G: Group
+ * - Ctrl+Shift+G: Ungroup
  * - Delete / Backspace: ลบ
  * - Escape: ยกเลิกเลือก
  * - Arrow keys: เลื่อน nodes (Shift = เลื่อน 10px)
@@ -36,6 +40,7 @@ import { selectAll, clearSelection } from "./core/commands/selection";
 import { deleteSelected, copy, paste, cut } from "./core/commands/clipboard";
 import { nudgeSelection } from "./core/commands/transform";
 import { insertImage } from "./core/commands/insert";
+import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
 import { OverlayRoot } from "./renderer/overlays/OverlayRoot";
 import { EditorLayout } from "./EditorLayout";
@@ -238,13 +243,20 @@ export function EditorClient({ docId }: EditorClientProps) {
 
   // ===============================================
   // Keyboard Shortcuts
+  // ใช้ capture phase + หลาย fallback เพื่อรองรับทุก keyboard layout
   // ===============================================
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // ตรวจสอบว่ากำลัง focus อยู่ที่ input/textarea หรือไม่
+      // ข้าม IME composing (ภาษาจีน/ญี่ปุ่น composition)
+      if (e.isComposing || e.keyCode === 229) return;
+
+      // ตรวจสอบว่ากำลัง focus อยู่ที่ input/textarea/select/contentEditable หรือไม่
+      const active = document.activeElement;
       if (
-        document.activeElement?.tagName === "INPUT" ||
-        document.activeElement?.tagName === "TEXTAREA"
+        active?.tagName === "INPUT" ||
+        active?.tagName === "TEXTAREA" ||
+        active?.tagName === "SELECT" ||
+        (active as HTMLElement)?.isContentEditable
       ) {
         return;
       }
@@ -252,61 +264,103 @@ export function EditorClient({ docId }: EditorClientProps) {
       const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
       const isCtrlOrCmd = isMac ? e.metaKey : e.ctrlKey;
 
+      // =============================================
+      // Helper: ตรวจจับปุ่มข้าม layout ทั้งไทย/อังกฤษ
+      // ใช้ 3 fallbacks:
+      //   1. e.code   = physical key position (layout-independent)
+      //   2. e.key    = character produced (ใช้ได้ตอนภาษาอังกฤษ)
+      //   3. e.keyCode = deprecated แต่เชื่อถือได้ข้าม layout
+      // =============================================
+      const code = e.code;                 // "KeyV", "KeyZ", ...
+      const key = e.key.toLowerCase();     // "v", "อ", ...
+      const keyCode = e.keyCode;           // 86 (V), 90 (Z), ... ไม่เปลี่ยนตาม layout
+
+      /**
+       * ตรวจจับปุ่มตัวอักษร แม้เปลี่ยนภาษา
+       * @param targetCode  - e.code ที่ต้องการ เช่น "KeyV"
+       * @param targetKey   - e.key ที่ต้องการ เช่น "v"
+       * @param targetKeyCode - e.keyCode ที่ต้องการ เช่น 86
+       */
+      const matchKey = (targetCode: string, targetKey: string, targetKeyCode: number): boolean => {
+        return code === targetCode || key === targetKey || keyCode === targetKeyCode;
+      };
+
       // Tool shortcuts (without modifier keys)
       if (!isCtrlOrCmd && !e.altKey) {
-        // V = Select tool
-        if (e.key === "v" || e.key === "V") {
+        // V = Select tool (keyCode 86)
+        if (matchKey("KeyV", "v", 86)) {
           e.preventDefault();
           setTool("select");
           return;
         }
-        // H = Pan/Hand tool
-        if (e.key === "h" || e.key === "H") {
+        // H = Pan/Hand tool (keyCode 72)
+        if (matchKey("KeyH", "h", 72)) {
           e.preventDefault();
           setTool("pan");
           return;
         }
       }
 
-      // Undo: Ctrl+Z
-      if (isCtrlOrCmd && e.key === "z" && !e.shiftKey) {
+      // Undo: Ctrl+Z (keyCode 90)
+      if (isCtrlOrCmd && matchKey("KeyZ", "z", 90) && !e.shiftKey) {
         e.preventDefault();
         undo();
         return;
       }
 
       // Redo: Ctrl+Y หรือ Ctrl+Shift+Z
-      if (isCtrlOrCmd && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+      if (isCtrlOrCmd && (matchKey("KeyY", "y", 89) || (matchKey("KeyZ", "z", 90) && e.shiftKey))) {
         e.preventDefault();
         redo();
         return;
       }
 
-      // Select All: Ctrl+A
-      if (isCtrlOrCmd && e.key === "a") {
+      // Select All: Ctrl+A (keyCode 65)
+      if (isCtrlOrCmd && matchKey("KeyA", "a", 65)) {
         e.preventDefault();
         selectAll();
         return;
       }
 
-      // Copy: Ctrl+C
-      if (isCtrlOrCmd && e.key === "c") {
+      // Copy: Ctrl+C (keyCode 67)
+      if (isCtrlOrCmd && matchKey("KeyC", "c", 67)) {
         e.preventDefault();
         copy();
         return;
       }
 
-      // Cut: Ctrl+X
-      if (isCtrlOrCmd && e.key === "x") {
+      // Cut: Ctrl+X (keyCode 88)
+      if (isCtrlOrCmd && matchKey("KeyX", "x", 88)) {
         e.preventDefault();
         cut();
         return;
       }
 
-      // Paste: Ctrl+V
-      if (isCtrlOrCmd && e.key === "v") {
+      // Paste: Ctrl+V (keyCode 86)
+      if (isCtrlOrCmd && matchKey("KeyV", "v", 86)) {
         e.preventDefault();
         paste();
+        return;
+      }
+
+      // Save: Ctrl+S (keyCode 83)
+      if (isCtrlOrCmd && matchKey("KeyS", "s", 83)) {
+        e.preventDefault();
+        useDocStore.getState().saveDoc();
+        return;
+      }
+
+      // Ungroup: Ctrl+Shift+G (ต้องเช็คก่อน Group)
+      if (isCtrlOrCmd && matchKey("KeyG", "g", 71) && e.shiftKey) {
+        e.preventDefault();
+        ungroupNodes();
+        return;
+      }
+
+      // Group: Ctrl+G (keyCode 71)
+      if (isCtrlOrCmd && matchKey("KeyG", "g", 71) && !e.shiftKey) {
+        e.preventDefault();
+        groupNodes();
         return;
       }
 
@@ -346,8 +400,11 @@ export function EditorClient({ docId }: EditorClientProps) {
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // ใช้ capture phase (true) เพื่อดักจับ event ก่อน Konva หรือ element อื่น
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
   }, [undo, redo, setTool]);
 
   return (

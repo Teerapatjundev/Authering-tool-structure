@@ -252,8 +252,21 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
 
         // Clamp to document bounds (center-based coordinates)
         if (doc) {
-          finalWidth = Math.min(finalWidth, doc.width);
-          finalHeight = Math.min(finalHeight, doc.height);
+          // สำหรับ image: clamp โดยรักษาสัดส่วน
+          if (node.type === "image") {
+            const aspect = finalWidth / finalHeight;
+            if (finalWidth > doc.width) {
+              finalWidth = doc.width;
+              finalHeight = finalWidth / aspect;
+            }
+            if (finalHeight > doc.height) {
+              finalHeight = doc.height;
+              finalWidth = finalHeight * aspect;
+            }
+          } else {
+            finalWidth = Math.min(finalWidth, doc.width);
+            finalHeight = Math.min(finalHeight, doc.height);
+          }
           const halfW = finalWidth / 2;
           const halfH = finalHeight / 2;
           finalX = Math.max(halfW, Math.min(doc.width - halfW, finalX));
@@ -474,6 +487,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   }
 
   // Single selection
+  const singleNode = selectedNodes[0];
+  const isImage = singleNode?.type === "image";
+
   return (
     <Transformer
       ref={transformerRef}
@@ -482,17 +498,21 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       onTransformEnd={handleTransformEnd}
       rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
       rotationSnapTolerance={5}
-      keepRatio={false}
-      enabledAnchors={[
-        "top-left",
-        "top-center",
-        "top-right",
-        "middle-left",
-        "middle-right",
-        "bottom-left",
-        "bottom-center",
-        "bottom-right",
-      ]}
+      keepRatio={isImage}
+      enabledAnchors={
+        isImage
+          ? ["top-left", "top-right", "bottom-left", "bottom-right"]
+          : [
+              "top-left",
+              "top-center",
+              "top-right",
+              "middle-left",
+              "middle-right",
+              "bottom-left",
+              "bottom-center",
+              "bottom-right",
+            ]
+      }
       boundBoxFunc={(oldBox, newBox) => {
         if (Math.abs(newBox.width) < 5 || Math.abs(newBox.height) < 5) {
           return oldBox;
@@ -507,11 +527,31 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           const docBottom = doc.height * zoom + viewport.y;
 
           let { x, y, width, height } = newBox;
-          if (x < docLeft) { width -= (docLeft - x); x = docLeft; }
-          if (y < docTop) { height -= (docTop - y); y = docTop; }
-          if (x + width > docRight) { width = docRight - x; }
-          if (y + height > docBottom) { height = docBottom - y; }
-          if (width < 5 || height < 5) return oldBox;
+
+          // ตรวจว่าเป็นการ rotate หรือ resize
+          // ถ้า width/height เท่าเดิม (หรือเปลี่ยนน้อยมาก) แสดงว่าเป็นการ rotate → ไม่ต้อง clamp
+          const isRotating =
+            Math.abs(oldBox.width - newBox.width) < 1 &&
+            Math.abs(oldBox.height - newBox.height) < 1;
+
+          if (!isRotating) {
+            if (isImage) {
+              // รูปภาพ: clamp โดยรักษาสัดส่วน — ถ้าชนขอบ ให้คืนกล่องเดิม
+              const clippedLeft = Math.max(0, docLeft - x);
+              const clippedTop = Math.max(0, docTop - y);
+              const clippedRight = Math.max(0, (x + width) - docRight);
+              const clippedBottom = Math.max(0, (y + height) - docBottom);
+              if (clippedLeft > 0 || clippedTop > 0 || clippedRight > 0 || clippedBottom > 0) {
+                return oldBox;
+              }
+            } else {
+              if (x < docLeft) { width -= (docLeft - x); x = docLeft; }
+              if (y < docTop) { height -= (docTop - y); y = docTop; }
+              if (x + width > docRight) { width = docRight - x; }
+              if (y + height > docBottom) { height = docBottom - y; }
+            }
+            if (width < 5 || height < 5) return oldBox;
+          }
           return { ...newBox, x, y, width, height };
         }
         return newBox;

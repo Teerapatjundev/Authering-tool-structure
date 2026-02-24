@@ -39,11 +39,44 @@ import { snapNodes } from "../../core/geometry/snap";
 import {
   commitMoveWithOriginal,
 } from "../../core/commands/transform";
+import { useHistoryStore } from "../../core/history/historyStore";
+import { InsertOp } from "../../core/history/ops";
+import { generateNodeId } from "@/shared/utils/id";
 
 interface EventBridgeProps {
   stageRef: React.RefObject<Konva.Stage>;
   width: number;
   height: number;
+}
+
+/**
+ * ขยาย selection ให้รวม nodes ทั้ง group
+ * ถ้าคลิกที่ node ที่มี groupId → เลือกทุก node ที่มี groupId เดียวกัน
+ */
+function expandGroupIds(hitNodeId: string, allNodes: { id: string; groupId?: string }[]): string[] {
+  const hitNode = allNodes.find((n) => n.id === hitNodeId);
+  if (!hitNode || !hitNode.groupId) return [hitNodeId];
+
+  // หาทุก node ที่อยู่ใน group เดียวกัน
+  return allNodes
+    .filter((n) => n.groupId === hitNode.groupId)
+    .map((n) => n.id);
+}
+
+/**
+ * ขยาย set ของ IDs ให้รวม group members ทั้งหมด
+ */
+function expandAllGroupIds(ids: string[], allNodes: { id: string; groupId?: string }[]): string[] {
+  const result = new Set(ids);
+  for (const id of ids) {
+    const node = allNodes.find((n) => n.id === id);
+    if (node?.groupId) {
+      for (const n of allNodes) {
+        if (n.groupId === node.groupId) result.add(n.id);
+      }
+    }
+  }
+  return Array.from(result);
 }
 
 export function EventBridge({ stageRef }: EventBridgeProps) {
@@ -58,6 +91,8 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
   );
   // สะสม delta ของเมาส์ตั้งแต่เริ่มลาก (raw, ไม่ถูก snap)
   const accDeltaRef = useRef({ x: 0, y: 0 });
+  // Alt+drag duplicate: เก็บว่าเป็นการลาก duplicate หรือไม่
+  const isAltDuplicatingRef = useRef(false);
   // Long-press timer สำหรับ context menu บน touch devices
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
@@ -140,10 +175,11 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
         const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
         if (hitNode) {
-          // ถ้าคลิกขวาที่ node ที่ยังไม่ได้เลือก → เลือกก่อน
-          const { selectedIds, select } = useSelectionStore.getState();
+          // ถ้าคลิกขวาที่ node ที่ยังไม่ได้เลือก → เลือกก่อน (รวม group)
+          const { selectedIds, selectMultiple } = useSelectionStore.getState();
           if (!selectedIds.has(hitNode.id)) {
-            select(hitNode.id);
+            const groupIds = expandGroupIds(hitNode.id, doc.nodes);
+            selectMultiple(groupIds);
           }
         }
 
@@ -201,13 +237,52 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
             };
 
             if (boundsContainsPoint(expandedBounds, worldPos.x, worldPos.y)) {
+              // =============================================
+              // ALT + DRAG = Duplicate แบบ Canva
+              // กด Alt ค้าง + คลิกลากที่ selected nodes → สร้าง clone แล้วลาก clone ออก
+              // =============================================
+              if (e.evt.altKey) {
+                const clonedNodes = selectedNodes.map((n) => ({
+                  ...JSON.parse(JSON.stringify(n)),
+                  id: generateNodeId(),
+                }));
+
+                // Insert cloned nodes ผ่าน history (undo ได้)
+                const insertOp: InsertOp = {
+                  type: "insert",
+                  timestamp: Date.now(),
+                  nodes: clonedNodes,
+                };
+                useHistoryStore.getState().commit(insertOp);
+
+                // เลือก cloned nodes แทน originals
+                useSelectionStore.getState().selectMultiple(clonedNodes.map((n) => n.id));
+
+                // เริ่มลาก cloned nodes
+                isDraggingRef.current = true;
+                isAltDuplicatingRef.current = true;
+                dragStartRef.current = worldPos;
+                accDeltaRef.current = { x: 0, y: 0 };
+                originalPositionsRef.current.clear();
+                clonedNodes.forEach((n) => {
+                  originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
+                });
+                useVideoPlayStore.getState().stopVideo();
+                return;
+              }
+
               // คลิกอยู่ในพื้นที่ selection (รวม handles) → เริ่มลากได้เลย ไม่ต้อง clear selection
               isDraggingRef.current = true;
               dragStartRef.current = worldPos;
               accDeltaRef.current = { x: 0, y: 0 };
-              // บันทึกตำแหน่งเดิมของ selected nodes สำหรับ undo
+              // บันทึกตำแหน่งเดิมของ selected nodes + group members สำหรับ undo
               originalPositionsRef.current.clear();
-              selectedNodes.forEach((n) => {
+              const allTrackIds = expandAllGroupIds(currentSelectedIds, doc.nodes);
+              // อัพเดท selection ให้รวม group members ด้วย
+              if (allTrackIds.length > currentSelectedIds.length) {
+                useSelectionStore.getState().selectMultiple(allTrackIds);
+              }
+              doc.nodes.filter((n) => allTrackIds.includes(n.id)).forEach((n) => {
                 originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
               });
               // หยุดเล่น video ถ้ากำลังลากขยับ
@@ -227,14 +302,27 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
             stopVideo();
           }
 
+          // ขยาย selection ให้รวมทั้ง group
+          const groupIds = expandGroupIds(hitNode.id, doc.nodes);
+
           // คลิกที่ node
           if (e.evt.shiftKey) {
-            // Shift+click = toggle selection
-            toggleSelect(hitNode.id);
+            // Shift+click = toggle group selection
+            const { selectMultiple, getSelectedIds } = useSelectionStore.getState();
+            const currentIds = new Set(getSelectedIds());
+            const allInGroup = groupIds.every((id) => currentIds.has(id));
+            if (allInGroup) {
+              // ถ้ากลุ่มทั้งหมดเลือกอยู่แล้ว → ถอดออก
+              groupIds.forEach((id) => currentIds.delete(id));
+            } else {
+              // เพิ่มกลุ่มเข้าไป
+              groupIds.forEach((id) => currentIds.add(id));
+            }
+            selectMultiple(Array.from(currentIds));
           } else {
-            // ถ้ายังไม่ได้เลือก node นี้ → เลือก
+            // ถ้ายังไม่ได้เลือก node นี้ → เลือก (รวม group)
             if (!selectedIds.has(hitNode.id)) {
-              select(hitNode.id);
+              useSelectionStore.getState().selectMultiple(groupIds);
             }
           }
 
@@ -244,14 +332,10 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
           accDeltaRef.current = { x: 0, y: 0 };
           // บันทึกตำแหน่งเดิมของ selected nodes สำหรับ undo
           originalPositionsRef.current.clear();
-          // รวม hitNode และ nodes ที่เลือกแล้ว
-          const nodesToTrack = e.evt.shiftKey
-            ? doc.nodes.filter(
-                (n) => selectedIds.has(n.id) || n.id === hitNode.id,
-              )
-            : selectedIds.has(hitNode.id)
-              ? doc.nodes.filter((n) => selectedIds.has(n.id))
-              : [hitNode];
+          // รวม hitNode + group + nodes ที่เลือกแล้ว
+          const currentSelectedIds = useSelectionStore.getState().getSelectedIds();
+          const allTrackIds = expandAllGroupIds(currentSelectedIds, doc.nodes);
+          const nodesToTrack = doc.nodes.filter((n) => allTrackIds.includes(n.id));
           nodesToTrack.forEach((n) => {
             originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
           });
@@ -359,6 +443,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
           // แสดง snap guides
           useSnapGuidesStore.getState().setGuides(snapResult.guides);
+          useSnapGuidesStore.getState().setSpacingGuides(snapResult.spacingGuides);
 
           // อัพเดทตำแหน่ง nodes = original + finalDelta
           const updates = selectedIds.map((id: string) => {
@@ -404,7 +489,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
           useSelectionStore
             .getState()
-            .selectMultiple(intersecting.map((n) => n.id));
+            .selectMultiple(expandAllGroupIds(intersecting.map((n) => n.id), doc.nodes));
         }
       }
     };
@@ -444,6 +529,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
       // Reset states
       isDraggingRef.current = false;
+      isAltDuplicatingRef.current = false;
       isMarqueeRef.current = false;
       dragStartRef.current = null;
       marqueeStartRef.current = null;
@@ -488,9 +574,10 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
         const hitNode = findTopNodeAt(docNow.nodes, worldPos.x, worldPos.y);
         if (hitNode) {
-          const { selectedIds, select } = useSelectionStore.getState();
+          const { selectedIds, selectMultiple } = useSelectionStore.getState();
           if (!selectedIds.has(hitNode.id)) {
-            select(hitNode.id);
+            const groupIds = expandGroupIds(hitNode.id, docNow.nodes);
+            selectMultiple(groupIds);
           }
         }
 
@@ -545,7 +632,11 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
               dragStartRef.current = worldPos;
               accDeltaRef.current = { x: 0, y: 0 };
               originalPositionsRef.current.clear();
-              selectedNodes.forEach((n) => {
+              const allTrackIds = expandAllGroupIds(currentSelectedIds, doc.nodes);
+              if (allTrackIds.length > currentSelectedIds.length) {
+                useSelectionStore.getState().selectMultiple(allTrackIds);
+              }
+              doc.nodes.filter((n) => allTrackIds.includes(n.id)).forEach((n) => {
                 originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
               });
               return;
@@ -556,16 +647,18 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
 
         if (hitNode) {
+          // ขยายให้รวมทั้ง group
+          const groupIds = expandGroupIds(hitNode.id, doc.nodes);
           if (!selectedIds.has(hitNode.id)) {
-            select(hitNode.id);
+            useSelectionStore.getState().selectMultiple(groupIds);
           }
           isDraggingRef.current = true;
           dragStartRef.current = worldPos;
           accDeltaRef.current = { x: 0, y: 0 };
           originalPositionsRef.current.clear();
-          const nodesToTrack = selectedIds.has(hitNode.id)
-            ? doc.nodes.filter((n) => selectedIds.has(n.id))
-            : [hitNode];
+          const currentSelectedIds = useSelectionStore.getState().getSelectedIds();
+          const allTrackIds = expandAllGroupIds(currentSelectedIds, doc.nodes);
+          const nodesToTrack = doc.nodes.filter((n) => allTrackIds.includes(n.id));
           nodesToTrack.forEach((n) => {
             originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
           });

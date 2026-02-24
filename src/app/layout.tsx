@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "@/shared/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "Canvas Editor",
+  title: "Authoring Tool Structure",
   description: "A Canva-like editor built with Next.js and Konva",
 };
 
