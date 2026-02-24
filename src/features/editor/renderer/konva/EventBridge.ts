@@ -237,6 +237,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
             };
 
             if (boundsContainsPoint(expandedBounds, worldPos.x, worldPos.y)) {
+              // ถ้า nodes ที่เลือกทั้งหมดถูกล็อค → ไม่ให้ลาก
+              const allLocked = selectedNodes.every((n) => n.locked);
+              if (allLocked) {
+                return;
+              }
+
               // =============================================
               // ALT + DRAG = Duplicate แบบ Canva
               // กด Alt ค้าง + คลิกลากที่ selected nodes → สร้าง clone แล้วลาก clone ออก
@@ -324,6 +330,11 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
             if (!selectedIds.has(hitNode.id)) {
               useSelectionStore.getState().selectMultiple(groupIds);
             }
+          }
+
+          // ถ้า node ที่คลิกถูกล็อค → เลือกได้แต่ไม่ให้ลาก
+          if (hitNode.locked) {
+            return;
           }
 
           // เริ่มลาก
@@ -628,6 +639,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
             };
 
             if (boundsContainsPoint(expandedBounds, worldPos.x, worldPos.y)) {
+              // ถ้า nodes ที่เลือกทั้งหมดถูกล็อค → ไม่ให้ลาก (touch)
+              const allLockedTouch = selectedNodes.every((n) => n.locked);
+              if (allLockedTouch) {
+                return;
+              }
+
               isDraggingRef.current = true;
               dragStartRef.current = worldPos;
               accDeltaRef.current = { x: 0, y: 0 };
@@ -652,6 +669,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
           if (!selectedIds.has(hitNode.id)) {
             useSelectionStore.getState().selectMultiple(groupIds);
           }
+
+          // ถ้า node ถูกล็อค → เลือกได้แต่ไม่ให้ลาก (touch)
+          if (hitNode.locked) {
+            return;
+          }
+
           isDraggingRef.current = true;
           dragStartRef.current = worldPos;
           accDeltaRef.current = { x: 0, y: 0 };

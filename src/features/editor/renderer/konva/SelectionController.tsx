@@ -68,6 +68,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   // ถ้ากำลังแก้ไข text → ไม่แสดง transformer
   const isEditingText = editingNodeId !== null;
 
+  // ตรวจสอบว่า nodes ที่เลือกทั้งหมดถูกล็อคหรือไม่
+  const allLocked = selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
+
   // Force update transformer when single node's size changes
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -419,6 +422,19 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   // ไม่มี selection หรือกำลังแก้ไข text
   if (selectedNodes.length === 0 || isEditingText) {
     return <Transformer ref={transformerRef} />;
+  }
+
+  // ถ้า nodes ทั้งหมดถูกล็อค → แสดง transformer แบบไม่มี handles (ไม่ให้ resize/rotate)
+  if (allLocked) {
+    return (
+      <Transformer
+        ref={transformerRef}
+        enabledAnchors={[]}
+        rotateEnabled={false}
+        borderStroke="#ff4444"
+        borderDash={[4, 4]}
+      />
+    );
   }
 
   // Multi-selection: แสดง proxy rect
