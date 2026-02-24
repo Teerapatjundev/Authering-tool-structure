@@ -178,19 +178,31 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         const rotatedRelY = scaledRelX * sin + scaledRelY * cos;
 
         // ตำแหน่งใหม่
-        const newX = newCenterX + rotatedRelX;
-        const newY = newCenterY + rotatedRelY;
+        let finalX = newCenterX + rotatedRelX;
+        let finalY = newCenterY + rotatedRelY;
+        let finalW = newWidth;
+        let finalH = newHeight;
 
         // Rotation ใหม่
         const newRotation = orig.rotation + rotation;
 
+        // Clamp to document bounds (center-based coordinates)
+        if (doc) {
+          finalW = Math.min(finalW, doc.width);
+          finalH = Math.min(finalH, doc.height);
+          const halfW = finalW / 2;
+          const halfH = finalH / 2;
+          finalX = Math.max(halfW, Math.min(doc.width - halfW, finalX));
+          finalY = Math.max(halfH, Math.min(doc.height - halfH, finalY));
+        }
+
         updates.push({
           id: orig.id,
           changes: {
-            x: newX,
-            y: newY,
-            width: newWidth,
-            height: newHeight,
+            x: finalX,
+            y: finalY,
+            width: finalW,
+            height: finalH,
             rotation: newRotation,
           },
         });
@@ -199,35 +211,10 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       if (updates.length > 0) {
         updateNodes(updates);
       }
-    } else {
-      // ===============================================
-      // Single selection transform
-      // ===============================================
-      const node = selectedNodes[0];
-      if (!node) return;
-
-      const shape = stage.findOne(`#shape_${node.id}`);
-      if (!shape) return;
-
-      const original = originalStatesRef.current[0];
-      if (!original) return;
-
-      const scaleX = shape.scaleX();
-      const scaleY = shape.scaleY();
-
-      updateNodes([
-        {
-          id: node.id,
-          changes: {
-            x: shape.x(),
-            y: shape.y(),
-            width: Math.abs(original.width * scaleX),
-            height: Math.abs(original.height * scaleY),
-            rotation: shape.rotation(),
-          },
-        },
-      ]);
     }
+    // Single selection: ไม่อัพเดท store ระหว่าง transform
+    // ป้องกัน double-scaling — ให้ Konva Transformer จัดการ visual
+    // อัพเดทค่าจริงใน handleTransformEnd เท่านั้น
   };
 
   /**
@@ -237,45 +224,140 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const stage = stageRef.current;
     if (!stage) return;
 
-    // สร้าง TransformOp
     const transformUpdates: Array<{
       id: string;
       oldProps: Partial<Node>;
       newProps: Partial<Node>;
     }> = [];
 
-    selectedNodes.forEach((node) => {
-      const original = originalStatesRef.current.find((o) => o.id === node.id);
-      if (!original) return;
+    if (!isMultiSelect && selectedNodes.length === 1) {
+      // ===============================================
+      // Single selection: คำนวณค่าจาก Konva shape โดยตรง
+      // (ไม่ได้อัพเดท store ระหว่าง transform เพื่อป้องกัน double-scaling)
+      // ===============================================
+      const node = selectedNodes[0];
+      const shape = stage.findOne(`#shape_${node.id}`);
+      const original = originalStatesRef.current[0];
 
-      transformUpdates.push({
-        id: node.id,
-        oldProps: {
-          x: original.x,
-          y: original.y,
-          width: original.width,
-          height: original.height,
-          rotation: original.rotation,
-        },
-        newProps: {
-          x: node.x,
-          y: node.y,
-          width: node.width,
-          height: node.height,
-          rotation: node.rotation,
-        },
+      if (shape && original) {
+        const scaleX = shape.scaleX();
+        const scaleY = shape.scaleY();
+
+        // คำนวณขนาดจริงจาก shape width * scale
+        let finalWidth = Math.max(5, Math.abs(shape.width() * scaleX));
+        let finalHeight = Math.max(5, Math.abs(shape.height() * scaleY));
+        let finalX = shape.x();
+        let finalY = shape.y();
+        const finalRotation = shape.rotation();
+
+        // Clamp to document bounds (center-based coordinates)
+        if (doc) {
+          finalWidth = Math.min(finalWidth, doc.width);
+          finalHeight = Math.min(finalHeight, doc.height);
+          const halfW = finalWidth / 2;
+          const halfH = finalHeight / 2;
+          finalX = Math.max(halfW, Math.min(doc.width - halfW, finalX));
+          finalY = Math.max(halfH, Math.min(doc.height - halfH, finalY));
+        }
+
+        // Reset shape scale และอัพเดท dimensions ป้องกัน visual glitch
+        shape.scaleX(1);
+        shape.scaleY(1);
+        shape.x(finalX);
+        shape.y(finalY);
+        shape.width(finalWidth);
+        shape.height(finalHeight);
+        // อัพเดท offset สำหรับ center-based shapes (Rect, Text, Image)
+        // Ellipse ใช้ offset = 0 เพราะ center-based โดยธรรมชาติ
+        if (shape.offsetX() !== 0) {
+          shape.offsetX(finalWidth / 2);
+          shape.offsetY(finalHeight / 2);
+        }
+
+        // Update store
+        updateNodes([{
+          id: node.id,
+          changes: {
+            x: finalX,
+            y: finalY,
+            width: finalWidth,
+            height: finalHeight,
+            rotation: finalRotation,
+          },
+        }]);
+
+        transformUpdates.push({
+          id: node.id,
+          oldProps: {
+            x: original.x,
+            y: original.y,
+            width: original.width,
+            height: original.height,
+            rotation: original.rotation,
+          },
+          newProps: {
+            x: finalX,
+            y: finalY,
+            width: finalWidth,
+            height: finalHeight,
+            rotation: finalRotation,
+          },
+        });
+      }
+    } else {
+      // ===============================================
+      // Multi-selection: clamp ค่าปัจจุบันแล้วสร้าง history
+      // ===============================================
+      const clampedUpdates: Array<{ id: string; changes: Partial<Node> }> = [];
+
+      selectedNodes.forEach((node) => {
+        const original = originalStatesRef.current.find((o) => o.id === node.id);
+        if (!original) return;
+
+        let { x, y, width, height } = node;
+        const { rotation } = node;
+
+        // Clamp to document bounds
+        if (doc) {
+          width = Math.min(width, doc.width);
+          height = Math.min(height, doc.height);
+          const halfW = width / 2;
+          const halfH = height / 2;
+          x = Math.max(halfW, Math.min(doc.width - halfW, x));
+          y = Math.max(halfH, Math.min(doc.height - halfH, y));
+        }
+
+        clampedUpdates.push({
+          id: node.id,
+          changes: { x, y, width, height },
+        });
+
+        transformUpdates.push({
+          id: node.id,
+          oldProps: {
+            x: original.x,
+            y: original.y,
+            width: original.width,
+            height: original.height,
+            rotation: original.rotation,
+          },
+          newProps: { x, y, width, height, rotation },
+        });
       });
-    });
 
-    // Reset scales
-    if (isMultiSelect) {
+      // Batch update ค่าที่ clamp แล้ว
+      if (clampedUpdates.length > 0) {
+        updateNodes(clampedUpdates);
+      }
+
+      // Reset proxy rect
       const proxyRect = proxyRectRef.current;
       if (proxyRect) {
         proxyRect.scaleX(1);
         proxyRect.scaleY(1);
         proxyRect.rotation(0);
-        // Update proxy position to new bounds center
-        const newBounds = getMultiSelectionBounds(selectedNodes);
+        const currentNodes = doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
+        const newBounds = getMultiSelectionBounds(currentNodes);
         if (newBounds) {
           proxyRect.x(newBounds.x + newBounds.width / 2);
           proxyRect.y(newBounds.y + newBounds.height / 2);
@@ -284,12 +366,6 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           proxyRect.offsetX(newBounds.width / 2);
           proxyRect.offsetY(newBounds.height / 2);
         }
-      }
-    } else {
-      const shape = stage.findOne(`#shape_${selectedNodes[0]?.id}`);
-      if (shape) {
-        shape.scaleX(1);
-        shape.scaleY(1);
       }
     }
 
@@ -373,6 +449,23 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
             if (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10) {
               return oldBox;
             }
+            // Clamp to document bounds (convert to absolute/screen coords)
+            if (doc) {
+              const { viewport } = useViewStore.getState();
+              const zoom = viewport.zoom;
+              const docLeft = viewport.x;
+              const docTop = viewport.y;
+              const docRight = doc.width * zoom + viewport.x;
+              const docBottom = doc.height * zoom + viewport.y;
+
+              let { x, y, width, height } = newBox;
+              if (x < docLeft) { width -= (docLeft - x); x = docLeft; }
+              if (y < docTop) { height -= (docTop - y); y = docTop; }
+              if (x + width > docRight) { width = docRight - x; }
+              if (y + height > docBottom) { height = docBottom - y; }
+              if (width < 10 || height < 10) return oldBox;
+              return { ...newBox, x, y, width, height };
+            }
             return newBox;
           }}
         />
@@ -403,6 +496,23 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       boundBoxFunc={(oldBox, newBox) => {
         if (Math.abs(newBox.width) < 5 || Math.abs(newBox.height) < 5) {
           return oldBox;
+        }
+        // Clamp to document bounds (convert to absolute/screen coords)
+        if (doc) {
+          const { viewport } = useViewStore.getState();
+          const zoom = viewport.zoom;
+          const docLeft = viewport.x;
+          const docTop = viewport.y;
+          const docRight = doc.width * zoom + viewport.x;
+          const docBottom = doc.height * zoom + viewport.y;
+
+          let { x, y, width, height } = newBox;
+          if (x < docLeft) { width -= (docLeft - x); x = docLeft; }
+          if (y < docTop) { height -= (docTop - y); y = docTop; }
+          if (x + width > docRight) { width = docRight - x; }
+          if (y + height > docBottom) { height = docBottom - y; }
+          if (width < 5 || height < 5) return oldBox;
+          return { ...newBox, x, y, width, height };
         }
         return newBox;
       }}
