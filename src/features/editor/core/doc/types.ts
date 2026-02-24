@@ -30,6 +30,13 @@ export interface BaseNode {
   opacity: number; // ความโปร่งใส (0-1)
   locked: boolean; // ล็อคไม่ให้แก้ไข
   visible: boolean; // แสดง/ซ่อน
+
+  // === Grouping ===
+  groupId?: string; // รหัสกลุ่ม (ถ้าอยู่ในกลุ่ม)
+
+  // === Master / Instance ===
+  masterId?: string; // ชี้ไปยัง master node (ถ้าเป็น instance)
+  isMaster?: boolean; // เป็น master template หรือไม่
 }
 
 // ===============================================

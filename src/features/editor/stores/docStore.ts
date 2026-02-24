@@ -17,7 +17,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { Document, Node } from "../core/doc/types";
-import { createEmptyDocument } from "../core/doc/migrate";
+import { createEmptyDocument, A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT } from "../core/doc/migrate";
 import { docsService } from "@/services/api/docs.service";
 import { debounce } from "@/shared/utils/debounce";
 
@@ -63,7 +63,15 @@ export const useDocStore = create<DocState>()(
         docsService.saveDoc(doc);
       }
 
-      set({ doc: doc as Document, isLoading: false });
+      // กันกระดาษหาย: เติม width/height/backgroundColor ถ้าไม่มี (ข้อมูลเก่าที่บันทึกไม่ครบ)
+      const fullDoc: Document = {
+        ...(doc as Document),
+        width: (doc as Document).width || A4_LANDSCAPE_WIDTH,
+        height: (doc as Document).height || A4_LANDSCAPE_HEIGHT,
+        backgroundColor: (doc as Document).backgroundColor || "#ffffff",
+      };
+
+      set({ doc: fullDoc, isLoading: false });
     },
 
     setDoc: (doc: Document) => {
@@ -137,6 +145,9 @@ export const useDocStore = create<DocState>()(
         nodes: state.doc.nodes,
         version: state.doc.version,
         updatedAt: state.doc.updatedAt,
+        width: state.doc.width,
+        height: state.doc.height,
+        backgroundColor: state.doc.backgroundColor,
       });
       set({ isSaving: false });
     },

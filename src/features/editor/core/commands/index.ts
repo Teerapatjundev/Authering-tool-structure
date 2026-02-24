@@ -16,3 +16,4 @@ export * from "./selection";
 export * from "./transform";
 export * from "./edit";
 export * from "./clipboard";
+export * from "./contextMenu";

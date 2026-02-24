@@ -4,24 +4,23 @@
  * ===============================================
  *
  * เก็บสถานะเส้น guides (snap lines):
- * - guides: Array ของเส้นแนวนอน/แนวตั้ง
+ * - guides: Array ของเส้นแนวนอน/แนวตั้ง พร้อมจุดเริ่ม-จบ
  *
  * เส้น guides จะแสดงเมื่อลาก node ไปใกล้ node อื่น
+ * หรือตรงกลาง canvas
  */
 
 "use client";
 
 import { create } from "zustand";
+import { SnapGuideInfo } from "../core/geometry/snap";
 
-export interface SnapGuide {
-  type: "vertical" | "horizontal"; // แนวตั้ง หรือ แนวนอน
-  position: number; // ตำแหน่ง
-}
+export type { SnapGuideInfo as SnapGuide };
 
 interface SnapGuidesState {
-  guides: SnapGuide[];
+  guides: SnapGuideInfo[];
 
-  setGuides: (guides: SnapGuide[]) => void;
+  setGuides: (guides: SnapGuideInfo[]) => void;
   clearGuides: () => void;
 }
 
@@ -29,7 +28,7 @@ export const useSnapGuidesStore = create<SnapGuidesState>((set) => ({
   guides: [],
 
   /** ตั้งค่าเส้น guides */
-  setGuides: (guides: SnapGuide[]) => {
+  setGuides: (guides: SnapGuideInfo[]) => {
     set({ guides });
   },
 

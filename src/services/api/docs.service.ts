@@ -17,6 +17,9 @@ export interface DocData {
   nodes: unknown[];
   version: number;
   updatedAt: number;
+  width?: number;
+  height?: number;
+  backgroundColor?: string;
 }
 
 class DocsService {

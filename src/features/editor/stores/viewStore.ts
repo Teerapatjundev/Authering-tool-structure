@@ -76,12 +76,22 @@ export const useViewStore = create<ViewState>()(
         // Zoom ไปที่จุด center
         const worldPos = state.screenToWorld(centerX, centerY);
 
-        set((state) => {
-          state.viewport.zoom = newZoom;
-          // คำนวณ offset ใหม่เพื่อให้จุดเดิมอยู่ที่เดิม
-          state.viewport.x = centerX - worldPos.x * newZoom;
-          state.viewport.y = centerY - worldPos.y * newZoom;
-        });
+        // Guard NaN: ถ้าคำนวณได้ NaN ให้ zoom อย่างเดียวโดยไม่เปลี่ยน pan
+        const newX = centerX - worldPos.x * newZoom;
+        const newY = centerY - worldPos.y * newZoom;
+
+        if (!Number.isFinite(newX) || !Number.isFinite(newY)) {
+          // ค่าเป็น NaN/Infinity → แค่ zoom อย่างเดียว
+          set((state) => {
+            state.viewport.zoom = newZoom;
+          });
+        } else {
+          set((state) => {
+            state.viewport.zoom = newZoom;
+            state.viewport.x = newX;
+            state.viewport.y = newY;
+          });
+        }
       } else {
         set((state) => {
           state.viewport.zoom = newZoom;
@@ -91,6 +101,8 @@ export const useViewStore = create<ViewState>()(
 
     /** Pan (เลื่อน) viewport */
     pan: (dx: number, dy: number) => {
+      // Guard NaN
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
       set((state) => {
         state.viewport.x += dx;
         state.viewport.y += dy;
@@ -117,6 +129,12 @@ export const useViewStore = create<ViewState>()(
       viewWidth: number,
       viewHeight: number,
     ) => {
+      // Guard: ถ้าขนาด document ไม่ถูกต้อง ใช้ค่า default
+      if (!docWidth || !Number.isFinite(docWidth)) docWidth = 1123;
+      if (!docHeight || !Number.isFinite(docHeight)) docHeight = 794;
+      if (!viewWidth || !Number.isFinite(viewWidth)) return;
+      if (!viewHeight || !Number.isFinite(viewHeight)) return;
+
       // คำนวณ zoom ที่ทำให้ document พอดีกับ viewport (มี margin 40px รอบๆ)
       const margin = 60;
       const availableWidth = viewWidth - margin * 2;
@@ -131,6 +149,11 @@ export const useViewStore = create<ViewState>()(
       const scaledHeight = docHeight * zoom;
       const x = (viewWidth - scaledWidth) / 2;
       const y = (viewHeight - scaledHeight) / 2;
+
+      // Guard NaN ขั้นสุดท้าย
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(zoom)) {
+        return;
+      }
 
       set((state) => {
         state.viewport = { x, y, zoom };

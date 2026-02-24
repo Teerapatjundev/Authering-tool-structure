@@ -39,6 +39,7 @@ import { insertImage } from "./core/commands/insert";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
 import { OverlayRoot } from "./renderer/overlays/OverlayRoot";
 import { EditorLayout } from "./EditorLayout";
+import { ContextMenu } from "./ui/ContextMenu";
 
 interface EditorClientProps {
   docId: string;
@@ -373,6 +374,9 @@ export function EditorClient({ docId }: EditorClientProps) {
         <div className="absolute inset-0 z-20 pointer-events-none">
           <OverlayRoot />
         </div>
+
+        {/* Context Menu (right-click / long-press) */}
+        <ContextMenu />
       </div>
     </EditorLayout>
   );
