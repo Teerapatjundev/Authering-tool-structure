@@ -3,12 +3,16 @@
  * LEFT SIDEBAR - แผงเพิ่ม Elements
  * ===============================================
  *
- * แสดงปุ่มสำหรับเพิ่ม elements ต่างๆ ลงใน canvas:
- * - Rectangle
- * - Ellipse / Circle
- * - Text
+ * แสดง elements ที่สามารถลากมาวางบน canvas:
+ * - Rectangle (ลากหรือคลิกเพื่อเพิ่ม)
+ * - Ellipse / Circle (ลากหรือคลิกเพื่อเพิ่ม)
+ * - Text (ลากหรือคลิกเพื่อเพิ่ม)
  * - Image (อัปโหลดไฟล์ หรือ ลากรูปมาวาง)
  * - Video (YouTube URL)
+ * 
+ * การใช้งาน:
+ * - ลาก element ไปวางบน canvas เพื่อสร้างที่ตำแหน่งที่ต้องการ
+ * - หรือคลิกเพื่อสร้างตรงกลาง document
  */
 
 "use client";
@@ -199,17 +203,32 @@ export function LeftSidebar() {
       <div className="px-4 py-3 border-b border-gray-100">
         <h2 className="font-semibold text-gray-800">Elements</h2>
         <p className="text-xs text-gray-500 mt-1">
-          Click to add elements to canvas
+          Drag elements to canvas
         </p>
       </div>
 
       {/* รายการ Elements */}
       <div className="flex-1 p-3 space-y-2 overflow-auto">
         {elements.map((element) => (
-          <button
+          <div
             key={element.id}
+            draggable={element.id !== "image" && element.id !== "video"}
+            onDragStart={(e) => {
+              // เก็บข้อมูล element type ไว้ใน dataTransfer
+              e.dataTransfer.setData("application/element-type", element.id);
+              e.dataTransfer.effectAllowed = "copy";
+              
+              // สร้าง ghost image สำหรับ drag cursor
+              const ghostElement = e.currentTarget.cloneNode(true) as HTMLElement;
+              ghostElement.style.opacity = "0.5";
+              ghostElement.style.position = "absolute";
+              ghostElement.style.top = "-1000px";
+              document.body.appendChild(ghostElement);
+              e.dataTransfer.setDragImage(ghostElement, 0, 0);
+              setTimeout(() => document.body.removeChild(ghostElement), 0);
+            }}
             onClick={() => handleAddElement(element.id)}
-            className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all group"
+            className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all group cursor-move active:cursor-grabbing"
           >
             <div
               className={`w-10 h-10 ${element.color} rounded-lg flex items-center justify-center text-white text-xl`}
@@ -222,7 +241,7 @@ export function LeftSidebar() {
               </div>
               <div className="text-xs text-gray-400">{element.description}</div>
             </div>
-          </button>
+          </div>
         ))}
       </div>
 

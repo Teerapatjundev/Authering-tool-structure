@@ -33,6 +33,7 @@ export interface BaseNode {
 
   // === Grouping ===
   groupId?: string; // รหัสกลุ่ม (ถ้าอยู่ในกลุ่ม)
+  groupRotation?: number; // มุมหมุนสะสมของกลุ่ม (Canva-style: กรอบเอียงตาม)
 
   // === Master / Instance ===
   masterId?: string; // ชี้ไปยัง master node (ถ้าเป็น instance)

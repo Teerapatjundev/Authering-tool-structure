@@ -1,20 +1,7 @@
-/**
- * ===============================================
- * SELECTION CONTROLLER - Transform Handles
- * ===============================================
- *
- * แสดง transform handles สำหรับ selection:
- * - Single selection: Transformer attach กับ shape โดยตรง
- * - Multi-selection: ใช้ Rect proxy + คำนวณ transform แยกแต่ละ node
- *
- * Multi-selection behavior:
- * - Resize: แต่ละ node ขยาย/ย่อตามสัดส่วนตำแหน่งใน group
- * - Rotate: ทั้ง group หมุนรอบ center ของ group
- */
-
+/** Selection Controller — Transform handles for single & multi-selection (Canva-style) */
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef } from "react";
 import { Transformer, Rect } from "react-konva";
 import Konva from "konva";
 import { useSelectionStore } from "../../stores/selectionStore";
@@ -23,16 +10,23 @@ import { useViewStore } from "../../stores/viewStore";
 import { useHistoryStore } from "../../core/history/historyStore";
 import { useTextEditStore } from "../../stores/textEditStore";
 import { TransformOp } from "../../core/history/ops";
-import { Node } from "../../core/doc/types";
-import { getMultiSelectionBounds } from "../../core/geometry/bounds";
+import { Node, NodeType } from "../../core/doc/types";
+import {
+  getMultiSelectionBoundsWithRotation,
+  getGroupBoundsInRotatedFrame,
+} from "../../core/geometry/bounds";
+
+/* ------------------------------------------------------------------ */
+/*  Types & Constants                                                  */
+/* ------------------------------------------------------------------ */
 
 interface SelectionControllerProps {
   stageRef: React.RefObject<Konva.Stage>;
 }
 
-// เก็บค่าเริ่มต้นของ nodes ก่อน transform
-interface OriginalNodeState {
+interface OrigNodeState {
   id: string;
+  type: NodeType;
   x: number;
   y: number;
   width: number;
@@ -40,18 +34,182 @@ interface OriginalNodeState {
   rotation: number;
 }
 
+const ROTATION_SNAPS = [0, 45, 90, 135, 180, 225, 270, 315];
+const ALL_ANCHORS = [
+  "top-left",
+  "top-center",
+  "top-right",
+  "middle-left",
+  "middle-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+] as const;
+const CORNER_ANCHORS = [
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+] as const;
+const SCALE_SNAP = 0.01;
+
+/* ------------------------------------------------------------------ */
+/*  Shared helpers (extracted from duplicated transform math)          */
+/* ------------------------------------------------------------------ */
+
+/** Compute transformed position/size for every node in a multi-selection */
+function computeMultiPositions(
+  origStates: OrigNodeState[],
+  origCenter: { x: number; y: number },
+  groupRot: number,
+  rawSX: number,
+  rawSY: number,
+  proxyRot: number,
+  cx: number,
+  cy: number,
+) {
+  const deltaRot = proxyRot - groupRot;
+  const isPure =
+    Math.abs(rawSX - 1) < SCALE_SNAP &&
+    Math.abs(rawSY - 1) < SCALE_SNAP &&
+    Math.abs(deltaRot) > 0.1;
+  const sX = isPure ? 1 : rawSX;
+  const sY = isPure ? 1 : rawSY;
+
+  const lr = (-groupRot * Math.PI) / 180;
+  const lc = Math.cos(lr),
+    ls = Math.sin(lr);
+  const wr = (proxyRot * Math.PI) / 180;
+  const wc = Math.cos(wr),
+    ws = Math.sin(wr);
+
+  return origStates.map((o) => {
+    const w = isPure ? o.width : Math.abs(o.width * sX);
+    const h = isPure ? o.height : Math.abs(o.height * sY);
+    const rx = o.x - origCenter.x,
+      ry = o.y - origCenter.y;
+    const lx = rx * lc - ry * ls,
+      ly = rx * ls + ry * lc;
+    const sx = lx * sX,
+      sy = ly * sY;
+    return {
+      id: o.id,
+      type: o.type,
+      x: cx + sx * wc - sy * ws,
+      y: cy + sx * ws + sy * wc,
+      width: w,
+      height: h,
+      rotation: o.rotation + deltaRot,
+      origWidth: o.width,
+      origHeight: o.height,
+    };
+  });
+}
+
+/** Apply position/size to a Konva shape. finalize=true resets scale to 1. */
+function setKonvaShape(
+  stage: Konva.Stage,
+  id: string,
+  type: NodeType,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  rot: number,
+  origW: number,
+  origH: number,
+  finalize: boolean,
+) {
+  const shape = stage.findOne(`#shape_${id}`);
+  if (!shape) return;
+
+  if (type === "video") {
+    const p = shape.parent;
+    if (!p || p === shape.getLayer()) return;
+    p.x(x);
+    p.y(y);
+    p.rotation(rot);
+    if (finalize) {
+      p.scaleX(1);
+      p.scaleY(1);
+      p.offsetX(w / 2);
+      p.offsetY(h / 2);
+      shape.width(w);
+      shape.height(h);
+    } else {
+      p.scaleX(w / origW);
+      p.scaleY(h / origH);
+    }
+  } else if (type === "ellipse") {
+    shape.x(x);
+    shape.y(y);
+    shape.rotation(rot);
+    (shape as Konva.Ellipse).radiusX(w / 2);
+    (shape as Konva.Ellipse).radiusY(h / 2);
+    if (finalize) {
+      shape.scaleX(1);
+      shape.scaleY(1);
+    }
+  } else {
+    shape.x(x);
+    shape.y(y);
+    shape.rotation(rot);
+    shape.width(w);
+    shape.height(h);
+    shape.offsetX(w / 2);
+    shape.offsetY(h / 2);
+    if (finalize) {
+      shape.scaleX(1);
+      shape.scaleY(1);
+    }
+  }
+}
+
+/** Document bounds in screen-space */
+function docScreenBounds(d: { width: number; height: number }) {
+  const { viewport } = useViewStore.getState();
+  const z = viewport.zoom;
+  return {
+    l: viewport.x,
+    t: viewport.y,
+    r: d.width * z + viewport.x,
+    b: d.height * z + viewport.y,
+  };
+}
+
+/** Clamp edges of a box to document screen bounds */
+function clampEdges(
+  box: { x: number; y: number; width: number; height: number },
+  db: { l: number; t: number; r: number; b: number },
+) {
+  let { x, y, width, height } = box;
+  if (x < db.l) {
+    width -= db.l - x;
+    x = db.l;
+  }
+  if (y < db.t) {
+    height -= db.t - y;
+    y = db.t;
+  }
+  if (x + width > db.r) width = db.r - x;
+  if (y + height > db.b) height = db.b - y;
+  return { x, y, width, height };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
+
 export function SelectionController({ stageRef }: SelectionControllerProps) {
   const { selectedIds } = useSelectionStore();
   const { doc, updateNodes } = useDocStore();
   const { viewport } = useViewStore();
   const { editingNodeId } = useTextEditStore();
 
-  const transformerRef = useRef<Konva.Transformer>(null);
-  const proxyRectRef = useRef<Konva.Rect>(null);
-
-  // เก็บค่าเริ่มต้นก่อน transform
-  const originalStatesRef = useRef<OriginalNodeState[]>([]);
-  const originalBoundsRef = useRef<{
+  const trRef = useRef<Konva.Transformer>(null);
+  const proxyRef = useRef<Konva.Rect>(null);
+  const origStatesRef = useRef<OrigNodeState[]>([]);
+  const origBoundsRef = useRef<{
     x: number;
     y: number;
     width: number;
@@ -59,64 +217,72 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     centerX: number;
     centerY: number;
   } | null>(null);
+  const groupRotRef = useRef(0);
+  const prevKeyRef = useRef("");
 
-  // หา nodes ที่เลือกอยู่
   const selectedNodes = doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
-  const bounds = getMultiSelectionBounds(selectedNodes);
-  const isMultiSelect = selectedNodes.length > 1;
-
-  // ถ้ากำลังแก้ไข text → ไม่แสดง transformer
+  const bounds = getMultiSelectionBoundsWithRotation(selectedNodes);
+  const isMulti = selectedNodes.length > 1;
   const isEditingText = editingNodeId !== null;
+  const allLocked =
+    selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
 
-  // ตรวจสอบว่า nodes ที่เลือกทั้งหมดถูกล็อคหรือไม่
-  const allLocked = selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
+  // Sync group rotation on selection change (synchronous to avoid 1-frame flicker)
+  const key = Array.from(selectedIds).sort().join(",");
+  if (prevKeyRef.current !== key) {
+    prevKeyRef.current = key;
+    let restored = false;
+    if (selectedNodes.length > 1) {
+      const gid = selectedNodes[0]?.groupId;
+      if (gid && selectedNodes.every((n) => n.groupId === gid)) {
+        const saved = selectedNodes[0]?.groupRotation;
+        if (saved !== undefined && saved !== 0) {
+          groupRotRef.current = saved;
+          restored = true;
+        }
+      }
+    }
+    if (!restored) groupRotRef.current = 0;
+  }
 
-  // Force update transformer when single node's size changes
+  const groupBounds = isMulti
+    ? getGroupBoundsInRotatedFrame(selectedNodes, groupRotRef.current)
+    : null;
+
+  // Force-update transformer when single node size changes
   useEffect(() => {
-    const transformer = transformerRef.current;
-    if (!transformer || selectedNodes.length !== 1 || isEditingText) return;
-
-    const node = selectedNodes[0];
-    // Force transformer to update its bounds
-    transformer.forceUpdate();
-    transformer.getLayer()?.batchDraw();
+    const tr = trRef.current;
+    if (!tr || selectedNodes.length !== 1 || isEditingText) return;
+    tr.forceUpdate();
+    tr.getLayer()?.batchDraw();
   }, [selectedNodes, isEditingText]);
 
-  // Attach transformer
+  // Attach transformer to target shape / proxy rect
   useEffect(() => {
-    const transformer = transformerRef.current;
-    const stage = stageRef.current;
-    if (!transformer || !stage) return;
-
+    const tr = trRef.current,
+      stage = stageRef.current;
+    if (!tr || !stage) return;
     if (selectedNodes.length === 0 || isEditingText) {
-      transformer.nodes([]);
+      tr.nodes([]);
       return;
     }
 
-    if (isMultiSelect) {
-      // Multi-selection: attach กับ proxy rect
-      const proxyRect = proxyRectRef.current;
-      if (proxyRect) {
-        transformer.nodes([proxyRect]);
-      }
+    if (isMulti) {
+      const proxy = proxyRef.current;
+      if (proxy) tr.nodes([proxy]);
     } else {
-      // Single selection: attach กับ shape โดยตรง
       const shape = stage.findOne(`#shape_${selectedNodes[0].id}`);
-      if (shape) {
-        transformer.nodes([shape]);
-      }
+      if (shape) tr.nodes([shape]);
     }
+    tr.getLayer()?.batchDraw();
+  }, [selectedNodes, stageRef, selectedIds, isMulti, isEditingText]);
 
-    transformer.getLayer()?.batchDraw();
-  }, [selectedNodes, stageRef, selectedIds, isMultiSelect, isEditingText]);
+  /* ---- Transform handlers ---- */
 
-  /**
-   * เริ่ม transform - บันทึกค่าเริ่มต้น
-   */
   const handleTransformStart = () => {
-    // บันทึกค่าเดิมของทุก selected nodes
-    originalStatesRef.current = selectedNodes.map((n) => ({
+    origStatesRef.current = selectedNodes.map((n) => ({
       id: n.id,
+      type: n.type,
       x: n.x,
       y: n.y,
       width: n.width,
@@ -124,9 +290,20 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       rotation: n.rotation,
     }));
 
-    // บันทึก bounds เริ่มต้น (รวม center)
-    if (bounds) {
-      originalBoundsRef.current = {
+    if (isMulti) {
+      const pr = proxyRef.current;
+      if (pr) {
+        origBoundsRef.current = {
+          x: 0,
+          y: 0,
+          width: pr.width(),
+          height: pr.height(),
+          centerX: pr.x(),
+          centerY: pr.y(),
+        };
+      }
+    } else if (bounds) {
+      origBoundsRef.current = {
         ...bounds,
         centerX: bounds.x + bounds.width / 2,
         centerY: bounds.y + bounds.height / 2,
@@ -134,301 +311,269 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     }
   };
 
-  /**
-   * Real-time transform update
-   */
   const handleTransform = () => {
     const stage = stageRef.current;
-    if (!stage) return;
+    if (!stage || !isMulti) return; // Single: Konva Transformer handles visual
 
-    if (isMultiSelect) {
-      // ===============================================
-      // Multi-selection transform
-      // ===============================================
-      const proxyRect = proxyRectRef.current;
-      if (!proxyRect || !originalBoundsRef.current) return;
+    const pr = proxyRef.current;
+    if (!pr || !origBoundsRef.current) return;
 
-      const origBounds = originalBoundsRef.current;
-      const scaleX = proxyRect.scaleX();
-      const scaleY = proxyRect.scaleY();
-      const rotation = proxyRect.rotation();
-
-      // Proxy center (after transform)
-      const newCenterX = proxyRect.x();
-      const newCenterY = proxyRect.y();
-
-      // Apply transform ให้แต่ละ node
-      const updates: Array<{ id: string; changes: Partial<Node> }> = [];
-
-      originalStatesRef.current.forEach((orig) => {
-        // ขนาดใหม่
-        const newWidth = Math.abs(orig.width * scaleX);
-        const newHeight = Math.abs(orig.height * scaleY);
-
-        // คำนวณ relative position จาก original center ของ bounds
-        const relX = orig.x - origBounds.centerX;
-        const relY = orig.y - origBounds.centerY;
-
-        // Scale relative position
-        const scaledRelX = relX * scaleX;
-        const scaledRelY = relY * scaleY;
-
-        // Rotate relative position around center
-        const rad = (rotation * Math.PI) / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-        const rotatedRelX = scaledRelX * cos - scaledRelY * sin;
-        const rotatedRelY = scaledRelX * sin + scaledRelY * cos;
-
-        // ตำแหน่งใหม่
-        let finalX = newCenterX + rotatedRelX;
-        let finalY = newCenterY + rotatedRelY;
-        let finalW = newWidth;
-        let finalH = newHeight;
-
-        // Rotation ใหม่
-        const newRotation = orig.rotation + rotation;
-
-        // Clamp to document bounds (center-based coordinates)
-        if (doc) {
-          finalW = Math.min(finalW, doc.width);
-          finalH = Math.min(finalH, doc.height);
-          const halfW = finalW / 2;
-          const halfH = finalH / 2;
-          finalX = Math.max(halfW, Math.min(doc.width - halfW, finalX));
-          finalY = Math.max(halfH, Math.min(doc.height - halfH, finalY));
-        }
-
-        updates.push({
-          id: orig.id,
-          changes: {
-            x: finalX,
-            y: finalY,
-            width: finalW,
-            height: finalH,
-            rotation: newRotation,
-          },
-        });
-      });
-
-      if (updates.length > 0) {
-        updateNodes(updates);
-      }
-    }
-    // Single selection: ไม่อัพเดท store ระหว่าง transform
-    // ป้องกัน double-scaling — ให้ Konva Transformer จัดการ visual
-    // อัพเดทค่าจริงใน handleTransformEnd เท่านั้น
+    const positions = computeMultiPositions(
+      origStatesRef.current,
+      { x: origBoundsRef.current.centerX, y: origBoundsRef.current.centerY },
+      groupRotRef.current,
+      pr.scaleX(),
+      pr.scaleY(),
+      pr.rotation(),
+      pr.x(),
+      pr.y(),
+    );
+    positions.forEach((p) =>
+      setKonvaShape(
+        stage,
+        p.id,
+        p.type,
+        p.x,
+        p.y,
+        p.width,
+        p.height,
+        p.rotation,
+        p.origWidth,
+        p.origHeight,
+        false,
+      ),
+    );
+    stage.batchDraw();
   };
 
-  /**
-   * จบการ transform - บันทึก history
-   */
   const handleTransformEnd = () => {
     const stage = stageRef.current;
     if (!stage) return;
 
-    const transformUpdates: Array<{
+    const historyUpdates: Array<{
       id: string;
       oldProps: Partial<Node>;
       newProps: Partial<Node>;
     }> = [];
 
-    if (!isMultiSelect && selectedNodes.length === 1) {
-      // ===============================================
-      // Single selection: คำนวณค่าจาก Konva shape โดยตรง
-      // (ไม่ได้อัพเดท store ระหว่าง transform เพื่อป้องกัน double-scaling)
-      // ===============================================
+    if (!isMulti && selectedNodes.length === 1) {
+      /* --- Single selection --- */
       const node = selectedNodes[0];
       const shape = stage.findOne(`#shape_${node.id}`);
-      const original = originalStatesRef.current[0];
+      const orig = origStatesRef.current[0];
 
-      if (shape && original) {
-        const scaleX = shape.scaleX();
-        const scaleY = shape.scaleY();
-
-        // คำนวณขนาดจริงจาก shape width * scale
-        let finalWidth = Math.max(5, Math.abs(shape.width() * scaleX));
-        let finalHeight = Math.max(5, Math.abs(shape.height() * scaleY));
-        let finalX = shape.x();
-        let finalY = shape.y();
-        const finalRotation = shape.rotation();
-
-        // Clamp to document bounds (center-based coordinates)
-        if (doc) {
-          // สำหรับ image: clamp โดยรักษาสัดส่วน
-          if (node.type === "image") {
-            const aspect = finalWidth / finalHeight;
-            if (finalWidth > doc.width) {
-              finalWidth = doc.width;
-              finalHeight = finalWidth / aspect;
-            }
-            if (finalHeight > doc.height) {
-              finalHeight = doc.height;
-              finalWidth = finalHeight * aspect;
-            }
-          } else {
-            finalWidth = Math.min(finalWidth, doc.width);
-            finalHeight = Math.min(finalHeight, doc.height);
-          }
-          const halfW = finalWidth / 2;
-          const halfH = finalHeight / 2;
-          finalX = Math.max(halfW, Math.min(doc.width - halfW, finalX));
-          finalY = Math.max(halfH, Math.min(doc.height - halfH, finalY));
-        }
-
-        // Reset shape scale และอัพเดท dimensions ป้องกัน visual glitch
-        shape.scaleX(1);
-        shape.scaleY(1);
-        shape.x(finalX);
-        shape.y(finalY);
-        shape.width(finalWidth);
-        shape.height(finalHeight);
-        // อัพเดท offset สำหรับ center-based shapes (Rect, Text, Image)
-        // Ellipse ใช้ offset = 0 เพราะ center-based โดยธรรมชาติ
-        if (shape.offsetX() !== 0) {
-          shape.offsetX(finalWidth / 2);
-          shape.offsetY(finalHeight / 2);
-        }
-
-        // Update store
-        updateNodes([{
-          id: node.id,
-          changes: {
-            x: finalX,
-            y: finalY,
-            width: finalWidth,
-            height: finalHeight,
-            rotation: finalRotation,
-          },
-        }]);
-
-        transformUpdates.push({
-          id: node.id,
-          oldProps: {
-            x: original.x,
-            y: original.y,
-            width: original.width,
-            height: original.height,
-            rotation: original.rotation,
-          },
-          newProps: {
-            x: finalX,
-            y: finalY,
-            width: finalWidth,
-            height: finalHeight,
-            rotation: finalRotation,
-          },
-        });
-      }
-    } else {
-      // ===============================================
-      // Multi-selection: clamp ค่าปัจจุบันแล้วสร้าง history
-      // ===============================================
-      const clampedUpdates: Array<{ id: string; changes: Partial<Node> }> = [];
-
-      selectedNodes.forEach((node) => {
-        const original = originalStatesRef.current.find((o) => o.id === node.id);
-        if (!original) return;
-
-        let { x, y, width, height } = node;
-        const { rotation } = node;
+      if (shape && orig) {
+        let fw = Math.max(5, Math.abs(shape.width() * shape.scaleX()));
+        let fh = Math.max(5, Math.abs(shape.height() * shape.scaleY()));
+        let fx = shape.x(),
+          fy = shape.y();
+        const fr = shape.rotation();
 
         // Clamp to document bounds
         if (doc) {
-          width = Math.min(width, doc.width);
-          height = Math.min(height, doc.height);
-          const halfW = width / 2;
-          const halfH = height / 2;
-          x = Math.max(halfW, Math.min(doc.width - halfW, x));
-          y = Math.max(halfH, Math.min(doc.height - halfH, y));
+          if (node.type === "image") {
+            const asp = fw / fh;
+            if (fw > doc.width) {
+              fw = doc.width;
+              fh = fw / asp;
+            }
+            if (fh > doc.height) {
+              fh = doc.height;
+              fw = fh * asp;
+            }
+          } else {
+            fw = Math.min(fw, doc.width);
+            fh = Math.min(fh, doc.height);
+          }
+          const hw = fw / 2,
+            hh = fh / 2;
+          fx = Math.max(hw, Math.min(doc.width - hw, fx));
+          fy = Math.max(hh, Math.min(doc.height - hh, fy));
         }
 
-        clampedUpdates.push({
-          id: node.id,
-          changes: { x, y, width, height },
-        });
+        // Reset scale & apply final dimensions
+        shape.scaleX(1);
+        shape.scaleY(1);
+        shape.x(fx);
+        shape.y(fy);
+        shape.width(fw);
+        shape.height(fh);
+        if (shape.offsetX() !== 0) {
+          shape.offsetX(fw / 2);
+          shape.offsetY(fh / 2);
+        }
 
-        transformUpdates.push({
+        updateNodes([
+          {
+            id: node.id,
+            changes: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
+          },
+        ]);
+        historyUpdates.push({
           id: node.id,
           oldProps: {
-            x: original.x,
-            y: original.y,
-            width: original.width,
-            height: original.height,
-            rotation: original.rotation,
+            x: orig.x,
+            y: orig.y,
+            width: orig.width,
+            height: orig.height,
+            rotation: orig.rotation,
           },
-          newProps: { x, y, width, height, rotation },
+          newProps: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
         });
-      });
-
-      // Batch update ค่าที่ clamp แล้ว
-      if (clampedUpdates.length > 0) {
-        updateNodes(clampedUpdates);
       }
+    } else {
+      /* --- Multi selection --- */
+      const pr = proxyRef.current;
+      if (pr && origBoundsRef.current) {
+        const proxyRotation = pr.rotation();
+        const positions = computeMultiPositions(
+          origStatesRef.current,
+          {
+            x: origBoundsRef.current.centerX,
+            y: origBoundsRef.current.centerY,
+          },
+          groupRotRef.current,
+          pr.scaleX(),
+          pr.scaleY(),
+          proxyRotation,
+          pr.x(),
+          pr.y(),
+        );
 
-      // Reset proxy rect
-      const proxyRect = proxyRectRef.current;
-      if (proxyRect) {
-        proxyRect.scaleX(1);
-        proxyRect.scaleY(1);
-        proxyRect.rotation(0);
-        const currentNodes = doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
-        const newBounds = getMultiSelectionBounds(currentNodes);
+        const storeUpdates: Array<{ id: string; changes: Partial<Node> }> = [];
+
+        positions.forEach((p, i) => {
+          let { x: fx, y: fy, width: fw, height: fh } = p;
+          if (doc) {
+            fw = Math.min(fw, doc.width);
+            fh = Math.min(fh, doc.height);
+            const hw = fw / 2,
+              hh = fh / 2;
+            fx = Math.max(hw, Math.min(doc.width - hw, fx));
+            fy = Math.max(hh, Math.min(doc.height - hh, fy));
+          }
+          setKonvaShape(
+            stage,
+            p.id,
+            p.type,
+            fx,
+            fy,
+            fw,
+            fh,
+            p.rotation,
+            p.origWidth,
+            p.origHeight,
+            true,
+          );
+          storeUpdates.push({
+            id: p.id,
+            changes: {
+              x: fx,
+              y: fy,
+              width: fw,
+              height: fh,
+              rotation: p.rotation,
+            },
+          });
+
+          const orig = origStatesRef.current[i];
+          historyUpdates.push({
+            id: p.id,
+            oldProps: {
+              x: orig.x,
+              y: orig.y,
+              width: orig.width,
+              height: orig.height,
+              rotation: orig.rotation,
+            },
+            newProps: {
+              x: fx,
+              y: fy,
+              width: fw,
+              height: fh,
+              rotation: p.rotation,
+            },
+          });
+        });
+
+        if (storeUpdates.length > 0) updateNodes(storeUpdates);
+
+        // Persist group rotation (Canva-style tilted frame)
+        groupRotRef.current = proxyRotation;
+        const gid = selectedNodes[0]?.groupId;
+        const allSameGroup =
+          gid && selectedNodes.every((n) => n.groupId === gid);
+        if (allSameGroup) {
+          updateNodes(
+            selectedNodes.map((n) => ({
+              id: n.id,
+              changes: {
+                groupRotation: proxyRotation || undefined,
+              } as Partial<Node>,
+            })),
+          );
+        }
+
+        // Reset proxy rect with fresh bounds
+        pr.scaleX(1);
+        pr.scaleY(1);
+        const freshNodes =
+          useDocStore
+            .getState()
+            .doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
+        const newBounds = getGroupBoundsInRotatedFrame(
+          freshNodes,
+          groupRotRef.current,
+        );
         if (newBounds) {
-          proxyRect.x(newBounds.x + newBounds.width / 2);
-          proxyRect.y(newBounds.y + newBounds.height / 2);
-          proxyRect.width(newBounds.width);
-          proxyRect.height(newBounds.height);
-          proxyRect.offsetX(newBounds.width / 2);
-          proxyRect.offsetY(newBounds.height / 2);
+          pr.x(newBounds.centerX);
+          pr.y(newBounds.centerY);
+          pr.width(newBounds.width);
+          pr.height(newBounds.height);
+          pr.offsetX(newBounds.width / 2);
+          pr.offsetY(newBounds.height / 2);
+          pr.rotation(groupRotRef.current);
         }
       }
     }
 
-    // Commit to history
-    const hasChanges = transformUpdates.some(
-      (u) =>
-        u.oldProps.x !== u.newProps.x ||
-        u.oldProps.y !== u.newProps.y ||
-        u.oldProps.width !== u.newProps.width ||
-        u.oldProps.height !== u.newProps.height ||
-        u.oldProps.rotation !== u.newProps.rotation,
-    );
-
-    if (hasChanges && transformUpdates.length > 0) {
+    // Commit history
+    if (
+      historyUpdates.length > 0 &&
+      historyUpdates.some(
+        (u) =>
+          u.oldProps.x !== u.newProps.x ||
+          u.oldProps.y !== u.newProps.y ||
+          u.oldProps.width !== u.newProps.width ||
+          u.oldProps.height !== u.newProps.height ||
+          u.oldProps.rotation !== u.newProps.rotation,
+      )
+    ) {
       const op: TransformOp = {
         type: "transform",
         timestamp: Date.now(),
-        updates: transformUpdates,
+        updates: historyUpdates,
       };
-
       const { past } = useHistoryStore.getState();
-      useHistoryStore.setState({
-        past: [...past, op],
-        future: [],
-      });
-
+      useHistoryStore.setState({ past: [...past, op], future: [] });
       useDocStore.getState().autoSave();
     }
 
-    // Clear refs
-    originalStatesRef.current = [];
-    originalBoundsRef.current = null;
-
-    // Force update transformer
-    transformerRef.current?.forceUpdate();
+    origStatesRef.current = [];
+    origBoundsRef.current = null;
+    trRef.current?.forceUpdate();
   };
 
-  // ไม่มี selection หรือกำลังแก้ไข text
+  /* ---- Render ---- */
+
   if (selectedNodes.length === 0 || isEditingText) {
-    return <Transformer ref={transformerRef} />;
+    return <Transformer ref={trRef} />;
   }
 
-  // ถ้า nodes ทั้งหมดถูกล็อค → แสดง transformer แบบไม่มี handles (ไม่ให้ resize/rotate)
   if (allLocked) {
     return (
       <Transformer
-        ref={transformerRef}
+        ref={trRef}
         enabledAnchors={[]}
         rotateEnabled={false}
         borderStroke="#ff4444"
@@ -437,19 +582,19 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     );
   }
 
-  // Multi-selection: แสดง proxy rect
-  if (isMultiSelect && bounds) {
+  // Multi-selection with rotated proxy rect
+  if (isMulti && groupBounds) {
     return (
       <>
-        {/* Proxy rect สำหรับ multi-selection */}
         <Rect
-          ref={proxyRectRef}
-          x={bounds.x + bounds.width / 2}
-          y={bounds.y + bounds.height / 2}
-          width={bounds.width}
-          height={bounds.height}
-          offsetX={bounds.width / 2}
-          offsetY={bounds.height / 2}
+          ref={proxyRef}
+          x={groupBounds.centerX}
+          y={groupBounds.centerY}
+          width={groupBounds.width}
+          height={groupBounds.height}
+          offsetX={groupBounds.width / 2}
+          offsetY={groupBounds.height / 2}
+          rotation={groupRotRef.current}
           fill="transparent"
           stroke="#0066ff"
           strokeWidth={1 / viewport.zoom}
@@ -457,45 +602,29 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           listening={false}
         />
         <Transformer
-          ref={transformerRef}
+          ref={trRef}
           onTransformStart={handleTransformStart}
           onTransform={handleTransform}
           onTransformEnd={handleTransformEnd}
-          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+          rotationSnaps={ROTATION_SNAPS}
           rotationSnapTolerance={5}
           keepRatio={false}
-          enabledAnchors={[
-            "top-left",
-            "top-center",
-            "top-right",
-            "middle-left",
-            "middle-right",
-            "bottom-left",
-            "bottom-center",
-            "bottom-right",
-          ]}
+          enabledAnchors={[...ALL_ANCHORS]}
           boundBoxFunc={(oldBox, newBox) => {
-            if (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10) {
+            if (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10)
               return oldBox;
-            }
-            // Clamp to document bounds (convert to absolute/screen coords)
-            if (doc) {
-              const { viewport } = useViewStore.getState();
-              const zoom = viewport.zoom;
-              const docLeft = viewport.x;
-              const docTop = viewport.y;
-              const docRight = doc.width * zoom + viewport.x;
-              const docBottom = doc.height * zoom + viewport.y;
-
-              let { x, y, width, height } = newBox;
-              if (x < docLeft) { width -= (docLeft - x); x = docLeft; }
-              if (y < docTop) { height -= (docTop - y); y = docTop; }
-              if (x + width > docRight) { width = docRight - x; }
-              if (y + height > docBottom) { height = docBottom - y; }
-              if (width < 10 || height < 10) return oldBox;
-              return { ...newBox, x, y, width, height };
-            }
-            return newBox;
+            // Detect rotation via proxy scale (AABB changes size when rotated even without resize)
+            const p = proxyRef.current;
+            const isRot = p
+              ? Math.abs(p.scaleX() - 1) < 0.001 &&
+                Math.abs(p.scaleY() - 1) < 0.001
+              : Math.abs(oldBox.width - newBox.width) < 1 &&
+                Math.abs(oldBox.height - newBox.height) < 1;
+            if (isRot) return newBox;
+            if (!doc) return newBox;
+            const db = docScreenBounds(doc);
+            const c = clampEdges(newBox, db);
+            return c.width < 10 || c.height < 10 ? oldBox : { ...newBox, ...c };
           }}
         />
       </>
@@ -503,72 +632,34 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   }
 
   // Single selection
-  const singleNode = selectedNodes[0];
-  const isImage = singleNode?.type === "image";
-
+  const isImage = selectedNodes[0]?.type === "image";
   return (
     <Transformer
-      ref={transformerRef}
+      ref={trRef}
       onTransformStart={handleTransformStart}
       onTransform={handleTransform}
       onTransformEnd={handleTransformEnd}
-      rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+      rotationSnaps={ROTATION_SNAPS}
       rotationSnapTolerance={5}
       keepRatio={isImage}
-      enabledAnchors={
-        isImage
-          ? ["top-left", "top-right", "bottom-left", "bottom-right"]
-          : [
-              "top-left",
-              "top-center",
-              "top-right",
-              "middle-left",
-              "middle-right",
-              "bottom-left",
-              "bottom-center",
-              "bottom-right",
-            ]
-      }
+      enabledAnchors={isImage ? [...CORNER_ANCHORS] : [...ALL_ANCHORS]}
       boundBoxFunc={(oldBox, newBox) => {
-        if (Math.abs(newBox.width) < 5 || Math.abs(newBox.height) < 5) {
+        if (Math.abs(newBox.width) < 5 || Math.abs(newBox.height) < 5)
           return oldBox;
-        }
-        // Clamp to document bounds (convert to absolute/screen coords)
-        if (doc) {
-          const { viewport } = useViewStore.getState();
-          const zoom = viewport.zoom;
-          const docLeft = viewport.x;
-          const docTop = viewport.y;
-          const docRight = doc.width * zoom + viewport.x;
-          const docBottom = doc.height * zoom + viewport.y;
-
-          let { x, y, width, height } = newBox;
-
-          // ตรวจว่าเป็นการ rotate หรือ resize
-          // ถ้า width/height เท่าเดิม (หรือเปลี่ยนน้อยมาก) แสดงว่าเป็นการ rotate → ไม่ต้อง clamp
-          const isRotating =
-            Math.abs(oldBox.width - newBox.width) < 1 &&
-            Math.abs(oldBox.height - newBox.height) < 1;
-
-          if (!isRotating) {
-            if (isImage) {
-              // รูปภาพ: clamp โดยรักษาสัดส่วน — ถ้าชนขอบ ให้คืนกล่องเดิม
-              const clippedLeft = Math.max(0, docLeft - x);
-              const clippedTop = Math.max(0, docTop - y);
-              const clippedRight = Math.max(0, (x + width) - docRight);
-              const clippedBottom = Math.max(0, (y + height) - docBottom);
-              if (clippedLeft > 0 || clippedTop > 0 || clippedRight > 0 || clippedBottom > 0) {
-                return oldBox;
-              }
-            } else {
-              if (x < docLeft) { width -= (docLeft - x); x = docLeft; }
-              if (y < docTop) { height -= (docTop - y); y = docTop; }
-              if (x + width > docRight) { width = docRight - x; }
-              if (y + height > docBottom) { height = docBottom - y; }
-            }
-            if (width < 5 || height < 5) return oldBox;
-          }
-          return { ...newBox, x, y, width, height };
+        if (!doc) return newBox;
+        const isRot =
+          Math.abs(oldBox.width - newBox.width) < 1 &&
+          Math.abs(oldBox.height - newBox.height) < 1;
+        if (isRot) return newBox;
+        const db = docScreenBounds(doc);
+        if (isImage) {
+          const { x, y, width, height } = newBox;
+          if (x < db.l || y < db.t || x + width > db.r || y + height > db.b)
+            return oldBox;
+        } else {
+          const c = clampEdges(newBox, db);
+          if (c.width < 5 || c.height < 5) return oldBox;
+          return { ...newBox, ...c };
         }
         return newBox;
       }}

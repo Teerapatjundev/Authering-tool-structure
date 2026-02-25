@@ -10,6 +10,7 @@
  * 2. จัดการ keyboard shortcuts
  * 3. Render canvas และ overlays
  * 4. รองรับ drag & drop รูปภาพจากภายนอก
+ * 5. รองรับ drag & drop elements จาก sidebar (Rectangle, Ellipse, Text)
  *
  * Keyboard Shortcuts:
  * - V: Select tool
@@ -39,7 +40,7 @@ import { useViewStore } from "./stores/viewStore";
 import { selectAll, clearSelection } from "./core/commands/selection";
 import { deleteSelected, copy, paste, cut } from "./core/commands/clipboard";
 import { nudgeSelection } from "./core/commands/transform";
-import { insertImage } from "./core/commands/insert";
+import { insertImage, insertRect, insertEllipse, insertText } from "./core/commands/insert";
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
 import { OverlayRoot } from "./renderer/overlays/OverlayRoot";
@@ -57,6 +58,7 @@ export function EditorClient({ docId }: EditorClientProps) {
   const { setTool } = useToolStore();
   const { centerDocument } = useViewStore();
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [draggingElementType, setDraggingElementType] = useState<string | null>(null);
 
   // Canvas size state
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
@@ -112,6 +114,18 @@ export function EditorClient({ docId }: EditorClientProps) {
     e.preventDefault();
     e.stopPropagation();
     setIsDraggingOver(true);
+    
+    // ตรวจสอบว่าเป็นการลาก element type หรือไม่
+    const elementType =
+      (e as React.DragEvent).dataTransfer?.types?.includes("application/element-type") ||
+      (e as DragEvent).dataTransfer?.types?.includes("application/element-type");
+    
+    if (elementType) {
+      const type =
+        (e as React.DragEvent).dataTransfer?.getData?.("application/element-type") ||
+        (e as DragEvent).dataTransfer?.getData?.("application/element-type");
+      setDraggingElementType(type || "element");
+    }
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent | DragEvent) => {
@@ -121,6 +135,7 @@ export function EditorClient({ docId }: EditorClientProps) {
     const relatedTarget = (e as React.DragEvent).relatedTarget as Node | null;
     if (containerRef.current && !containerRef.current.contains(relatedTarget)) {
       setIsDraggingOver(false);
+      setDraggingElementType(null);
     }
   }, []);
 
@@ -129,6 +144,7 @@ export function EditorClient({ docId }: EditorClientProps) {
       e.preventDefault();
       e.stopPropagation();
       setIsDraggingOver(false);
+      setDraggingElementType(null);
 
       const { screenToWorld } = useViewStore.getState();
       const container = containerRef.current;
@@ -143,6 +159,27 @@ export function EditorClient({ docId }: EditorClientProps) {
       // ตรวจสอบว่า drop อยู่ใน canvas bounds หรือไม่
       const dropX = Math.max(50, Math.min(doc.width - 50, worldPos.x));
       const dropY = Math.max(50, Math.min(doc.height - 50, worldPos.y));
+
+      // ตรวจสอบว่าเป็นการลาก element type หรือไม่
+      const elementType =
+        (e as React.DragEvent).dataTransfer?.getData?.("application/element-type") ||
+        (e as DragEvent).dataTransfer?.getData?.("application/element-type");
+
+      if (elementType) {
+        // สร้าง element ตามประเภทที่ลาก
+        switch (elementType) {
+          case "rect":
+            insertRect(dropX, dropY, 150, 100);
+            break;
+          case "ellipse":
+            insertEllipse(dropX, dropY, 120, 120);
+            break;
+          case "text":
+            insertText(dropX, dropY, "Enter text");
+            break;
+        }
+        return;
+      }
 
       // จัดการไฟล์ที่ถูก drop
       const items =
@@ -412,20 +449,28 @@ export function EditorClient({ docId }: EditorClientProps) {
       {/* Canvas container */}
       <div
         ref={containerRef}
-        className={`relative w-full h-full ${isDraggingOver ? "bg-blue-100" : "bg-gray-300"} transition-colors overflow-hidden`}
+        className={`relative w-full h-full ${
+          isDraggingOver
+            ? draggingElementType
+              ? "bg-blue-100"
+              : "bg-blue-100"
+            : "bg-gray-300"
+        } transition-colors overflow-hidden`}
         onDragOver={handleDragOver}
         onDragEnter={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {/* Drag overlay indicator */}
-        {/* {isDraggingOver && (
+        {isDraggingOver && (
           <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
             <div className="px-6 py-4 text-lg font-medium text-white bg-blue-500 shadow-2xl rounded-xl">
-              📎 Drop image here
+              {draggingElementType
+                ? `Drop to create ${draggingElementType}`
+                : "📎 Drop image here"}
             </div>
           </div>
-        )} */}
+        )}
         <KonvaCanvas width={canvasSize.width} height={canvasSize.height} />
         {/* Overlays ต้องมี z-index ต่ำกว่า layout */}
         <div className="absolute inset-0 z-20 pointer-events-none">

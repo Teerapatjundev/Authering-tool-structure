@@ -241,8 +241,8 @@ export function groupNodes(): void {
       type: "edit",
       timestamp: Date.now(),
       nodeId,
-      oldProps: { groupId: node.groupId },
-      newProps: { groupId },
+      oldProps: { groupId: node.groupId, groupRotation: node.groupRotation },
+      newProps: { groupId, groupRotation: undefined },
     };
     useHistoryStore.getState().commit(op);
   }
@@ -268,8 +268,8 @@ export function ungroupNodes(): void {
       type: "edit",
       timestamp: Date.now(),
       nodeId: node.id,
-      oldProps: { groupId: node.groupId },
-      newProps: { groupId: undefined },
+      oldProps: { groupId: node.groupId, groupRotation: node.groupRotation },
+      newProps: { groupId: undefined, groupRotation: undefined },
     };
     useHistoryStore.getState().commit(op);
   }
