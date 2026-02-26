@@ -10,4 +10,5 @@ export { TopBar } from "./TopBar";
 export { LeftSidebar } from "./LeftSidebar";
 export { RightSidebar } from "./RightSidebar";
 export { ContextMenu } from "./ContextMenu";
+export { FloatingToolbar } from "./FloatingToolbar";
 export { Navbar } from "./Navbar";
