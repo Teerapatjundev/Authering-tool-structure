@@ -53,7 +53,10 @@ function getCommonFiltered<T>(
 }
 
 /** แปลง MixedValue เป็น string สำหรับ input */
-function mixedToStr(v: MixedValue<string | number> | undefined, fallback = ""): string {
+function mixedToStr(
+  v: MixedValue<string | number> | undefined,
+  fallback = "",
+): string {
   if (v === undefined || v === MIXED) return fallback;
   return String(v);
 }
@@ -86,10 +89,33 @@ export function RightSidebar() {
         <div className="px-4 py-3 border-b border-gray-100">
           <h2 className="font-semibold text-gray-800">Properties</h2>
         </div>
-        <div className="flex items-center justify-center flex-1 p-4">
-          <p className="text-sm text-center text-gray-400">
-            Select an element to edit its properties
-          </p>
+        <div className="flex-1 p-4 space-y-6">
+          {/* Paper Background Color */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={doc?.backgroundColor || "#ffffff"}
+                onChange={(e) => {
+                  useDocStore.getState().updateBackgroundColor(e.target.value);
+                  useDocStore.getState().autoSave();
+                }}
+                className="w-8 h-8 border border-gray-300 rounded-md cursor-pointer"
+              />
+              <input
+                type="text"
+                value={doc?.backgroundColor || "#ffffff"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+                    useDocStore.getState().updateBackgroundColor(v);
+                    useDocStore.getState().autoSave();
+                  }
+                }}
+                className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+              />
+            </div>
+          </div>
         </div>
       </aside>
     );
@@ -113,8 +139,12 @@ export function RightSidebar() {
   const commonY = getCommon(selectedNodes, (n) => Math.round(n.y));
   const commonW = getCommon(selectedNodes, (n) => Math.round(n.width));
   const commonH = getCommon(selectedNodes, (n) => Math.round(n.height));
-  const commonRotation = getCommon(selectedNodes, (n) => Math.round(n.rotation));
-  const commonOpacity = getCommon(selectedNodes, (n) => Math.round(n.opacity * 100));
+  const commonRotation = getCommon(selectedNodes, (n) =>
+    Math.round(n.rotation),
+  );
+  const commonOpacity = getCommon(selectedNodes, (n) =>
+    Math.round(n.opacity * 100),
+  );
 
   // Fill color — rect, ellipse, text
   const hasFillNodes = selectedNodes.some(
@@ -150,7 +180,9 @@ export function RightSidebar() {
   );
 
   // Text nodes
-  const textNodes = selectedNodes.filter((n) => n.type === "text") as TextNode[];
+  const textNodes = selectedNodes.filter(
+    (n) => n.type === "text",
+  ) as TextNode[];
   const hasTextNodes = textNodes.length > 0;
 
   // Type label
@@ -208,7 +240,9 @@ export function RightSidebar() {
         <Section title="Rotation">
           <NumberInput
             label="°"
-            value={isMixed(commonRotation) ? undefined : (commonRotation as number)}
+            value={
+              isMixed(commonRotation) ? undefined : (commonRotation as number)
+            }
             placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
             onChange={(v) => apply({ rotation: v })}
             min={-180}
@@ -223,9 +257,7 @@ export function RightSidebar() {
             min={0}
             max={100}
             value={isMixed(commonOpacity) ? 50 : (commonOpacity as number)}
-            onChange={(e) =>
-              apply({ opacity: parseInt(e.target.value) / 100 })
-            }
+            onChange={(e) => apply({ opacity: parseInt(e.target.value) / 100 })}
             className="w-full"
           />
           <div className="text-xs text-center text-gray-500">
@@ -254,7 +286,11 @@ export function RightSidebar() {
             />
             <NumberInput
               label="Width"
-              value={isMixed(commonStrokeWidth) ? undefined : (commonStrokeWidth as number)}
+              value={
+                isMixed(commonStrokeWidth)
+                  ? undefined
+                  : (commonStrokeWidth as number)
+              }
               placeholder={isMixed(commonStrokeWidth) ? "Mixed" : undefined}
               onChange={(v) => apply({ strokeWidth: v }, ["rect", "ellipse"])}
               min={0}
@@ -268,7 +304,11 @@ export function RightSidebar() {
           <Section title="Corner Radius">
             <NumberInput
               label="Radius"
-              value={isMixed(commonCornerRadius) ? undefined : (commonCornerRadius as number)}
+              value={
+                isMixed(commonCornerRadius)
+                  ? undefined
+                  : (commonCornerRadius as number)
+              }
               placeholder={isMixed(commonCornerRadius) ? "Mixed" : undefined}
               onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
               min={0}
@@ -394,11 +434,26 @@ function MultiTextProperties({
     }
   };
 
-  const commonText = getCommon(textNodes as Node[], (n) => (n as TextNode).text);
-  const commonFontSize = getCommon(textNodes as Node[], (n) => (n as TextNode).fontSize);
-  const commonFontFamily = getCommon(textNodes as Node[], (n) => (n as TextNode).fontFamily);
-  const commonFontStyle = getCommon(textNodes as Node[], (n) => (n as TextNode).fontStyle || "normal");
-  const commonAlign = getCommon(textNodes as Node[], (n) => (n as TextNode).align || "left");
+  const commonText = getCommon(
+    textNodes as Node[],
+    (n) => (n as TextNode).text,
+  );
+  const commonFontSize = getCommon(
+    textNodes as Node[],
+    (n) => (n as TextNode).fontSize,
+  );
+  const commonFontFamily = getCommon(
+    textNodes as Node[],
+    (n) => (n as TextNode).fontFamily,
+  );
+  const commonFontStyle = getCommon(
+    textNodes as Node[],
+    (n) => (n as TextNode).fontStyle || "normal",
+  );
+  const commonAlign = getCommon(
+    textNodes as Node[],
+    (n) => (n as TextNode).align || "left",
+  );
 
   return (
     <>
@@ -416,14 +471,18 @@ function MultiTextProperties({
         <div className="space-y-2">
           <NumberInput
             label="Size"
-            value={isMixed(commonFontSize) ? undefined : (commonFontSize as number)}
+            value={
+              isMixed(commonFontSize) ? undefined : (commonFontSize as number)
+            }
             placeholder={isMixed(commonFontSize) ? "Mixed" : undefined}
             onChange={(v) => applyText({ fontSize: v })}
             min={8}
             max={200}
           />
           <select
-            value={isMixed(commonFontFamily) ? "" : (commonFontFamily as string)}
+            value={
+              isMixed(commonFontFamily) ? "" : (commonFontFamily as string)
+            }
             onChange={(e) => {
               if (e.target.value) applyText({ fontFamily: e.target.value });
             }}

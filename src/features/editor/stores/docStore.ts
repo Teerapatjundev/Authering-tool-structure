@@ -32,6 +32,7 @@ interface DocState {
   removeNodes: (nodeIds: string[]) => void;
   updateNode: (nodeId: string, updates: Partial<Node>) => void;
   updateNodes: (updates: Array<{ id: string; changes: Partial<Node> }>) => void;
+  updateBackgroundColor: (color: string) => void;
   saveDoc: () => void;
   autoSave: () => void;
 }
@@ -127,6 +128,17 @@ export const useDocStore = create<DocState>()(
             Object.assign(node, changes);
           }
         }
+        state.doc.updatedAt = Date.now();
+      });
+    },
+
+    /**
+     * อัพเดทสีพื้นหลังกระดาษ
+     */
+    updateBackgroundColor: (color: string) => {
+      set((state) => {
+        if (!state.doc) return;
+        state.doc.backgroundColor = color;
         state.doc.updatedAt = Date.now();
       });
     },
