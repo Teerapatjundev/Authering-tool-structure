@@ -288,59 +288,28 @@ export function hasGroup(): boolean {
   return selectedNodes.some((n) => !!n.groupId);
 }
 
+/**
+ * ตรวจสอบว่า nodes ที่เลือกทั้งหมดอยู่ใน group เดียวกันหรือไม่
+ * ถ้าทุก node มี groupId เดียวกัน (และไม่ใช่ undefined) → true
+ * ใช้สำหรับซ่อนปุ่ม "รวมกลุ่ม" เมื่อ nodes ถูก group อยู่แล้ว
+ */
+export function allInSameGroup(): boolean {
+  const { doc } = useDocStore.getState();
+  const { getSelectedIds } = useSelectionStore.getState();
+  if (!doc) return false;
+
+  const selectedIds = getSelectedIds();
+  if (selectedIds.length < 2) return false;
+
+  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  if (selectedNodes.length < 2) return false;
+
+  const firstGroupId = selectedNodes[0].groupId;
+  if (!firstGroupId) return false;
+
+  return selectedNodes.every((n) => n.groupId === firstGroupId);
+}
+
 // =============================================
 // MASTER / INSTANCE (Copy as Master)
 // =============================================
-
-/**
- * คัดลอก nodes ที่เลือกเป็น Master
- * - ตั้ง nodes เดิมให้เป็น Master (isMaster = true)
- * - สร้าง instance ใหม่ที่ชี้กลับมาที่ master (masterId)
- *
- * เมื่อแก้ไข master → instance จะอัพเดทตาม
- * เมื่อแก้ไข instance → ไม่กระทบ master
- */
-export function copyAsMaster(): void {
-  const { doc } = useDocStore.getState();
-  const { getSelectedIds, selectMultiple } = useSelectionStore.getState();
-  if (!doc) return;
-
-  const selectedIds = getSelectedIds();
-  if (selectedIds.length === 0) return;
-
-  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
-
-  // 1. ตั้ง nodes เดิมเป็น Master
-  for (const node of selectedNodes) {
-    if (!node.isMaster) {
-      const op: EditOp = {
-        type: "edit",
-        timestamp: Date.now(),
-        nodeId: node.id,
-        oldProps: { isMaster: node.isMaster },
-        newProps: { isMaster: true },
-      };
-      useHistoryStore.getState().commit(op);
-    }
-  }
-
-  // 2. สร้าง instance (copy) ที่ชี้ไปยัง master
-  const newNodes: Node[] = selectedNodes.map((n) => ({
-    ...n,
-    id: generateNodeId(),
-    x: n.x + 30,
-    y: n.y + 30,
-    isMaster: false,
-    masterId: n.id,
-  }));
-
-  const insertOp: InsertOp = {
-    type: "insert",
-    timestamp: Date.now(),
-    nodes: newNodes,
-  };
-  useHistoryStore.getState().commit(insertOp);
-
-  // เลือก instances ที่สร้างใหม่
-  selectMultiple(newNodes.map((n) => n.id));
-}

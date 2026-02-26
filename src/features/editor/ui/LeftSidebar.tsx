@@ -27,6 +27,7 @@ import {
 } from "../core/commands/insert";
 import { useViewStore } from "../stores/viewStore";
 import { useDocStore } from "../stores/docStore";
+import { useDragPreviewStore } from "../stores/dragPreviewStore";
 
 // ประเภท element ที่เพิ่มได้
 interface ElementType {
@@ -217,15 +218,60 @@ export function LeftSidebar() {
               // เก็บข้อมูล element type ไว้ใน dataTransfer
               e.dataTransfer.setData("application/element-type", element.id);
               e.dataTransfer.effectAllowed = "copy";
-              
-              // สร้าง ghost image สำหรับ drag cursor
-              const ghostElement = e.currentTarget.cloneNode(true) as HTMLElement;
-              ghostElement.style.opacity = "0.5";
-              ghostElement.style.position = "absolute";
-              ghostElement.style.top = "-1000px";
-              document.body.appendChild(ghostElement);
-              e.dataTransfer.setDragImage(ghostElement, 0, 0);
-              setTimeout(() => document.body.removeChild(ghostElement), 0);
+
+              // บอก dragPreviewStore ว่าเริ่มลาก element ประเภทไหน
+              useDragPreviewStore.getState().startDrag(element.id);
+
+              // สร้าง drag image เป็นรูปทรงจริง (SVG) แทน clone ของปุ่ม
+              const ghost = document.createElement("canvas");
+              const dpr = window.devicePixelRatio || 1;
+              let gw = 150, gh = 100;
+              if (element.id === "ellipse") { gw = 120; gh = 120; }
+              else if (element.id === "text") { gw = 200; gh = 50; }
+              ghost.width = gw * dpr;
+              ghost.height = gh * dpr;
+              ghost.style.width = gw + "px";
+              ghost.style.height = gh + "px";
+              const ctx = ghost.getContext("2d");
+              if (ctx) {
+                ctx.scale(dpr, dpr);
+                ctx.globalAlpha = 0.7;
+                if (element.id === "rect") {
+                  ctx.fillStyle = "#3b82f6";
+                  ctx.strokeStyle = "#1e40af";
+                  ctx.lineWidth = 2;
+                  ctx.fillRect(0, 0, gw, gh);
+                  ctx.strokeRect(0, 0, gw, gh);
+                } else if (element.id === "ellipse") {
+                  ctx.fillStyle = "#10b981";
+                  ctx.strokeStyle = "#059669";
+                  ctx.lineWidth = 2;
+                  ctx.beginPath();
+                  ctx.ellipse(gw / 2, gh / 2, gw / 2, gh / 2, 0, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.stroke();
+                } else if (element.id === "text") {
+                  ctx.fillStyle = "#f3f4f6";
+                  ctx.strokeStyle = "#9ca3af";
+                  ctx.lineWidth = 1;
+                  ctx.fillRect(0, 0, gw, gh);
+                  ctx.strokeRect(0, 0, gw, gh);
+                  ctx.fillStyle = "#000000";
+                  ctx.font = "20px Arial";
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "middle";
+                  ctx.fillText("Enter text", gw / 2, gh / 2);
+                }
+              }
+              ghost.style.position = "absolute";
+              ghost.style.top = "-9999px";
+              document.body.appendChild(ghost);
+              e.dataTransfer.setDragImage(ghost, gw / 2, gh / 2);
+              requestAnimationFrame(() => document.body.removeChild(ghost));
+            }}
+            onDragEnd={() => {
+              // เคลียร์ drag preview เมื่อปล่อยเมาส์
+              useDragPreviewStore.getState().endDrag();
             }}
             onClick={() => handleAddElement(element.id)}
             className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all group cursor-move active:cursor-grabbing"

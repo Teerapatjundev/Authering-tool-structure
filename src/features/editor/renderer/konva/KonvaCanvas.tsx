@@ -26,6 +26,7 @@ import { useDocStore } from "../../stores/docStore";
 import { RenderNodes } from "./RenderNodes";
 import { GuidesLayer } from "./GuidesLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
+import { DragPreviewLayer } from "./DragPreviewLayer";
 import { EventBridge } from "./EventBridge";
 import { SelectionController } from "./SelectionController";
 
@@ -98,6 +99,7 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
           <SelectionController stageRef={stageRef} />
           <GuidesLayer />
           <MarqueeLayer />
+          <DragPreviewLayer />
         </Layer>
       </Stage>
 

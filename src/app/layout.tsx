@@ -1,10 +1,26 @@
 import type { Metadata } from "next";
 import "@/shared/styles/globals.css";
+import { Sarabun, Prompt } from "next/font/google";
+
+const sarabun = Sarabun({
+  style: "normal",
+  subsets: ["latin", "thai"],
+  weight: ["400", "700"],
+  variable: "--font-sarabun",
+});
+
+const prompt = Prompt({
+  style: "normal",
+  subsets: ["latin", "thai"],
+  weight: ["400", "700"],
+  variable: "--font-prompt",
+});
 
 export const metadata: Metadata = {
   title: "Authoring Tool Structure",
-  description: "A Canva-like editor built with Next.js and Konva",
-};
+  description: "Authoring Tool Structure",
+};  
+
 
 export default function RootLayout({
   children,
@@ -13,7 +29,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={`${sarabun.variable} ${prompt.variable}`}>{children}</body>
     </html>
   );
 }

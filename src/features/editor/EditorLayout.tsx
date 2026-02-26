@@ -18,6 +18,7 @@
 import { TopBar } from "./ui/TopBar";
 import { LeftSidebar } from "./ui/LeftSidebar";
 import { RightSidebar } from "./ui/RightSidebar";
+import { Navbar } from "./ui/Navbar";
 
 interface EditorLayoutProps {
   children: React.ReactNode;
@@ -28,6 +29,7 @@ export function EditorLayout({ children }: EditorLayoutProps) {
     <div className="flex flex-col w-full h-full bg-gray-100">
       {/* Top Bar - เครื่องมือและ zoom - z-index สูงกว่า canvas */}
       <div className="relative z-50">
+        {/* <Navbar /> */}
         <TopBar />
       </div>
 
