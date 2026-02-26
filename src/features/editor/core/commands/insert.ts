@@ -165,6 +165,110 @@ export function insertVideo(
   commitInsert([node]);
 }
 
+/**
+ * เพิ่มการ์ดแบบฝึกหัดลงใน canvas (เป็นกลุ่ม)
+ * - พื้นหลังการ์ด (rect)
+ * - กล่องสี่เหลี่ยมด้านบน (rect)
+ * - title (text)
+ * - description (text)
+ */
+export function insertPracticeCard(
+  x: number,
+  y: number,
+  title: string,
+  description: string,
+): void {
+  const cardW = 220;
+  const cardH = 240;
+
+  const padding = 14;
+  const squareW = cardW - padding * 2;
+  const squareY = y - cardH / 2 + padding + squareW / 2;
+
+  const titleY = squareY + squareW / 2 + 14;
+  const descY = titleY + 22;
+
+  const groupId = generateNodeId();
+
+  const card: RectNode = {
+    id: generateNodeId(),
+    type: "rect",
+    x,
+    y,
+    width: cardW,
+    height: cardH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    groupId,
+    fill: "#ffffff",
+    stroke: "#e5e7eb",
+    strokeWidth: 2,
+    cornerRadius: 10,
+  };
+
+  const square: RectNode = {
+    id: generateNodeId(),
+    type: "rect",
+    x,
+    y: squareY,
+    width: squareW,
+    height: squareW,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    groupId,
+    fill: "#e5e7eb",
+    stroke: "#d1d5db",
+    strokeWidth: 1,
+    cornerRadius: 4,
+  };
+
+  const titleNode: TextNode = {
+    id: generateNodeId(),
+    type: "text",
+    x,
+    y: titleY,
+    width: cardW - padding * 2,
+    height: 40,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    groupId,
+    text: title,
+    fontSize: 16,
+    fontFamily: "Arial",
+    fill: "#111827",
+    fontStyle: "bold",
+    align: "center",
+  };
+
+  const descNode: TextNode = {
+    id: generateNodeId(),
+    type: "text",
+    x,
+    y: descY,
+    width: cardW - padding * 2,
+    height: 40,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    groupId,
+    text: description,
+    fontSize: 12,
+    fontFamily: "Arial",
+    fill: "#6b7280",
+    fontStyle: "normal",
+    align: "center",
+  };
+
+  commitInsert([card, square, titleNode, descNode]);
+}
+
 // ===============================================
 // HELPER FUNCTION
 // ===============================================

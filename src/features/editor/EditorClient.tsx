@@ -40,7 +40,13 @@ import { useViewStore } from "./stores/viewStore";
 import { selectAll, clearSelection } from "./core/commands/selection";
 import { deleteSelected, copy, paste, cut } from "./core/commands/clipboard";
 import { nudgeSelection } from "./core/commands/transform";
-import { insertImage, insertRect, insertEllipse, insertText } from "./core/commands/insert";
+import {
+  insertImage,
+  insertRect,
+  insertEllipse,
+  insertText,
+  insertPracticeCard,
+} from "./core/commands/insert";
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
 import { OverlayRoot } from "./renderer/overlays/OverlayRoot";
@@ -115,16 +121,23 @@ export function EditorClient({ docId }: EditorClientProps) {
     e.stopPropagation();
     setIsDraggingOver(true);
     
-    // ตรวจสอบว่าเป็นการลาก element type หรือไม่
-    const elementType =
-      (e as React.DragEvent).dataTransfer?.types?.includes("application/element-type") ||
-      (e as DragEvent).dataTransfer?.types?.includes("application/element-type");
-    
-    if (elementType) {
-      const type =
-        (e as React.DragEvent).dataTransfer?.getData?.("application/element-type") ||
-        (e as DragEvent).dataTransfer?.getData?.("application/element-type");
+    const dt =
+      (e as React.DragEvent).dataTransfer || (e as DragEvent).dataTransfer;
+    if (!dt) return;
+
+    const isElementType = dt.types?.includes("application/element-type");
+    const isPracticeType = dt.types?.includes("application/practice-type");
+
+    if (isElementType) {
+      const type = dt.getData?.("application/element-type");
       setDraggingElementType(type || "element");
+      return;
+    }
+
+    if (isPracticeType) {
+      const title = dt.getData?.("application/practice-title");
+      const type = dt.getData?.("application/practice-type");
+      setDraggingElementType(title || type || "practice");
     }
   }, []);
 
@@ -164,6 +177,31 @@ export function EditorClient({ docId }: EditorClientProps) {
       const elementType =
         (e as React.DragEvent).dataTransfer?.getData?.("application/element-type") ||
         (e as DragEvent).dataTransfer?.getData?.("application/element-type");
+
+      const practiceType =
+        (e as React.DragEvent).dataTransfer?.getData?.("application/practice-type") ||
+        (e as DragEvent).dataTransfer?.getData?.("application/practice-type");
+
+      if (practiceType) {
+        const title =
+          (e as React.DragEvent).dataTransfer?.getData?.(
+            "application/practice-title",
+          ) ||
+          (e as DragEvent).dataTransfer?.getData?.("application/practice-title") ||
+          practiceType;
+
+        const description =
+          (e as React.DragEvent).dataTransfer?.getData?.(
+            "application/practice-description",
+          ) ||
+          (e as DragEvent).dataTransfer?.getData?.(
+            "application/practice-description",
+          ) ||
+          "";
+
+        insertPracticeCard(dropX, dropY, title, description);
+        return;
+      }
 
       if (elementType) {
         // สร้าง element ตามประเภทที่ลาก

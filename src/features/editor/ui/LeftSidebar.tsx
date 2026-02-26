@@ -37,8 +37,8 @@ export function LeftSidebar() {
         {
           id: "practice" as const,
           label: "Practice",
-          title: "Practice",
-          subtitle: "Practice tools (coming soon)",
+          title: "เลือกรูปแบบแบบฝึกหัด",
+          subtitle: "เลือกประเภทแบบฝึกหัดที่ต้องการสร้าง",
           render: () => <PracticePanel />,
         },
       ] as const,
