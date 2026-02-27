@@ -198,6 +198,19 @@ function clampEdges(
   return { x, y, width, height };
 }
 
+/** Half extents of a rotated rectangle around its center (world axis-aligned) */
+function rotatedHalfExtents(width: number, height: number, rotation: number) {
+  const hw = width / 2;
+  const hh = height / 2;
+  const rad = (rotation * Math.PI) / 180;
+  const c = Math.abs(Math.cos(rad));
+  const s = Math.abs(Math.sin(rad));
+  return {
+    halfX: hw * c + hh * s,
+    halfY: hw * s + hh * c,
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -411,10 +424,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
             fw = Math.min(fw, doc.width);
             fh = Math.min(fh, doc.height);
           }
-          const hw = fw / 2,
-            hh = fh / 2;
-          fx = Math.max(hw, Math.min(doc.width - hw, fx));
-          fy = Math.max(hh, Math.min(doc.height - hh, fy));
+          const { halfX, halfY } = rotatedHalfExtents(fw, fh, fr);
+          fx = Math.max(halfX, Math.min(doc.width - halfX, fx));
+          fy = Math.max(halfY, Math.min(doc.height - halfY, fy));
         }
 
         // Reset scale & apply final dimensions
@@ -775,11 +787,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         }
 
         const db = docScreenBounds(doc);
-        if (isImage) {
-          const { x, y, width, height } = newBox;
-          if (x < db.l || y < db.t || x + width > db.r || y + height > db.b)
-            return oldBox;
-        } else {
+        if (!isImage) {
           const c = clampEdges(newBox, db);
           if (c.width < 5 || c.height < 5) return oldBox;
           return { ...newBox, ...c };

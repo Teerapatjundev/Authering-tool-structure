@@ -313,20 +313,22 @@ export function RightSidebar() {
                 mixed={isMixed(commonStroke)}
                 onChange={(v) => apply({ stroke: v }, ["rect", "ellipse"])}
               />
-              <NumberField
-                label="Width"
-                value={
-                  isMixed(commonStrokeWidth)
-                    ? undefined
-                    : (commonStrokeWidth as number)
-                }
-                placeholder={isMixed(commonStrokeWidth) ? "Mixed" : undefined}
-                onChange={(v) =>
-                  apply({ strokeWidth: v }, ["rect", "ellipse"])
-                }
-                min={0}
-                max={50}
-              />
+              <div className="space-y-2">
+                <Slider
+                  min={0}
+                  max={50}
+                  step={1}
+                  value={[isMixed(commonStrokeWidth) ? 0 : (commonStrokeWidth as number)]}
+                  onValueChange={([v]) =>
+                    apply({ strokeWidth: v }, ["rect", "ellipse"])
+                  }
+                />
+                <p className="text-xs text-center text-muted-foreground">
+                  {isMixed(commonStrokeWidth)
+                    ? "Mixed"
+                    : `${commonStrokeWidth as number}px`}
+                </p>
+              </div>
             </PropertySection>
             <Separator />
           </>

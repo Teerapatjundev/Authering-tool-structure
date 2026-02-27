@@ -15,6 +15,7 @@
 
 import { useToolStore } from "../stores/toolStore";
 import { useHistoryStore } from "../core/history/historyStore";
+import { Button } from "../../../components/ui/button";
 
 export function FloatingToolbar() {
   const { activeTool, setTool } = useToolStore();
@@ -24,7 +25,7 @@ export function FloatingToolbar() {
     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-md rounded-xl shadow-lg border border-gray-200 px-2 py-1.5">
       {/* Select / Pan toggle */}
       <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
-        <button
+        <Button
           onClick={() => setTool("select")}
           className={`w-9 h-9 rounded-md flex items-center justify-center transition-all text-sm ${
             activeTool === "select"
@@ -34,8 +35,8 @@ export function FloatingToolbar() {
           title="Select Tool (V)"
         >
           ↖
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => setTool("pan")}
           className={`w-9 h-9 rounded-md flex items-center justify-center transition-all text-sm ${
             activeTool === "pan"
@@ -45,7 +46,7 @@ export function FloatingToolbar() {
           title="Pan Tool (H) - Drag to move canvas"
         >
           ✋
-        </button>
+        </Button>
       </div>
 
       {/* Divider */}
@@ -53,30 +54,31 @@ export function FloatingToolbar() {
 
       {/* Undo / Redo */}
       <div className="flex items-center gap-1">
-        <button
+        <Button
           onClick={undo}
           disabled={!canUndo()}
           className={`w-9 h-9 rounded-md flex items-center justify-center transition-all text-sm ${
             canUndo()
-              ? "hover:bg-gray-100 text-gray-700"
+              ? "hover:bg-blue-500 text-white"
               : "text-gray-300 cursor-not-allowed"
           }`}
           title="Undo (Ctrl+Z)"
         >
           ↶
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={redo}
           disabled={!canRedo()}
           className={`w-9 h-9 rounded-md flex items-center justify-center transition-all text-sm ${
             canRedo()
-              ? "hover:bg-gray-100 text-gray-700"
+              ? "hover:bg-blue-500 text-white"
               : "text-gray-300 cursor-not-allowed"
           }`}
           title="Redo (Ctrl+Y)"
         >
+    
           ↷
-        </button>
+        </Button>
       </div>
     </div>
   );
