@@ -125,21 +125,15 @@ export function EditorClient({ docId }: EditorClientProps) {
     e.stopPropagation();
     setIsDraggingOver(true);
 
-    // ตรวจสอบว่าเป็นการลาก element type หรือไม่
-    const isElementDrag =
-      (e as React.DragEvent).dataTransfer?.types?.includes(
-        "application/element-type",
-      ) ||
-      (e as DragEvent).dataTransfer?.types?.includes(
-        "application/element-type",
-      );
+    const dt =
+      (e as React.DragEvent).dataTransfer || (e as DragEvent).dataTransfer;
+    if (!dt) return;
 
-    if (isElementDrag) {
-      const type =
-        (e as React.DragEvent).dataTransfer?.getData?.(
-          "application/element-type",
-        ) ||
-        (e as DragEvent).dataTransfer?.getData?.("application/element-type");
+    const isElementType = dt.types?.includes("application/element-type");
+    const isPracticeType = dt.types?.includes("application/practice-type");
+
+    if (isElementType) {
+      const type = dt.getData?.("application/element-type");
       setDraggingElementType(type || "element");
 
       // อัพเดทตำแหน่งเมาส์บน canvas สำหรับ drag preview shape
@@ -152,17 +146,7 @@ export function EditorClient({ docId }: EditorClientProps) {
         const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
         useDragPreviewStore.getState().updatePosition(worldPos.x, worldPos.y);
       }
-    
-    const dt =
-      (e as React.DragEvent).dataTransfer || (e as DragEvent).dataTransfer;
-    if (!dt) return;
 
-    const isElementType = dt.types?.includes("application/element-type");
-    const isPracticeType = dt.types?.includes("application/practice-type");
-
-    if (isElementType) {
-      const type = dt.getData?.("application/element-type");
-      setDraggingElementType(type || "element");
       return;
     }
 

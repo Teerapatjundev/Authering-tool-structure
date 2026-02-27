@@ -693,9 +693,16 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         currentSelectedIds.includes(n.id),
       );
 
+      // หา node ที่คลิกโดนก่อน เพื่อให้คลิกเลือก node ใหม่ได้แม้อยู่ใน selection bounds เดิม
+      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
+      const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, doc.nodes) : [];
+      const hitOnUnselectedNode =
+        !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
+
       // ตรวจสอบว่าคลิกอยู่ในพื้นที่ selection หรือไม่
       const handlePadding = 30 / viewport.zoom;
       if (
+        !hitOnUnselectedNode &&
         tryDragExistingSelection(
           worldPos,
           selectedNodes,
@@ -708,9 +715,6 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         return;
       }
 
-      // หา node ที่คลิกโดน
-      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
-
       if (hitNode) {
         // หยุดเล่น video ถ้าคลิกที่ node อื่น
         const { playingNodeId, stopVideo } = useVideoPlayStore.getState();
@@ -719,7 +723,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         }
 
         // ขยาย selection ให้รวมทั้ง group
-        const groupIds = expandGroupIds(hitNode.id, doc.nodes);
+        const groupIds = hitGroupIds;
 
         if (shiftKey) {
           // Shift+click = toggle group selection
@@ -859,9 +863,16 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         currentSelectedIds.includes(n.id),
       );
 
+      // หา node ที่ touch โดนก่อน เพื่อให้เปลี่ยน selection ได้แม้อยู่ใน bounds เดิม
+      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
+      const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, doc.nodes) : [];
+      const hitOnUnselectedNode =
+        !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
+
       // ตรวจสอบว่า touch อยู่ใน selection bounds (padding ใหญ่กว่า mouse)
       const handlePadding = 40 / viewport.zoom;
       if (
+        !hitOnUnselectedNode &&
         tryDragExistingSelection(
           worldPos,
           selectedNodes,
@@ -874,11 +885,8 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         return;
       }
 
-      // หา node ที่ touch โดน
-      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
-
       if (hitNode) {
-        const groupIds = expandGroupIds(hitNode.id, doc.nodes);
+        const groupIds = hitGroupIds;
         if (!selectedIds.has(hitNode.id)) {
           useSelectionStore.getState().selectMultiple(groupIds);
         }
