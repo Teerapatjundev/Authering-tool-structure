@@ -400,6 +400,24 @@ export function EditorClient({ docId }: EditorClientProps) {
           setTool("pan");
           return;
         }
+        // P = Pen tool (keyCode 80)
+        if (matchKey("KeyP", "p", 80)) {
+          e.preventDefault();
+          setTool("pen");
+          return;
+        }
+        // I = Highlighter tool (keyCode 73)
+        if (matchKey("KeyI", "i", 73)) {
+          e.preventDefault();
+          setTool("highlighter");
+          return;
+        }
+        // E = Eraser tool (keyCode 69)
+        if (matchKey("KeyE", "e", 69)) {
+          e.preventDefault();
+          setTool("eraser");
+          return;
+        }
       }
 
       // Undo: Ctrl+Z (keyCode 90)

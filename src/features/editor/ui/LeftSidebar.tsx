@@ -13,8 +13,22 @@ import { useMemo, useState } from "react";
 import { ElementsPanel } from "@/features/editor/ui/leftSidebar/ElementsPanel";
 import { PagePanel } from "@/features/editor/ui/leftSidebar/PagePanel";
 import { PracticePanel } from "@/features/editor/ui/leftSidebar/PracticePanel";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  ChevronLeft,
+  LayoutGrid,
+  FileText,
+  PenSquare,
+  Pen,
+} from "lucide-react";
+import { ToolPanel } from "./leftSidebar/ToolPanel";
 
-type LeftSidebarPageId = "elements" | "page" | "practice";
+type LeftSidebarPageId = "elements" | "page" | "practice" | "tool";
 
 export function LeftSidebar() {
   const pages = useMemo(
@@ -25,6 +39,7 @@ export function LeftSidebar() {
           label: "Elements",
           title: "Elements",
           subtitle: "Drag elements to canvas",
+          icon: LayoutGrid,
           render: () => <ElementsPanel />,
         },
         {
@@ -32,6 +47,7 @@ export function LeftSidebar() {
           label: "Page",
           title: "Page",
           subtitle: "Page tools (coming soon)",
+          icon: FileText,
           render: () => <PagePanel />,
         },
         {
@@ -39,15 +55,22 @@ export function LeftSidebar() {
           label: "Practice",
           title: "เลือกรูปแบบแบบฝึกหัด",
           subtitle: "เลือกประเภทแบบฝึกหัดที่ต้องการสร้าง",
+          icon: PenSquare,
           render: () => <PracticePanel />,
+        },
+        {
+          id: "tool" as const,
+          label: "Tool",
+          title: "Tool",
+          subtitle: "Tool panel",
+          icon: Pen,
+          render: () => <ToolPanel />,
         },
       ] as const,
     [],
   );
 
-  const [openPageId, setOpenPageId] = useState<LeftSidebarPageId | null>(
-    pages[0].id,
-  );
+  const [openPageId, setOpenPageId] = useState<LeftSidebarPageId | null>(null);
 
   const openPage =
     (openPageId ? pages.find((p) => p.id === openPageId) : null) ?? null;
@@ -55,44 +78,61 @@ export function LeftSidebar() {
   return (
     <aside className="flex h-full">
       {/* Button strip (always visible) */}
-      <div className="flex flex-col w-40 h-full bg-white border-r border-gray-200">
-        <div className="p-2 border-b border-gray-100">
+      <div className="flex flex-col items-center w-16 h-full py-2 bg-white border-r border-gray-200">
+        <TooltipProvider delayDuration={100}>
           <div className="flex flex-col gap-2">
             {pages.map((p) => {
               const isActive = p.id === openPageId;
+              const Icon = p.icon;
               return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() =>
-                    setOpenPageId((curr) => (curr === p.id ? null : p.id))
-                  }
-                  className={
-                    "w-full px-2 py-1 text-xs rounded-md border transition-colors " +
-                    (isActive
-                      ? "bg-blue-50 border-blue-300 text-blue-700"
-                      : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50")
-                  }
-                >
-                  {p.label}
-                </button>
+                <Tooltip key={p.id}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={p.label}
+                      onClick={() =>
+                        setOpenPageId((curr) => (curr === p.id ? null : p.id))
+                      }
+                      className={
+                        "flex items-center justify-center w-10 h-10 transition-colors " +
+                        (isActive
+                          ? "bg-blue-50 border-blue-300 text-blue-700"
+                          : " border-gray-200 text-gray-600 hover:bg-gray-50")
+                      }
+                    >
+                      <Icon className="w-5 h-5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{p.label}</TooltipContent>
+                </Tooltip>
               );
             })}
           </div>
-        </div>
+        </TooltipProvider>
       </div>
 
       {/* Tab panel (togglable) */}
       {openPage && (
-        <div className="flex flex-col w-64 h-full overflow-hidden bg-white border-r border-gray-200">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-800">{openPage.title}</h2>
-            <p className="mt-1 text-xs text-gray-500">{openPage.subtitle}</p>
+        <div className="relative h-full">
+          <div className="flex flex-col w-64 h-full overflow-hidden bg-white border-r border-gray-200">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-800">{openPage.title}</h2>
+              <p className="mt-1 text-xs text-gray-500">{openPage.subtitle}</p>
+            </div>
+
+            <div className="flex flex-col flex-1 overflow-hidden">
+              {openPage.render()}
+            </div>
           </div>
 
-          <div className="flex flex-col flex-1 overflow-hidden">
-            {openPage.render()}
-          </div>
+          <button
+            type="button"
+            aria-label="Collapse left panel"
+            onClick={() => setOpenPageId(null)}
+            className="absolute z-10 flex items-center justify-center w-6 h-6 -translate-y-1/2 bg-white border border-gray-200 rounded-full -right-3 top-1/2 text-gray-500 hover:bg-gray-50"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
         </div>
       )}
     </aside>

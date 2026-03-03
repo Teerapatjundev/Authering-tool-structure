@@ -242,6 +242,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const isEditingText = editingNodeId !== null;
   const allLocked =
     selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
+  const hasPathSelection = selectedNodes.some((n) => n.type === "path");
 
   // Sync group rotation on selection change (synchronous to avoid 1-frame flicker)
   const key = Array.from(selectedIds).sort().join(",");
@@ -616,6 +617,16 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         rotateEnabled={false}
         borderStroke="#ff4444"
         borderDash={[4, 4]}
+      />
+    );
+  }
+
+  if (hasPathSelection && !isMulti) {
+    return (
+      <Transformer
+        ref={trRef}
+        enabledAnchors={[]}
+        rotateEnabled={false}
       />
     );
   }

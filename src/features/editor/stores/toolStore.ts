@@ -21,6 +21,9 @@ export type Tool =
   | "text"
   | "image"
   | "video"
+  | "pen"
+  | "highlighter"
+  | "eraser"
   | "pan";
 
 interface ToolState {

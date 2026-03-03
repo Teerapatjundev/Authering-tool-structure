@@ -49,6 +49,16 @@ import { commitMoveWithOriginal } from "../../core/commands/transform";
 import { useHistoryStore } from "../../core/history/historyStore";
 import { InsertOp } from "../../core/history/ops";
 import { generateNodeId } from "@/shared/utils/id";
+import { Node as EditorNode } from "../../core/doc/types";
+import {
+  Point,
+  beginFreehandDrawing,
+  appendFreehandPoint,
+  endFreehandDrawing,
+  eraseAtPoint,
+  commitEraseHistory,
+  resetFreehandState,
+} from "./penToolController";
 
 // ===============================================
 // Constants
@@ -84,11 +94,6 @@ interface EventBridgeProps {
   stageRef: React.RefObject<Konva.Stage>;
   width: number;
   height: number;
-}
-
-interface Point {
-  x: number;
-  y: number;
 }
 
 // ===============================================
@@ -312,6 +317,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
   const isAltDuplicatingRef = useRef(false);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
+  const isFreehandDrawingRef = useRef(false);
+  const currentPathIdRef = useRef<string | null>(null);
+  const currentPathPointsRef = useRef<Point[]>([]);
+  const isErasingRef = useRef(false);
+  const erasedNodeIdsRef = useRef<Set<string>>(new Set());
+  const erasedNodesRef = useRef<EditorNode[]>([]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -395,6 +406,47 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       );
     }
 
+    const freehandRefs = {
+      isFreehandDrawingRef,
+      currentPathIdRef,
+      currentPathPointsRef,
+      isErasingRef,
+      erasedNodeIdsRef,
+      erasedNodesRef,
+    };
+
+    function tryStartFreehandTool(
+      tool: string,
+      worldPos: Point,
+    ): boolean {
+      if (tool === "pen" || tool === "highlighter") {
+        beginFreehandDrawing(worldPos, tool, freehandRefs);
+        return true;
+      }
+
+      if (tool === "eraser") {
+        isErasingRef.current = true;
+        eraseAtPoint(worldPos, freehandRefs);
+        return true;
+      }
+
+      return false;
+    }
+
+    function tryProcessFreehandMove(worldPos: Point): boolean {
+      if (isFreehandDrawingRef.current) {
+        appendFreehandPoint(worldPos, freehandRefs);
+        return true;
+      }
+
+      if (isErasingRef.current) {
+        eraseAtPoint(worldPos, freehandRefs);
+        return true;
+      }
+
+      return false;
+    }
+
     /** Process marquee selection */
     function processMarquee(worldPos: Point): void {
       if (!isMarqueeRef.current || !marqueeStartRef.current) return;
@@ -452,6 +504,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       isDraggingRef.current = false;
       isAltDuplicatingRef.current = false;
       isMarqueeRef.current = false;
+      resetFreehandState(freehandRefs);
       dragStartRef.current = null;
       marqueeStartRef.current = null;
       originalPositionsRef.current.clear();
@@ -671,6 +724,10 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         return;
       }
 
+      if (tryStartFreehandTool(activeTool, worldPos)) {
+        return;
+      }
+
       // Select tool
       if (activeTool === "select") {
         handleSelectDown(worldPos, e.evt.shiftKey, e.evt.altKey);
@@ -779,6 +836,11 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const worldPos = useViewStore
         .getState()
         .screenToWorld(pointer.x, pointer.y);
+
+      if (tryProcessFreehandMove(worldPos)) {
+        return;
+      }
+
       processDragMove(worldPos, true);
       processMarquee(worldPos);
     };
@@ -789,9 +851,19 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
     const handleMouseUp = () => {
       const wasDragging = isDraggingRef.current;
+      const wasDrawing = isFreehandDrawingRef.current;
+      const wasErasing = isErasingRef.current;
 
       if (useViewStore.getState().isPanning) {
         useViewStore.getState().setIsPanning(false);
+      }
+
+      if (wasDrawing) {
+        endFreehandDrawing(freehandRefs);
+      }
+
+      if (wasErasing) {
+        commitEraseHistory(freehandRefs);
       }
 
       if (wasDragging) {
@@ -817,6 +889,10 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
       const { screenToWorld, viewport } = useViewStore.getState();
       const worldPos = screenToWorld(pointer.x, pointer.y);
+
+      if (tryStartFreehandTool(activeTool, worldPos)) {
+        return;
+      }
 
       useContextMenuStore.getState().close();
 
@@ -933,6 +1009,11 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const worldPos = useViewStore
         .getState()
         .screenToWorld(pointer.x, pointer.y);
+
+      if (tryProcessFreehandMove(worldPos)) {
+        return;
+      }
+
       processDragMove(worldPos, false);
     };
 

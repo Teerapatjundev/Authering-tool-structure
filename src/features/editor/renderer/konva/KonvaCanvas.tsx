@@ -31,6 +31,12 @@ import { DragPreviewLayer } from "./DragPreviewLayer";
 import { EventBridge } from "./EventBridge";
 import { SelectionController } from "./SelectionController";
 
+const PEN_CURSOR =
+  'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Cg transform=\'rotate(35 12 12)\'%3E%3Crect x=\'10\' y=\'3\' width=\'4\' height=\'13\' rx=\'1.5\' fill=\'%2322252b\'/%3E%3Cpolygon points=\'10,16 14,16 12,21\' fill=\'%23111727\'/%3E%3Crect x=\'10\' y=\'1\' width=\'4\' height=\'2\' rx=\'1\' fill=\'%23a1a1aa\'/%3E%3C/g%3E%3C/svg%3E") 7 19, crosshair';
+
+const HIGHLIGHTER_CURSOR =
+  'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'%3E%3Cg transform=\'rotate(35 12 12)\'%3E%3Crect x=\'9\' y=\'2\' width=\'6\' height=\'12\' rx=\'1.5\' fill=\'%23facc15\'/%3E%3Crect x=\'9\' y=\'14\' width=\'6\' height=\'5\' rx=\'1.5\' fill=\'%23ca8a04\'/%3E%3Crect x=\'9\' y=\'19\' width=\'6\' height=\'2\' rx=\'1\' fill=\'%23111727\'/%3E%3C/g%3E%3C/svg%3E") 7 19, crosshair';
+
 interface KonvaCanvasProps {
   width: number;
   height: number;
@@ -48,6 +54,12 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
       ? isPanning
         ? "grabbing"
         : "grab"
+      : activeTool === "pen"
+        ? PEN_CURSOR
+        : activeTool === "highlighter"
+          ? HIGHLIGHTER_CURSOR
+        : activeTool === "eraser"
+          ? "cell"
       : "default";
 
   // อัพเดท canvas size

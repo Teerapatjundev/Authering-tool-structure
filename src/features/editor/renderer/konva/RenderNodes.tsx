@@ -26,6 +26,7 @@ import {
   Group,
   Circle,
   RegularPolygon,
+  Line,
 } from "react-konva";
 import useImage from "use-image";
 import {
@@ -35,6 +36,7 @@ import {
   TextNode,
   ImageNode,
   VideoNode,
+  PathNode,
 } from "../../core/doc/types";
 import { useTextEditStore } from "../../stores/textEditStore";
 import { useVideoPlayStore } from "../../stores/videoPlayStore";
@@ -101,6 +103,9 @@ function RenderNode({ node }: { node: Node }) {
 
     case "video":
       return <RenderVideo node={node} commonProps={commonProps} />;
+
+    case "path":
+      return <RenderPath node={node} commonProps={commonProps} />;
 
     default:
       return null;
@@ -277,5 +282,28 @@ function RenderVideo({
         </Group>
       )}
     </Group>
+  );
+}
+
+function RenderPath({
+  node,
+  commonProps,
+}: {
+  node: PathNode;
+  commonProps: Record<string, unknown>;
+}) {
+  const tension = node.mode === "highlighter" ? 0.4 : 0.55;
+
+  return (
+    <Line
+      {...commonProps}
+      points={node.points}
+      stroke={node.stroke}
+      strokeWidth={node.strokeWidth}
+      lineCap="round"
+      lineJoin="round"
+      tension={tension}
+      globalCompositeOperation="source-over"
+    />
   );
 }

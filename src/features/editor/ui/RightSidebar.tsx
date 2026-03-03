@@ -34,7 +34,6 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Select,
@@ -62,6 +61,7 @@ import {
   PenLine,
   RectangleHorizontal,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // =============================================
@@ -70,6 +70,22 @@ import { cn } from "@/lib/utils";
 
 const MIXED = Symbol("mixed");
 type MixedValue<T> = T | typeof MIXED;
+
+const SIDEBAR_DESIGN = {
+  aside: "flex flex-col h-full bg-background border-l w-64",
+  asideScrollable: "flex flex-col h-full overflow-y-auto bg-background border-l w-64",
+  contentCompact: "flex-1 p-4 space-y-1",
+  contentDefault: "flex-1 p-4 space-y-4",
+  header: "px-4 py-3 border-b",
+  headerTitle: "text-sm font-semibold tracking-tight",
+  headerSubtitle: "mt-0.5 text-xs text-muted-foreground capitalize",
+  section: "py-2",
+  sectionTrigger: "flex w-full items-center justify-between group",
+  sectionLabel: "flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground tracking-wide",
+  sectionIcon: "h-3.5 w-3.5",
+  sectionChevron: "h-3.5 w-3.5 text-muted-foreground transition-transform",
+  sectionContent: "pt-2 space-y-2",
+} as const;
 
 /** หาค่าร่วมจากหลาย nodes — ถ้าค่าเหมือนกันหมดจะ return ค่านั้น, ถ้าต่างกัน return MIXED */
 function getCommon<T>(nodes: Node[], getter: (n: Node) => T): MixedValue<T> {
@@ -119,10 +135,10 @@ export function RightSidebar() {
   // ถ้าไม่มี selection → แสดง Background Color
   if (selectedNodes.length === 0) {
     return (
-      <aside className="flex flex-col h-full bg-background border-l w-72">
+      <aside className={SIDEBAR_DESIGN.aside}>
         <SidebarHeader title="Properties" />
-        <div className="flex-1 p-4 space-y-4">
-          <PropertySection icon={<Palette className="h-3.5 w-3.5" />} title="Background">
+        <div className={SIDEBAR_DESIGN.contentDefault}>
+          <PropertySection icon={Palette} title="Background">
             <ColorInput
               value={doc?.backgroundColor || "#ffffff"}
               onChange={(v) => {
@@ -206,12 +222,12 @@ export function RightSidebar() {
     : node.type;
 
   return (
-    <aside className="flex flex-col h-full overflow-y-auto bg-background border-l w-72">
+    <aside className={SIDEBAR_DESIGN.asideScrollable}>
       <SidebarHeader title="Properties" subtitle={typeLabel} />
 
-      <div className="flex-1 p-4 space-y-1">
+      <div className={SIDEBAR_DESIGN.contentCompact}>
         {/* Position */}
-        <PropertySection icon={<Move className="h-3.5 w-3.5" />} title="Position">
+        <PropertySection icon={Move} title="Position">
           <div className="grid grid-cols-2 gap-2">
             <NumberField
               label="X"
@@ -228,10 +244,10 @@ export function RightSidebar() {
           </div>
         </PropertySection>
 
-        <Separator />
+        <SidebarDivider />
 
         {/* Size */}
-        <PropertySection icon={<Maximize2 className="h-3.5 w-3.5" />} title="Size">
+        <PropertySection icon={Maximize2} title="Size">
           <div className="grid grid-cols-2 gap-2">
             <NumberField
               label="W"
@@ -250,10 +266,10 @@ export function RightSidebar() {
           </div>
         </PropertySection>
 
-        <Separator />
+        <SidebarDivider />
 
         {/* Rotation */}
-        <PropertySection icon={<RotateCw className="h-3.5 w-3.5" />} title="Rotation">
+        <PropertySection icon={RotateCw} title="Rotation">
           <NumberField
             label="°"
             value={
@@ -266,10 +282,10 @@ export function RightSidebar() {
           />
         </PropertySection>
 
-        <Separator />
+        <SidebarDivider />
 
         {/* Opacity */}
-        <PropertySection icon={<Eye className="h-3.5 w-3.5" />} title="Opacity">
+        <PropertySection icon={Eye} title="Opacity">
           <div className="space-y-2">
             <Slider
               min={0}
@@ -286,12 +302,12 @@ export function RightSidebar() {
           </div>
         </PropertySection>
 
-        <Separator />
+        <SidebarDivider />
 
         {/* Fill Color — rect, ellipse, text */}
         {hasFillNodes && (
           <>
-            <PropertySection icon={<Palette className="h-3.5 w-3.5" />} title="Fill Color">
+            <PropertySection icon={Palette} title="Fill Color">
               <ColorInput
                 value={mixedToStr(commonFill, "#000000")}
                 mixed={isMixed(commonFill)}
@@ -300,14 +316,14 @@ export function RightSidebar() {
                 }
               />
             </PropertySection>
-            <Separator />
+            <SidebarDivider />
           </>
         )}
 
         {/* Stroke — rect, ellipse */}
         {hasStrokeNodes && (
           <>
-            <PropertySection icon={<PenLine className="h-3.5 w-3.5" />} title="Stroke">
+            <PropertySection icon={PenLine} title="Stroke">
               <ColorInput
                 value={mixedToStr(commonStroke, "#000000")}
                 mixed={isMixed(commonStroke)}
@@ -330,7 +346,7 @@ export function RightSidebar() {
                 </p>
               </div>
             </PropertySection>
-            <Separator />
+            <SidebarDivider />
           </>
         )}
 
@@ -338,7 +354,7 @@ export function RightSidebar() {
         {hasRectNodes && (
           <>
             <PropertySection
-              icon={<RectangleHorizontal className="h-3.5 w-3.5" />}
+              icon={RectangleHorizontal}
               title="Corner Radius"
             >
               <NumberField
@@ -356,7 +372,7 @@ export function RightSidebar() {
                 max={100}
               />
             </PropertySection>
-            <Separator />
+            <SidebarDivider />
           </>
         )}
 
@@ -386,15 +402,17 @@ function SidebarHeader({
   subtitle?: string;
 }) {
   return (
-    <div className="px-4 py-3 border-b">
-      <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+    <div className={SIDEBAR_DESIGN.header}>
+      <h2 className={SIDEBAR_DESIGN.headerTitle}>{title}</h2>
       {subtitle && (
-        <p className="mt-0.5 text-xs text-muted-foreground capitalize">
-          {subtitle}
-        </p>
+        <p className={SIDEBAR_DESIGN.headerSubtitle}>{subtitle}</p>
       )}
     </div>
   );
+}
+
+function SidebarDivider() {
+  return <Separator />;
 }
 
 /** Collapsible property section with icon + title */
@@ -404,28 +422,29 @@ function PropertySection({
   children,
   defaultOpen = true,
 }: {
-  icon?: React.ReactNode;
+  icon?: LucideIcon;
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
+  const Icon = icon;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="py-2">
-      <CollapsibleTrigger className="flex w-full items-center justify-between group">
-        <span className="flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground tracking-wide">
-          {icon}
+    <Collapsible open={open} onOpenChange={setOpen} className={SIDEBAR_DESIGN.section}>
+      <CollapsibleTrigger className={SIDEBAR_DESIGN.sectionTrigger}>
+        <span className={SIDEBAR_DESIGN.sectionLabel}>
+          {Icon && <Icon className={SIDEBAR_DESIGN.sectionIcon} />}
           {title}
         </span>
         <ChevronDown
           className={cn(
-            "h-3.5 w-3.5 text-muted-foreground transition-transform",
+            SIDEBAR_DESIGN.sectionChevron,
             open && "rotate-180",
           )}
         />
       </CollapsibleTrigger>
-      <CollapsibleContent className="pt-2 space-y-2">
+      <CollapsibleContent className={SIDEBAR_DESIGN.sectionContent}>
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -547,7 +566,7 @@ function MultiTextProperties({
   return (
     <>
       {/* Text Content */}
-      <PropertySection icon={<Type className="h-3.5 w-3.5" />} title="Text">
+      <PropertySection icon={Type} title="Text">
         <Textarea
           value={isMixed(commonText) ? "" : (commonText as string)}
           placeholder={isMixed(commonText) ? "Mixed" : undefined}
@@ -557,10 +576,10 @@ function MultiTextProperties({
         />
       </PropertySection>
 
-      <Separator />
+      <SidebarDivider />
 
       {/* Font Settings */}
-      <PropertySection icon={<Type className="h-3.5 w-3.5" />} title="Font">
+      <PropertySection icon={Type} title="Font">
         <div className="space-y-2">
           <NumberField
             label="Size"
@@ -620,13 +639,10 @@ function MultiTextProperties({
         </div>
       </PropertySection>
 
-      <Separator />
+      <SidebarDivider />
 
       {/* Alignment — shadcn ToggleGroup */}
-      <PropertySection
-        icon={<AlignLeft className="h-3.5 w-3.5" />}
-        title="Alignment"
-      >
+      <PropertySection icon={AlignLeft} title="Alignment">
         <ToggleGroup
           type="single"
           value={isMixed(commonAlign) ? undefined : (commonAlign as string)}

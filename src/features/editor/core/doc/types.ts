@@ -14,7 +14,13 @@
  */
 
 // ประเภทของ Node ที่รองรับ
-export type NodeType = "rect" | "ellipse" | "text" | "image" | "video";
+export type NodeType =
+  | "rect"
+  | "ellipse"
+  | "text"
+  | "image"
+  | "video"
+  | "path";
 
 // ===============================================
 // BASE NODE - คุณสมบัติพื้นฐานที่ทุก Node มี
@@ -84,8 +90,23 @@ export interface VideoNode extends BaseNode {
   src: string; // URL ของวิดีโอ
 }
 
+// เส้นวาดอิสระ (pen/highlighter)
+export interface PathNode extends BaseNode {
+  type: "path";
+  points: number[]; // จุดแบบ relative ภายในกรอบ [x1,y1,x2,y2,...]
+  stroke: string;
+  strokeWidth: number;
+  mode: "pen" | "highlighter";
+}
+
 // รวม Node ทุกประเภท
-export type Node = RectNode | EllipseNode | TextNode | ImageNode | VideoNode;
+export type Node =
+  | RectNode
+  | EllipseNode
+  | TextNode
+  | ImageNode
+  | VideoNode
+  | PathNode;
 
 // ===============================================
 // DOCUMENT - เอกสารที่เก็บข้อมูลทั้งหมด
