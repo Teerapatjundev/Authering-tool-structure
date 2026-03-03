@@ -26,11 +26,14 @@ export function commitMove(
   const { doc } = useDocStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const moveOp: MoveOp = {
     type: "move",
     timestamp: Date.now(),
     updates: updates.map((u) => {
-      const node = doc.nodes.find((n) => n.id === u.id)!;
+      const node = page.nodes.find((n) => n.id === u.id)!;
       return {
         id: u.id,
         oldX: node.x,
@@ -94,11 +97,14 @@ export function commitTransform(
   const { doc } = useDocStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const transformOp: TransformOp = {
     type: "transform",
     timestamp: Date.now(),
     updates: updates.map((u) => {
-      const node = doc.nodes.find((n) => n.id === u.id)!;
+      const node = page.nodes.find((n) => n.id === u.id)!;
       const oldProps: Partial<Node> = {};
       const newProps: Partial<Node> = {};
 
@@ -127,13 +133,16 @@ export function nudgeSelection(dx: number, dy: number): void {
   const { doc, updateNodes } = useDocStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const selectedIds = getSelectedIds();
   if (selectedIds.length === 0) return;
 
   // เก็บตำแหน่งเดิมก่อน
   const originalPositions = new Map<string, { x: number; y: number }>();
   selectedIds.forEach((id: string) => {
-    const node = doc.nodes.find((n) => n.id === id);
+    const node = page.nodes.find((n) => n.id === id);
     if (node) {
       originalPositions.set(id, { x: node.x, y: node.y });
     }
@@ -141,7 +150,7 @@ export function nudgeSelection(dx: number, dy: number): void {
 
   // คำนวณตำแหน่งใหม่
   const updates = selectedIds.map((id: string) => {
-    const node = doc.nodes.find((n) => n.id === id)!;
+    const node = page.nodes.find((n) => n.id === id)!;
     return {
       id,
       changes: { x: node.x + dx, y: node.y + dy },

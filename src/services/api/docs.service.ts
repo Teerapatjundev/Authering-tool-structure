@@ -14,9 +14,15 @@ const STORAGE_KEY_PREFIX = "canvas_doc_";
 export interface DocData {
   id: string;
   title: string;
-  nodes: unknown[];
   version: number;
   updatedAt: number;
+
+  // === v2 (multi-page) ===
+  pages?: unknown[];
+  activePageId?: string;
+
+  // === v1 legacy (single-page) ===
+  nodes?: unknown[];
   width?: number;
   height?: number;
   backgroundColor?: string;

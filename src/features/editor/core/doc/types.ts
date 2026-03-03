@@ -116,16 +116,26 @@ export interface VideoNode extends BaseNode {
 export type Node = RectNode | EllipseNode | TextNode | ImageNode | VideoNode;
 
 // ===============================================
-// DOCUMENT - เอกสารที่เก็บข้อมูลทั้งหมด
+// PAGE - หน้าของเอกสาร (canvas แยกอิสระ)
+// ===============================================
+export interface Page {
+  id: string;
+  title?: string;
+  nodes: Node[];
+  width: number; // ความกว้าง canvas ของหน้านี้
+  height: number; // ความสูง canvas ของหน้านี้
+  backgroundColor: string;
+}
+
+// ===============================================
+// DOCUMENT - เอกสารที่เก็บข้อมูลทั้งหมด (หลายหน้า)
 // ===============================================
 export interface Document {
   id: string;
   title: string;
   version: number;
-  nodes: Node[];
-  width: number; // ความกว้าง canvas
-  height: number; // ความสูง canvas
-  backgroundColor: string;
+  pages: Page[];
+  activePageId: string;
   updatedAt: number;
 }
 
