@@ -146,6 +146,12 @@ export const useDocStore = create<DocState>()(
       // Ensure active page is valid
       ensureActivePage(migrated);
 
+      // Requirement: when opening a document (e.g. from dashboard), always show the first page.
+      // This overrides any previously-saved activePageId.
+      if (migrated.pages.length > 0) {
+        migrated.activePageId = migrated.pages[0].id;
+      }
+
       set({ doc: migrated, isLoading: false });
     },
 
