@@ -30,8 +30,11 @@ export function copy(): void {
   const { getSelectedIds } = useSelectionStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const selectedIds = getSelectedIds();
-  const selectedNodes = doc.nodes.filter(
+  const selectedNodes = page.nodes.filter(
     (n) => selectedIds.includes(n.id) && !n.locked,
   );
 
@@ -85,11 +88,14 @@ export function deleteSelected(): void {
   const { getSelectedIds, clearSelection } = useSelectionStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const selectedIds = getSelectedIds();
   if (selectedIds.length === 0) return;
 
   // กรอง nodes ที่ไม่ถูกล็อคเท่านั้น
-  const deletableNodes = doc.nodes.filter(
+  const deletableNodes = page.nodes.filter(
     (n) => selectedIds.includes(n.id) && !n.locked,
   );
   if (deletableNodes.length === 0) return;

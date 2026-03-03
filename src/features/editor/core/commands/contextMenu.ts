@@ -41,10 +41,13 @@ export function alignNodes(direction: AlignDirection): void {
   const { getSelectedIds } = useSelectionStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const selectedIds = getSelectedIds();
   if (selectedIds.length < 2) return;
 
-  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  const selectedNodes = page.nodes.filter((n) => selectedIds.includes(n.id));
   const bounds = getMultiSelectionBounds(selectedNodes);
   if (!bounds) return;
 
@@ -126,10 +129,13 @@ export function reorderLayer(action: LayerAction): void {
   const { getSelectedIds } = useSelectionStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const selectedIds = new Set(getSelectedIds());
   if (selectedIds.size === 0) return;
 
-  const nodes = [...doc.nodes];
+  const nodes = [...page.nodes];
   const selectedIndices = nodes
     .map((n, i) => (selectedIds.has(n.id) ? i : -1))
     .filter((i) => i !== -1);
@@ -176,7 +182,7 @@ export function reorderLayer(action: LayerAction): void {
   // อัพเดท doc.nodes โดยตรง (ไม่ผ่าน history สำหรับ reorder)
   useDocStore.getState().setDoc({
     ...doc,
-    nodes: reordered,
+    pages: doc.pages.map((p) => (p.id === page.id ? { ...p, nodes: reordered } : p)),
     updatedAt: Date.now(),
   });
 }
@@ -193,11 +199,14 @@ export function toggleLock(): void {
   const { getSelectedIds } = useSelectionStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const selectedIds = getSelectedIds();
   if (selectedIds.length === 0) return;
 
   // ถ้ามี node ที่ไม่ได้ล็อคอยู่ → ล็อคทั้งหมด, ถ้าล็อคหมดแล้ว → ปลดล็อคทั้งหมด
-  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  const selectedNodes = page.nodes.filter((n) => selectedIds.includes(n.id));
   const allLocked = selectedNodes.every((n) => n.locked);
   const newLocked = !allLocked;
 
@@ -228,13 +237,16 @@ export function groupNodes(): void {
   const { getSelectedIds } = useSelectionStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const selectedIds = getSelectedIds();
   if (selectedIds.length < 2) return;
 
   const groupId = generateNodeId(); // สร้าง groupId ใหม่
 
   for (const nodeId of selectedIds) {
-    const node = doc.nodes.find((n) => n.id === nodeId);
+    const node = page.nodes.find((n) => n.id === nodeId);
     if (!node) continue;
 
     const op: EditOp = {
@@ -256,10 +268,13 @@ export function ungroupNodes(): void {
   const { getSelectedIds } = useSelectionStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const selectedIds = getSelectedIds();
   if (selectedIds.length === 0) return;
 
-  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  const selectedNodes = page.nodes.filter((n) => selectedIds.includes(n.id));
 
   for (const node of selectedNodes) {
     if (!node.groupId) continue;
@@ -283,8 +298,11 @@ export function hasGroup(): boolean {
   const { getSelectedIds } = useSelectionStore.getState();
   if (!doc) return false;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return false;
+
   const selectedIds = getSelectedIds();
-  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  const selectedNodes = page.nodes.filter((n) => selectedIds.includes(n.id));
   return selectedNodes.some((n) => !!n.groupId);
 }
 
@@ -298,10 +316,13 @@ export function allInSameGroup(): boolean {
   const { getSelectedIds } = useSelectionStore.getState();
   if (!doc) return false;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return false;
+
   const selectedIds = getSelectedIds();
   if (selectedIds.length < 2) return false;
 
-  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  const selectedNodes = page.nodes.filter((n) => selectedIds.includes(n.id));
   if (selectedNodes.length < 2) return false;
 
   const firstGroupId = selectedNodes[0].groupId;

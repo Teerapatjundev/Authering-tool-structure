@@ -18,7 +18,10 @@ export function selectAll(): void {
   const { doc } = useDocStore.getState();
   if (!doc) return;
 
-  const allIds = doc.nodes.map((n) => n.id);
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
+  const allIds = page.nodes.map((n) => n.id);
   useSelectionStore.getState().selectMultiple(allIds);
 }
 

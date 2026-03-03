@@ -64,6 +64,8 @@ interface EditorClientProps {
 export function EditorClient({ docId }: EditorClientProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { loadDoc, doc } = useDocStore();
+  const activePage =
+    doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
   const { undo, redo } = useHistoryStore();
   const { setTool } = useToolStore();
   const { centerDocument } = useViewStore();
@@ -100,15 +102,15 @@ export function EditorClient({ docId }: EditorClientProps) {
 
   // Center document when loaded or canvas size changes
   useEffect(() => {
-    if (doc && canvasSize.width > 0 && canvasSize.height > 0) {
+    if (activePage && canvasSize.width > 0 && canvasSize.height > 0) {
       centerDocument(
-        doc.width,
-        doc.height,
+        activePage.width,
+        activePage.height,
         canvasSize.width,
         canvasSize.height,
       );
     }
-  }, [doc?.id, canvasSize.width, canvasSize.height, centerDocument]);
+  }, [doc?.id, doc?.activePageId, canvasSize.width, canvasSize.height, centerDocument]);
 
   // ===============================================
   // Resize Observer - อัพเดท canvas size
@@ -197,7 +199,7 @@ export function EditorClient({ docId }: EditorClientProps) {
 
       const { screenToWorld } = useViewStore.getState();
       const container = containerRef.current;
-      if (!container || !doc) return;
+      if (!container || !activePage) return;
 
       // คำนวณตำแหน่ง drop ใน world coordinates
       const rect = container.getBoundingClientRect();
@@ -206,8 +208,8 @@ export function EditorClient({ docId }: EditorClientProps) {
       const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
 
       // ตรวจสอบว่า drop อยู่ใน canvas bounds หรือไม่
-      const dropX = Math.max(50, Math.min(doc.width - 50, worldPos.x));
-      const dropY = Math.max(50, Math.min(doc.height - 50, worldPos.y));
+      const dropX = Math.max(50, Math.min(activePage.width - 50, worldPos.x));
+      const dropY = Math.max(50, Math.min(activePage.height - 50, worldPos.y));
 
       // ตรวจสอบว่าเป็นการลาก element type หรือไม่
       const elementType =
@@ -499,7 +501,7 @@ export function EditorClient({ docId }: EditorClientProps) {
         const { doc } = useDocStore.getState();
         const ids = useSelectionStore.getState().getSelectedIds();
         if (!doc || ids.length === 0) return false;
-        const nodes = doc.nodes.filter((n) => ids.includes(n.id));
+        const nodes = (activePage?.nodes || []).filter((n) => ids.includes(n.id));
         return nodes.length > 0 && nodes.every((n) => n.locked);
       };
 

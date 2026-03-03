@@ -38,8 +38,11 @@ export function TextEditOverlay() {
   const { clearSelection } = useSelectionStore();
   const [isInitialized, setIsInitialized] = useState(false);
 
+  const activePage =
+    doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
+
   // หา node ที่กำลังแก้ไข
-  const node = doc?.nodes.find(
+  const node = activePage?.nodes.find(
     (n) => n.id === editingNodeId && n.type === "text",
   ) as TextNode | undefined;
 
