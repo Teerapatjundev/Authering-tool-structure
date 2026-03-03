@@ -46,6 +46,7 @@ import {
   insertEllipse,
   insertText,
   insertPracticeCard,
+  insertConnectionPair,
 } from "./core/commands/insert";
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
@@ -199,7 +200,11 @@ export function EditorClient({ docId }: EditorClientProps) {
           ) ||
           "";
 
-        insertPracticeCard(dropX, dropY, title, description);
+        if (practiceType === "connection") {
+          insertConnectionPair(dropX, dropY, title, description);
+        } else {
+          insertPracticeCard(dropX, dropY, title, description);
+        }
         return;
       }
 

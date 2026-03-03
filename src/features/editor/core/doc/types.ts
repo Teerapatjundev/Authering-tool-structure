@@ -17,6 +17,24 @@
 export type NodeType = "rect" | "ellipse" | "text" | "image" | "video";
 
 // ===============================================
+// PRACTICE METADATA (สำหรับ viewer ในอนาคต)
+// ===============================================
+
+export type ConnectionSide = "left" | "right";
+
+/**
+ * เก็บ metadata ของแบบฝึกหัดไว้กับ node โดยไม่กระทบการ render ของ node type เดิม
+ * - `id` คือ id อ้างอิงร่วมของชุดแบบฝึกหัด (เช่น connection 1 ชุด = 2 nodes ที่มี practice.id เดียวกัน)
+ */
+export interface PracticeMeta {
+  type: string; // เช่น "connection"
+  id: string; // id อ้างอิงของชุดแบบฝึกหัด
+  side?: ConnectionSide; // ใช้กับ connection (left/right)
+  title?: string;
+  description?: string;
+}
+
+// ===============================================
 // BASE NODE - คุณสมบัติพื้นฐานที่ทุก Node มี
 // ===============================================
 export interface BaseNode {
@@ -30,6 +48,9 @@ export interface BaseNode {
   opacity: number; // ความโปร่งใส (0-1)
   locked: boolean; // ล็อคไม่ให้แก้ไข
   visible: boolean; // แสดง/ซ่อน
+
+  // === Practice ===
+  practice?: PracticeMeta;
 
   // === Grouping ===
   groupId?: string; // รหัสกลุ่ม (ถ้าอยู่ในกลุ่ม)

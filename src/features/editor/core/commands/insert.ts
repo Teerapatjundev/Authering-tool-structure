@@ -269,6 +269,66 @@ export function insertPracticeCard(
   commitInsert([card, square, titleNode, descNode]);
 }
 
+/**
+ * เพิ่มแบบฝึกหัด Connection (โยงเส้นจับคู่)
+ * - สร้าง 2 nodes (ซ้าย/ขวา)
+ * - ทั้งสอง nodes จะมี `practice.id` เดียวกันเพื่ออ้างอิงว่าเป็นชุดเดียวกัน
+ * หมายเหตุ: ห้ามใช้ node.id ซ้ำกัน เพราะจะทำให้ selection, update, React key พัง
+ */
+export function insertConnectionPair(
+  x: number,
+  y: number,
+  title: string,
+  description: string,
+): void {
+  const cardW = 220;
+  const cardH = 240;
+  const gap = 40;
+
+  const setId = generateNodeId();
+
+  const leftX = x - (cardW / 2 + gap / 2);
+  const rightX = x + (cardW / 2 + gap / 2);
+
+  const baseProps = {
+    type: "rect" as const,
+    width: cardW,
+    height: cardH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    fill: "#ffffff",
+    stroke: "#e5e7eb",
+    strokeWidth: 2,
+    cornerRadius: 10,
+    practice: {
+      type: "connection",
+      id: setId,
+      title,
+      description,
+    },
+  };
+
+  const left: RectNode = {
+    id: generateNodeId(),
+    x: leftX,
+    y,
+    ...baseProps,
+    practice: { ...baseProps.practice, side: "left" },
+  };
+
+  const right: RectNode = {
+    id: generateNodeId(),
+    x: rightX,
+    y,
+    ...baseProps,
+    practice: { ...baseProps.practice, side: "right" },
+  };
+
+  commitInsert([left, right]);
+}
+
 // ===============================================
 // HELPER FUNCTION
 // ===============================================
