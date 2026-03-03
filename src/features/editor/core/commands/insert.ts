@@ -329,6 +329,150 @@ export function insertConnectionPair(
   commitInsert([left, right]);
 }
 
+/**
+ * เพิ่มแบบฝึกหัด Choice (คำถามแบบเลือก) เป็นชุดของ option nodes
+ * - สร้าง nodes ตามจำนวนตัวเลือกทั้งหมด
+ * - กำหนดว่า option ไหนเป็น "ตัวเลือกที่ถูก" / "ตัวเลือกหลอก" ผ่าน metadata
+ */
+export function insertChoiceOptions(
+  x: number,
+  y: number,
+  mode: "single" | "multiple",
+  totalOptions: number,
+  correctCount: number,
+  title?: string,
+  description?: string,
+): void {
+  // Half-size compared to practice card (per requirement)
+  const cardW = 110;
+  const cardH = 120;
+  const gapX = 12;
+
+  const padding = 7;
+  const squareW = cardW - padding * 2;
+
+  const n = Math.max(1, Math.floor(totalOptions));
+  const c =
+    mode === "single"
+      ? 1
+      : Math.max(1, Math.min(Math.floor(correctCount), n));
+
+  const setId = generateNodeId();
+  // NOTE: Editor uses center-based coordinates.
+  // Requirement: top-left of the first choice card must align with drop point (x,y).
+  const startX = x + cardW / 2;
+  const baseY = y + cardH / 2;
+
+  const nodes: (RectNode | TextNode)[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const cardX = startX + i * (cardW + gapX);
+    const cardY = baseY;
+    const squareY = cardY - cardH / 2 + padding + squareW / 2;
+    const titleY = squareY + squareW / 2 + 8;
+    const descY = titleY + 16;
+
+    const isCorrect = i < c;
+    const optionGroupId = generateNodeId();
+
+    const practiceMeta = {
+      type: "choice" as const,
+      id: setId,
+      mode,
+      totalOptions: n,
+      correctCount: c,
+      optionIndex: i,
+      isCorrect,
+      title,
+      description,
+    };
+
+    const card: RectNode = {
+      id: generateNodeId(),
+      type: "rect",
+      x: cardX,
+      y: cardY,
+      width: cardW,
+      height: cardH,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      fill: "#ffffff",
+      stroke: "#e5e7eb",
+      strokeWidth: 2,
+      cornerRadius: 10,
+    };
+
+    const square: RectNode = {
+      id: generateNodeId(),
+      type: "rect",
+      x: cardX,
+      y: squareY,
+      width: squareW,
+      height: squareW,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      fill: "#e5e7eb",
+      stroke: "#d1d5db",
+      strokeWidth: 1,
+      cornerRadius: 4,
+    };
+
+    const titleNode: TextNode = {
+      id: generateNodeId(),
+      type: "text",
+      x: cardX,
+      y: titleY,
+      width: cardW - padding * 2,
+      height: 24,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      text: `ตัวเลือก ${i + 1}`,
+      fontSize: 12,
+      fontFamily: "Arial",
+      fill: "#111827",
+      fontStyle: "bold",
+      align: "center",
+    };
+
+    const descNode: TextNode = {
+      id: generateNodeId(),
+      type: "text",
+      x: cardX,
+      y: descY,
+      width: cardW - padding * 2,
+      height: 24,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      text: isCorrect ? "ตัวเลือกที่ถูก" : "ตัวเลือกหลอก",
+      fontSize: 10,
+      fontFamily: "Arial",
+      fill: "#6b7280",
+      fontStyle: "normal",
+      align: "center",
+    };
+
+    nodes.push(card, square, titleNode, descNode);
+  }
+
+  commitInsert(nodes);
+}
+
 // ===============================================
 // HELPER FUNCTION
 // ===============================================

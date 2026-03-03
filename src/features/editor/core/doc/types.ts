@@ -32,6 +32,13 @@ export interface PracticeMeta {
   side?: ConnectionSide; // ใช้กับ connection (left/right)
   title?: string;
   description?: string;
+
+  // === Choice (คำถามแบบเลือก) ===
+  mode?: "single" | "multiple";
+  totalOptions?: number;
+  correctCount?: number;
+  optionIndex?: number; // 0-based
+  isCorrect?: boolean;
 }
 
 // ===============================================
