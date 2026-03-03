@@ -21,12 +21,20 @@ export function LeftSidebar() {
     () =>
       [
         {
+          id: "practice" as const,
+          label: "Practice",
+          title: "เลือกรูปแบบแบบฝึกหัด",
+          subtitle: "เลือกประเภทแบบฝึกหัดที่ต้องการสร้าง",
+          render: () => <PracticePanel />,
+        },
+        {
           id: "elements" as const,
           label: "Elements",
           title: "Elements",
           subtitle: "Drag elements to canvas",
           render: () => <ElementsPanel />,
         },
+
         {
           id: "page" as const,
           label: "Page",
@@ -34,20 +42,12 @@ export function LeftSidebar() {
           subtitle: "Page tools (coming soon)",
           render: () => <PagePanel />,
         },
-        {
-          id: "practice" as const,
-          label: "Practice",
-          title: "เลือกรูปแบบแบบฝึกหัด",
-          subtitle: "เลือกประเภทแบบฝึกหัดที่ต้องการสร้าง",
-          render: () => <PracticePanel />,
-        },
       ] as const,
     [],
   );
 
-  const [openPageId, setOpenPageId] = useState<LeftSidebarPageId | null>(
-    pages[0].id,
-  );
+  // Default: no panel selected/open when entering the editor.
+  const [openPageId, setOpenPageId] = useState<LeftSidebarPageId | null>(null);
 
   const openPage =
     (openPageId ? pages.find((p) => p.id === openPageId) : null) ?? null;
