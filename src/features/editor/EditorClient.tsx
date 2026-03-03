@@ -37,6 +37,7 @@ import { useDocStore } from "./stores/docStore";
 import { useHistoryStore } from "./core/history/historyStore";
 import { useToolStore } from "./stores/toolStore";
 import { useViewStore } from "./stores/viewStore";
+import { useSelectionStore } from "./stores/selectionStore";
 import { selectAll, clearSelection } from "./core/commands/selection";
 import { deleteSelected, copy, paste, cut } from "./core/commands/clipboard";
 import { nudgeSelection } from "./core/commands/transform";
@@ -52,8 +53,9 @@ import {
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
 import { OverlayRoot } from "./renderer/overlays/OverlayRoot";
-import { EditorLayout } from "./EditorLayout";
 import { ContextMenu } from "./ui/ContextMenu";
+import { EditorLayout } from "./EditorLayout";
+import { useDragPreviewStore } from "./stores/dragPreviewStore";
 
 interface EditorClientProps {
   docId: string;
@@ -66,7 +68,9 @@ export function EditorClient({ docId }: EditorClientProps) {
   const { setTool } = useToolStore();
   const { centerDocument } = useViewStore();
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [draggingElementType, setDraggingElementType] = useState<string | null>(null);
+  const [draggingElementType, setDraggingElementType] = useState<string | null>(
+    null,
+  );
 
   // Choice modal state (when dropping practiceType === "choice")
   const [choiceModalOpen, setChoiceModalOpen] = useState(false);
@@ -138,7 +142,7 @@ export function EditorClient({ docId }: EditorClientProps) {
     e.preventDefault();
     e.stopPropagation();
     setIsDraggingOver(true);
-    
+
     const dt =
       (e as React.DragEvent).dataTransfer || (e as DragEvent).dataTransfer;
     if (!dt) return;
@@ -149,6 +153,18 @@ export function EditorClient({ docId }: EditorClientProps) {
     if (isElementType) {
       const type = dt.getData?.("application/element-type");
       setDraggingElementType(type || "element");
+
+      // อัพเดทตำแหน่งเมาส์บน canvas สำหรับ drag preview shape
+      const container = containerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const clientX = "clientX" in e ? e.clientX : (e as DragEvent).clientX;
+        const clientY = "clientY" in e ? e.clientY : (e as DragEvent).clientY;
+        const { screenToWorld } = useViewStore.getState();
+        const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
+        useDragPreviewStore.getState().updatePosition(worldPos.x, worldPos.y);
+      }
+
       return;
     }
 
@@ -167,6 +183,7 @@ export function EditorClient({ docId }: EditorClientProps) {
     if (containerRef.current && !containerRef.current.contains(relatedTarget)) {
       setIsDraggingOver(false);
       setDraggingElementType(null);
+      useDragPreviewStore.getState().endDrag();
     }
   }, []);
 
@@ -176,6 +193,7 @@ export function EditorClient({ docId }: EditorClientProps) {
       e.stopPropagation();
       setIsDraggingOver(false);
       setDraggingElementType(null);
+      useDragPreviewStore.getState().endDrag();
 
       const { screenToWorld } = useViewStore.getState();
       const container = containerRef.current;
@@ -193,7 +211,9 @@ export function EditorClient({ docId }: EditorClientProps) {
 
       // ตรวจสอบว่าเป็นการลาก element type หรือไม่
       const elementType =
-        (e as React.DragEvent).dataTransfer?.getData?.("application/element-type") ||
+        (e as React.DragEvent).dataTransfer?.getData?.(
+          "application/element-type",
+        ) ||
         (e as DragEvent).dataTransfer?.getData?.("application/element-type");
 
       const practiceType =
@@ -414,9 +434,9 @@ export function EditorClient({ docId }: EditorClientProps) {
       //   2. e.key    = character produced (ใช้ได้ตอนภาษาอังกฤษ)
       //   3. e.keyCode = deprecated แต่เชื่อถือได้ข้าม layout
       // =============================================
-      const code = e.code;                 // "KeyV", "KeyZ", ...
-      const key = e.key.toLowerCase();     // "v", "อ", ...
-      const keyCode = e.keyCode;           // 86 (V), 90 (Z), ... ไม่เปลี่ยนตาม layout
+      const code = e.code; // "KeyV", "KeyZ", ...
+      const key = e.key.toLowerCase(); // "v", "อ", ...
+      const keyCode = e.keyCode; // 86 (V), 90 (Z), ... ไม่เปลี่ยนตาม layout
 
       /**
        * ตรวจจับปุ่มตัวอักษร แม้เปลี่ยนภาษา
@@ -424,8 +444,14 @@ export function EditorClient({ docId }: EditorClientProps) {
        * @param targetKey   - e.key ที่ต้องการ เช่น "v"
        * @param targetKeyCode - e.keyCode ที่ต้องการ เช่น 86
        */
-      const matchKey = (targetCode: string, targetKey: string, targetKeyCode: number): boolean => {
-        return code === targetCode || key === targetKey || keyCode === targetKeyCode;
+      const matchKey = (
+        targetCode: string,
+        targetKey: string,
+        targetKeyCode: number,
+      ): boolean => {
+        return (
+          code === targetCode || key === targetKey || keyCode === targetKeyCode
+        );
       };
 
       // Tool shortcuts (without modifier keys)
@@ -452,7 +478,10 @@ export function EditorClient({ docId }: EditorClientProps) {
       }
 
       // Redo: Ctrl+Y หรือ Ctrl+Shift+Z
-      if (isCtrlOrCmd && (matchKey("KeyY", "y", 89) || (matchKey("KeyZ", "z", 90) && e.shiftKey))) {
+      if (
+        isCtrlOrCmd &&
+        (matchKey("KeyY", "y", 89) || (matchKey("KeyZ", "z", 90) && e.shiftKey))
+      ) {
         e.preventDefault();
         redo();
         return;
@@ -465,24 +494,33 @@ export function EditorClient({ docId }: EditorClientProps) {
         return;
       }
 
+      // Helper: ตรวจสอบว่า selected nodes ทั้งหมดถูกล็อคหรือไม่
+      const checkAllLocked = () => {
+        const { doc } = useDocStore.getState();
+        const ids = useSelectionStore.getState().getSelectedIds();
+        if (!doc || ids.length === 0) return false;
+        const nodes = doc.nodes.filter((n) => ids.includes(n.id));
+        return nodes.length > 0 && nodes.every((n) => n.locked);
+      };
+
       // Copy: Ctrl+C (keyCode 67)
       if (isCtrlOrCmd && matchKey("KeyC", "c", 67)) {
         e.preventDefault();
-        copy();
+        if (!checkAllLocked()) copy();
         return;
       }
 
       // Cut: Ctrl+X (keyCode 88)
       if (isCtrlOrCmd && matchKey("KeyX", "x", 88)) {
         e.preventDefault();
-        cut();
+        if (!checkAllLocked()) cut();
         return;
       }
 
       // Paste: Ctrl+V (keyCode 86)
       if (isCtrlOrCmd && matchKey("KeyV", "v", 86)) {
         e.preventDefault();
-        paste();
+        if (!checkAllLocked()) paste();
         return;
       }
 
@@ -507,10 +545,10 @@ export function EditorClient({ docId }: EditorClientProps) {
         return;
       }
 
-      // Delete: Delete / Backspace
+      // Delete: Delete / Backspace (ไม่ลบ nodes ที่ถูกล็อค)
       if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
-        deleteSelected();
+        if (!checkAllLocked()) deleteSelected();
         return;
       }
 
@@ -567,16 +605,6 @@ export function EditorClient({ docId }: EditorClientProps) {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Drag overlay indicator */}
-        {isDraggingOver && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-            <div className="px-6 py-4 text-lg font-medium text-white bg-blue-500 shadow-2xl rounded-xl">
-              {draggingElementType
-                ? `Drop to create ${draggingElementType}`
-                : "📎 Drop image here"}
-            </div>
-          </div>
-        )}
         <KonvaCanvas width={canvasSize.width} height={canvasSize.height} />
         {/* Overlays ต้องมี z-index ต่ำกว่า layout */}
         <div className="absolute inset-0 z-20 pointer-events-none">

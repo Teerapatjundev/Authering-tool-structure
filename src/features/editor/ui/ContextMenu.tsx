@@ -21,11 +21,17 @@
 
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useCallback } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import { useContextMenuStore } from "../stores/contextMenuStore";
 import { useSelectionStore } from "../stores/selectionStore";
 import { useDocStore } from "../stores/docStore";
-import { copy, deleteSelected } from "../core/commands/clipboard";
+import { copy, paste, deleteSelected } from "../core/commands/clipboard";
 import {
   alignNodes,
   reorderLayer,
@@ -33,9 +39,7 @@ import {
   groupNodes,
   ungroupNodes,
   hasGroup,
-  copyAsMaster,
-  AlignDirection,
-  LayerAction,
+  allInSameGroup,
 } from "../core/commands/contextMenu";
 
 // =============================================
@@ -43,27 +47,46 @@ import {
 // =============================================
 function CopyIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <rect x="9" y="9" width="13" height="13" rx="2" />
       <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
     </svg>
   );
 }
 
-function MasterIcon() {
+function PasteIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="3" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="3" width="7" height="7" rx="1" />
-      <rect x="14" y="14" width="7" height="7" rx="1" />
-      <path d="M7 10v4a1 1 0 001 1h4" />
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2" />
+      <rect x="8" y="2" width="8" height="4" rx="1" />
     </svg>
   );
 }
 
 function DeleteIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
       <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
@@ -73,7 +96,14 @@ function DeleteIcon() {
 
 function AlignIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <line x1="21" y1="10" x2="3" y2="10" />
       <line x1="21" y1="6" x2="3" y2="6" />
       <line x1="21" y1="14" x2="3" y2="14" />
@@ -84,7 +114,14 @@ function AlignIcon() {
 
 function LayerIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <polygon points="12 2 2 7 12 12 22 7 12 2" />
       <polyline points="2 17 12 22 22 17" />
       <polyline points="2 12 12 17 22 12" />
@@ -94,7 +131,14 @@ function LayerIcon() {
 
 function LockIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <rect x="3" y="11" width="18" height="11" rx="2" />
       <path d="M7 11V7a5 5 0 0110 0v4" />
     </svg>
@@ -103,7 +147,14 @@ function LockIcon() {
 
 function UnlockIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <rect x="3" y="11" width="18" height="11" rx="2" />
       <path d="M7 11V7a5 5 0 019.9-1" />
     </svg>
@@ -112,7 +163,14 @@ function UnlockIcon() {
 
 function GroupIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <rect x="2" y="2" width="8" height="8" rx="1" />
       <rect x="14" y="2" width="8" height="8" rx="1" />
       <rect x="2" y="14" width="8" height="8" rx="1" />
@@ -123,7 +181,14 @@ function GroupIcon() {
 
 function UngroupIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <rect x="2" y="2" width="8" height="8" rx="1" strokeDasharray="2 2" />
       <rect x="14" y="2" width="8" height="8" rx="1" strokeDasharray="2 2" />
       <rect x="2" y="14" width="8" height="8" rx="1" strokeDasharray="2 2" />
@@ -132,9 +197,120 @@ function UngroupIcon() {
   );
 }
 
+// =============================================
+// ALIGN ICONS
+// =============================================
+function AlignLeftIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="4" y1="2" x2="4" y2="22" />
+      <rect x="4" y="6" width="12" height="4" rx="1" />
+      <rect x="4" y="14" width="8" height="4" rx="1" />
+    </svg>
+  );
+}
+
+function AlignCenterHIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="12" y1="2" x2="12" y2="22" />
+      <rect x="6" y="6" width="12" height="4" rx="1" />
+      <rect x="8" y="14" width="8" height="4" rx="1" />
+    </svg>
+  );
+}
+
+function AlignRightIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="20" y1="2" x2="20" y2="22" />
+      <rect x="8" y="6" width="12" height="4" rx="1" />
+      <rect x="12" y="14" width="8" height="4" rx="1" />
+    </svg>
+  );
+}
+
+function AlignTopIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="2" y1="4" x2="22" y2="4" />
+      <rect x="6" y="4" width="4" height="12" rx="1" />
+      <rect x="14" y="4" width="4" height="8" rx="1" />
+    </svg>
+  );
+}
+
+function AlignCenterVIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <rect x="6" y="6" width="4" height="12" rx="1" />
+      <rect x="14" y="8" width="4" height="8" rx="1" />
+    </svg>
+  );
+}
+
+function AlignBottomIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <line x1="2" y1="20" x2="22" y2="20" />
+      <rect x="6" y="8" width="4" height="12" rx="1" />
+      <rect x="14" y="12" width="4" height="8" rx="1" />
+    </svg>
+  );
+}
+
+// =============================================
+// LAYER REORDER ICONS
+// =============================================
+function BringToFrontIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="8" y="2" width="12" height="12" rx="2" />
+      <rect x="4" y="10" width="12" height="12" rx="2" opacity="0.4" />
+    </svg>
+  );
+}
+
+function BringForwardIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="4" y="10" width="12" height="12" rx="2" opacity="0.4" />
+      <rect x="8" y="2" width="12" height="12" rx="2" />
+      <path d="M12 6v4M10 8h4" />
+    </svg>
+  );
+}
+
+function SendBackwardIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="8" y="2" width="12" height="12" rx="2" opacity="0.4" />
+      <rect x="4" y="10" width="12" height="12" rx="2" />
+      <path d="M10 18h4" />
+    </svg>
+  );
+}
+
+function SendToBackIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="8" y="2" width="12" height="12" rx="2" opacity="0.4" />
+      <rect x="4" y="10" width="12" height="12" rx="2" />
+    </svg>
+  );
+}
+
 function ChevronRight() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
       <polyline points="9 18 15 12 9 6" />
     </svg>
   );
@@ -275,7 +451,10 @@ export function ContextMenu() {
     if (!isOpen) return;
 
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as HTMLElement)) {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(e.target as HTMLElement)
+      ) {
         close();
       }
     };
@@ -350,8 +529,10 @@ export function ContextMenu() {
 
   // ตรวจสอบว่ามี node ที่ล็อคอยู่หรือไม่
   const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
-  const allLocked = selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
+  const allLocked =
+    selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
   const isGrouped = hasGroup();
+  const isSameGroup = allInSameGroup();
 
   // =============================================
   // Helper: run action แล้วปิดเมนู
@@ -378,117 +559,138 @@ export function ContextMenu() {
       className="bg-white border border-gray-200 rounded-lg shadow-2xl min-w-[200px] py-1 select-none"
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* ===== คัดลอก (Copy) ===== */}
-      <MenuItem
-        label="คัดลอก (Copy)"
-        icon={<CopyIcon />}
-        onClick={() => exec(copy)}
-        disabled={!hasSelection}
-      />
+      {/* ===== เมื่อ lock ทั้งหมด → แสดงแค่ปุ่มปลดล็อค ===== */}
+      {allLocked ? (
+        <MenuItem
+          label="ปลดล็อค (Unlock)"
+          icon={<UnlockIcon />}
+          onClick={() => exec(toggleLock)}
+        />
+      ) : (
+        <>
+          {/* ===== คัดลอก (Copy) ===== */}
+          <MenuItem
+            label="คัดลอก (Copy)"
+            icon={<CopyIcon />}
+            onClick={() => exec(copy)}
+            disabled={!hasSelection}
+          />
 
-      {/* ===== คัดลอกเป็น Master ===== */}
-      <MenuItem
-        label="คัดลอกเป็น Master"
-        icon={<MasterIcon />}
-        onClick={() => exec(copyAsMaster)}
-        disabled={!hasSelection}
-      />
+          {/* ===== วาง (Paste) ===== */}
+          <MenuItem
+            label="วาง (Paste)"
+            icon={<PasteIcon />}
+            onClick={() => exec(paste)}
+          />
 
-      {/* ===== ลบ (Delete) ===== */}
-      <MenuItem
-        label="ลบ (Delete)"
-        icon={<DeleteIcon />}
-        onClick={() => exec(deleteSelected)}
-        disabled={!hasSelection}
-        danger
-      />
+          {/* ===== ลบ (Delete) ===== */}
+          <MenuItem
+            label="ลบ (Delete)"
+            icon={<DeleteIcon />}
+            onClick={() => exec(deleteSelected)}
+            disabled={!hasSelection}
+            danger
+          />
 
-      <Divider />
+          <Divider />
 
-      {/* ===== จัดตำแหน่ง (Align) ===== */}
-      <SubMenu label="จัดตำแหน่ง (Align)" icon={<AlignIcon />}>
-        <MenuItem
-          label="ชิดซ้าย"
-          onClick={() => exec(() => alignNodes("left"))}
-          disabled={!multipleSelected}
-        />
-        <MenuItem
-          label="กึ่งกลางแนวนอน"
-          onClick={() => exec(() => alignNodes("center-h"))}
-          disabled={!multipleSelected}
-        />
-        <MenuItem
-          label="ชิดขวา"
-          onClick={() => exec(() => alignNodes("right"))}
-          disabled={!multipleSelected}
-        />
-        <Divider />
-        <MenuItem
-          label="ชิดบน"
-          onClick={() => exec(() => alignNodes("top"))}
-          disabled={!multipleSelected}
-        />
-        <MenuItem
-          label="กึ่งกลางแนวตั้ง"
-          onClick={() => exec(() => alignNodes("center-v"))}
-          disabled={!multipleSelected}
-        />
-        <MenuItem
-          label="ชิดล่าง"
-          onClick={() => exec(() => alignNodes("bottom"))}
-          disabled={!multipleSelected}
-        />
-      </SubMenu>
+          {/* ===== จัดตำแหน่ง (Align) ===== */}
+          <SubMenu label="จัดตำแหน่ง (Align)" icon={<AlignIcon />}>
+            <MenuItem
+              label="ชิดซ้าย"
+              icon={<AlignLeftIcon />}
+              onClick={() => exec(() => alignNodes("left"))}
+              disabled={!multipleSelected}
+            />
+            <MenuItem
+              label="กึ่งกลางแนวนอน"
+              icon={<AlignCenterHIcon />}
+              onClick={() => exec(() => alignNodes("center-h"))}
+              disabled={!multipleSelected}
+            />
+            <MenuItem
+              label="ชิดขวา"
+              icon={<AlignRightIcon />}
+              onClick={() => exec(() => alignNodes("right"))}
+              disabled={!multipleSelected}
+            />
+            <Divider />
+            <MenuItem
+              label="ชิดบน"
+              icon={<AlignTopIcon />}
+              onClick={() => exec(() => alignNodes("top"))}
+              disabled={!multipleSelected}
+            />
+            <MenuItem
+              label="กึ่งกลางแนวตั้ง"
+              icon={<AlignCenterVIcon />}
+              onClick={() => exec(() => alignNodes("center-v"))}
+              disabled={!multipleSelected}
+            />
+            <MenuItem
+              label="ชิดล่าง"
+              icon={<AlignBottomIcon />}
+              onClick={() => exec(() => alignNodes("bottom"))}
+              disabled={!multipleSelected}
+            />
+          </SubMenu>
 
-      {/* ===== จัดเรียง Layer ===== */}
-      <SubMenu label="จัดเรียง Layer" icon={<LayerIcon />}>
-        <MenuItem
-          label="นำไปบนสุด"
-          onClick={() => exec(() => reorderLayer("bring-to-front"))}
-          disabled={!hasSelection}
-        />
-        <MenuItem
-          label="เลื่อนขึ้น"
-          onClick={() => exec(() => reorderLayer("bring-forward"))}
-          disabled={!hasSelection}
-        />
-        <MenuItem
-          label="เลื่อนลง"
-          onClick={() => exec(() => reorderLayer("send-backward"))}
-          disabled={!hasSelection}
-        />
-        <MenuItem
-          label="ส่งไปล่างสุด"
-          onClick={() => exec(() => reorderLayer("send-to-back"))}
-          disabled={!hasSelection}
-        />
-      </SubMenu>
+          {/* ===== จัดเรียง Layer ===== */}
+          <SubMenu label="จัดเรียง Layer" icon={<LayerIcon />}>
+            <MenuItem
+              label="นำไปบนสุด"
+              icon={<BringToFrontIcon />}
+              onClick={() => exec(() => reorderLayer("bring-to-front"))}
+              disabled={!hasSelection}
+            />
+            <MenuItem
+              label="เลื่อนขึ้น"
+              icon={<BringForwardIcon />}
+              onClick={() => exec(() => reorderLayer("bring-forward"))}
+              disabled={!hasSelection}
+            />
+            <MenuItem
+              label="เลื่อนลง"
+              icon={<SendBackwardIcon />}
+              onClick={() => exec(() => reorderLayer("send-backward"))}
+              disabled={!hasSelection}
+            />
+            <MenuItem
+              label="ส่งไปล่างสุด"
+              icon={<SendToBackIcon />}
+              onClick={() => exec(() => reorderLayer("send-to-back"))}
+              disabled={!hasSelection}
+            />
+          </SubMenu>
 
-      <Divider />
+          <Divider />
 
-      {/* ===== Lock / Unlock ===== */}
-      <MenuItem
-        label={allLocked ? "ปลดล็อค (Unlock)" : "ล็อค (Lock)"}
-        icon={allLocked ? <UnlockIcon /> : <LockIcon />}
-        onClick={() => exec(toggleLock)}
-        disabled={!hasSelection}
-      />
+          {/* ===== Lock ===== */}
+          <MenuItem
+            label="ล็อค (Lock)"
+            icon={<LockIcon />}
+            onClick={() => exec(toggleLock)}
+            disabled={!hasSelection}
+          />
 
-      {/* ===== รวมกลุ่ม (Group) ===== */}
-      <MenuItem
-        label="รวมกลุ่ม (Group)"
-        icon={<GroupIcon />}
-        onClick={() => exec(groupNodes)}
-        disabled={!multipleSelected}
-      />
+          {/* ===== รวมกลุ่ม (Group) - ซ่อนเมื่อ nodes ที่เลือกอยู่ใน group เดียวกันอยู่แล้ว ===== */}
+          {multipleSelected && !isSameGroup && (
+            <MenuItem
+              label="รวมกลุ่ม (Group)"
+              icon={<GroupIcon />}
+              onClick={() => exec(groupNodes)}
+            />
+          )}
 
-      {/* ===== แยกกลุ่ม (Ungroup) - แสดงเฉพาะเมื่อมีกลุ่ม ===== */}
-      {isGrouped && (
-        <MenuItem
-          label="แยกกลุ่ม (Ungroup)"
-          icon={<UngroupIcon />}
-          onClick={() => exec(ungroupNodes)}
-        />
+          {/* ===== แยกกลุ่ม (Ungroup) - แสดงเฉพาะเมื่อมีกลุ่ม ===== */}
+          {isGrouped && (
+            <MenuItem
+              label="แยกกลุ่ม (Ungroup)"
+              icon={<UngroupIcon />}
+              onClick={() => exec(ungroupNodes)}
+            />
+          )}
+        </>
       )}
     </div>
   );

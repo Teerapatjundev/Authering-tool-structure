@@ -565,6 +565,115 @@ function detectEqualSpacing(
   return guides;
 }
 
+// =============================================
+// Size Snap (Resize Snap - Canva-style)
+// =============================================
+
+export interface SizeSnapGuide {
+  axis: "width" | "height";
+  /** ค่า dimension ที่ match (world-space px) */
+  value: number;
+  /** ขอบเขตของ reference node สำหรับแสดง indicator */
+  refNode: { x: number; y: number; width: number; height: number };
+}
+
+export interface SizeSnapResult {
+  width: number;
+  height: number;
+  snappedWidth: boolean;
+  snappedHeight: boolean;
+  sizeGuides: SizeSnapGuide[];
+}
+
+const SIZE_SNAP_THRESHOLD = 5;
+
+/**
+ * Snap resize dimensions ให้ตรงกับขนาดของ node อื่น (Canva-style)
+ * เมื่อ resize แล้วขนาด width/height ใกล้เคียงกับ node อื่น จะ "ดูดติด" ไปที่ขนาดนั้น
+ *
+ * @param proposedWidth  - ความกว้างที่เสนอ (world-space)
+ * @param proposedHeight - ความสูงที่เสนอ (world-space)
+ * @param movingNodeIds  - IDs ของ nodes ที่กำลัง resize
+ * @param allNodes       - Nodes ทั้งหมด
+ * @param threshold      - ระยะ threshold (world-space pixels)
+ */
+export function snapResizeSize(
+  proposedWidth: number,
+  proposedHeight: number,
+  movingNodeIds: Set<string>,
+  allNodes: Node[],
+  threshold: number = SIZE_SNAP_THRESHOLD,
+): SizeSnapResult {
+  let bestWidthMatch: {
+    value: number;
+    dist: number;
+    refNode: Node;
+  } | null = null;
+  let bestHeightMatch: {
+    value: number;
+    dist: number;
+    refNode: Node;
+  } | null = null;
+
+  for (const other of allNodes) {
+    if (movingNodeIds.has(other.id) || !other.visible) continue;
+
+    // ตรวจ width match
+    const wDist = Math.abs(proposedWidth - other.width);
+    if (
+      wDist <= threshold &&
+      (!bestWidthMatch || wDist < bestWidthMatch.dist)
+    ) {
+      bestWidthMatch = { value: other.width, dist: wDist, refNode: other };
+    }
+
+    // ตรวจ height match
+    const hDist = Math.abs(proposedHeight - other.height);
+    if (
+      hDist <= threshold &&
+      (!bestHeightMatch || hDist < bestHeightMatch.dist)
+    ) {
+      bestHeightMatch = { value: other.height, dist: hDist, refNode: other };
+    }
+  }
+
+  const sizeGuides: SizeSnapGuide[] = [];
+
+  if (bestWidthMatch) {
+    sizeGuides.push({
+      axis: "width",
+      value: bestWidthMatch.value,
+      refNode: {
+        x: bestWidthMatch.refNode.x,
+        y: bestWidthMatch.refNode.y,
+        width: bestWidthMatch.refNode.width,
+        height: bestWidthMatch.refNode.height,
+      },
+    });
+  }
+
+  if (bestHeightMatch) {
+    sizeGuides.push({
+      axis: "height",
+      value: bestHeightMatch.value,
+      refNode: {
+        x: bestHeightMatch.refNode.x,
+        y: bestHeightMatch.refNode.y,
+        width: bestHeightMatch.refNode.width,
+        height: bestHeightMatch.refNode.height,
+      },
+    });
+  }
+
+  return {
+    width: bestWidthMatch ? bestWidthMatch.value : proposedWidth,
+    height: bestHeightMatch ? bestHeightMatch.value : proposedHeight,
+    snappedWidth: !!bestWidthMatch,
+    snappedHeight: !!bestHeightMatch,
+    sizeGuides,
+  };
+}
+
 /**
  * (Legacy) snapNode - เรียก snapNodes ภายใน สำหรับ backward-compat
  */

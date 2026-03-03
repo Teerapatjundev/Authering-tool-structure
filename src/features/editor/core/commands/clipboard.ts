@@ -23,6 +23,7 @@ let clipboard: Node[] = [];
 
 /**
  * คัดลอก nodes ที่เลือกไว้ใน clipboard
+ * ข้าม nodes ที่ถูกล็อค
  */
 export function copy(): void {
   const { doc } = useDocStore.getState();
@@ -30,7 +31,11 @@ export function copy(): void {
   if (!doc) return;
 
   const selectedIds = getSelectedIds();
-  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  const selectedNodes = doc.nodes.filter(
+    (n) => selectedIds.includes(n.id) && !n.locked,
+  );
+
+  if (selectedNodes.length === 0) return;
 
   // Deep copy nodes
   clipboard = selectedNodes.map((n) => ({ ...n }));
@@ -73,6 +78,7 @@ export function paste(): void {
 
 /**
  * ลบ nodes ที่เลือก
+ * ข้าม nodes ที่ถูกล็อค
  */
 export function deleteSelected(): void {
   const { doc } = useDocStore.getState();
@@ -82,13 +88,19 @@ export function deleteSelected(): void {
   const selectedIds = getSelectedIds();
   if (selectedIds.length === 0) return;
 
-  const deletedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  // กรอง nodes ที่ไม่ถูกล็อคเท่านั้น
+  const deletableNodes = doc.nodes.filter(
+    (n) => selectedIds.includes(n.id) && !n.locked,
+  );
+  if (deletableNodes.length === 0) return;
+
+  const deletableIds = deletableNodes.map((n) => n.id);
 
   const op: DeleteOp = {
     type: "delete",
     timestamp: Date.now(),
-    nodeIds: selectedIds,
-    deletedNodes,
+    nodeIds: deletableIds,
+    deletedNodes: deletableNodes,
   };
 
   useHistoryStore.getState().commit(op);

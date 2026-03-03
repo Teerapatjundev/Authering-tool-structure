@@ -15,6 +15,8 @@ import {
   getMultiSelectionBoundsWithRotation,
   getGroupBoundsInRotatedFrame,
 } from "../../core/geometry/bounds";
+import { snapResizeSize, SizeSnapResult } from "../../core/geometry/snap";
+import { useSnapGuidesStore } from "../../stores/snapGuidesStore";
 
 /* ------------------------------------------------------------------ */
 /*  Types & Constants                                                  */
@@ -196,6 +198,19 @@ function clampEdges(
   return { x, y, width, height };
 }
 
+/** Half extents of a rotated rectangle around its center (world axis-aligned) */
+function rotatedHalfExtents(width: number, height: number, rotation: number) {
+  const hw = width / 2;
+  const hh = height / 2;
+  const rad = (rotation * Math.PI) / 180;
+  const c = Math.abs(Math.cos(rad));
+  const s = Math.abs(Math.sin(rad));
+  return {
+    halfX: hw * c + hh * s,
+    halfY: hw * s + hh * c,
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -219,6 +234,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   } | null>(null);
   const groupRotRef = useRef(0);
   const prevKeyRef = useRef("");
+  const sizeSnapResultRef = useRef<SizeSnapResult | null>(null);
 
   const selectedNodes = doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
   const bounds = getMultiSelectionBoundsWithRotation(selectedNodes);
@@ -313,7 +329,17 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
 
   const handleTransform = () => {
     const stage = stageRef.current;
-    if (!stage || !isMulti) return; // Single: Konva Transformer handles visual
+    if (!stage) return;
+
+    // --- Size snap guides (ทั้ง single & multi) ---
+    const snapResult = sizeSnapResultRef.current;
+    if (snapResult && (snapResult.snappedWidth || snapResult.snappedHeight)) {
+      useSnapGuidesStore.getState().setSizeGuides(snapResult.sizeGuides);
+    } else {
+      useSnapGuidesStore.getState().setSizeGuides([]);
+    }
+
+    if (!isMulti) return; // Single: Konva Transformer handles visual
 
     const pr = proxyRef.current;
     if (!pr || !origBoundsRef.current) return;
@@ -347,6 +373,13 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   };
 
   const handleTransformEnd = () => {
+    // Read size snap result BEFORE clearing
+    const lastSizeSnap = sizeSnapResultRef.current;
+
+    // Clear size snap guides
+    useSnapGuidesStore.getState().setSizeGuides([]);
+    sizeSnapResultRef.current = null;
+
     const stage = stageRef.current;
     if (!stage) return;
 
@@ -365,6 +398,12 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       if (shape && orig) {
         let fw = Math.max(5, Math.abs(shape.width() * shape.scaleX()));
         let fh = Math.max(5, Math.abs(shape.height() * shape.scaleY()));
+
+        // Apply exact snapped dimensions (fix floating-point drift from Konva scale)
+        if (lastSizeSnap) {
+          if (lastSizeSnap.snappedWidth) fw = lastSizeSnap.width;
+          if (lastSizeSnap.snappedHeight) fh = lastSizeSnap.height;
+        }
         let fx = shape.x(),
           fy = shape.y();
         const fr = shape.rotation();
@@ -385,10 +424,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
             fw = Math.min(fw, doc.width);
             fh = Math.min(fh, doc.height);
           }
-          const hw = fw / 2,
-            hh = fh / 2;
-          fx = Math.max(hw, Math.min(doc.width - hw, fx));
-          fy = Math.max(hh, Math.min(doc.height - hh, fy));
+          const { halfX, halfY } = rotatedHalfExtents(fw, fh, fr);
+          fx = Math.max(halfX, Math.min(doc.width - halfX, fx));
+          fy = Math.max(halfY, Math.min(doc.height - halfY, fy));
         }
 
         // Reset scale & apply final dimensions
@@ -650,13 +688,106 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         const isRot =
           Math.abs(oldBox.width - newBox.width) < 1 &&
           Math.abs(oldBox.height - newBox.height) < 1;
-        if (isRot) return newBox;
+        if (isRot) {
+          sizeSnapResultRef.current = null;
+          return newBox;
+        }
+
+        // --- Size snap (Canva-style: ดูดติดเมื่อขนาดเท่ากัน) ---
+        {
+          const z = viewport.zoom;
+          const worldW = Math.abs(newBox.width) / z;
+          const worldH = Math.abs(newBox.height) / z;
+          const widthChanged =
+            Math.abs(Math.abs(newBox.width) - Math.abs(oldBox.width)) > 0.5;
+          const heightChanged =
+            Math.abs(Math.abs(newBox.height) - Math.abs(oldBox.height)) > 0.5;
+
+          const otherNodes = doc.nodes.filter(
+            (n) => !selectedIds.has(n.id) && n.visible,
+          );
+          const sizeSnap = snapResizeSize(
+            worldW,
+            worldH,
+            selectedIds,
+            otherNodes,
+          );
+          sizeSnapResultRef.current = sizeSnap;
+
+          if (isImage) {
+            // keepRatio: snap หนึ่ง dimension แล้ว derive อีกด้านตาม aspect ratio
+            const orig = origStatesRef.current[0];
+            const aspect = orig
+              ? orig.width / orig.height
+              : Math.abs(oldBox.width) / Math.abs(oldBox.height);
+
+            if (sizeSnap.snappedWidth && widthChanged) {
+              const snappedScreenW = sizeSnap.width * z;
+              const snappedScreenH = snappedScreenW / aspect;
+              const signW = Math.sign(newBox.width) || 1;
+              const signH = Math.sign(newBox.height) || 1;
+              const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
+              const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
+
+              if (!leftFixed) {
+                newBox.x =
+                  newBox.x + newBox.width - signW * snappedScreenW;
+              }
+              newBox.width = signW * snappedScreenW;
+
+              if (!topFixed) {
+                newBox.y =
+                  newBox.y + newBox.height - signH * snappedScreenH;
+              }
+              newBox.height = signH * snappedScreenH;
+            } else if (sizeSnap.snappedHeight && heightChanged) {
+              const snappedScreenH = sizeSnap.height * z;
+              const snappedScreenW = snappedScreenH * aspect;
+              const signW = Math.sign(newBox.width) || 1;
+              const signH = Math.sign(newBox.height) || 1;
+              const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
+              const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
+
+              if (!leftFixed) {
+                newBox.x =
+                  newBox.x + newBox.width - signW * snappedScreenW;
+              }
+              newBox.width = signW * snappedScreenW;
+
+              if (!topFixed) {
+                newBox.y =
+                  newBox.y + newBox.height - signH * snappedScreenH;
+              }
+              newBox.height = signH * snappedScreenH;
+            }
+          } else {
+            // Non-keepRatio: snap แต่ละ dimension อิสระ
+            if (sizeSnap.snappedWidth && widthChanged) {
+              const snappedScreenW = sizeSnap.width * z;
+              const signW = Math.sign(newBox.width) || 1;
+              const targetW = signW * snappedScreenW;
+              const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
+              if (!leftFixed) {
+                newBox.x = newBox.x + newBox.width - targetW;
+              }
+              newBox.width = targetW;
+            }
+
+            if (sizeSnap.snappedHeight && heightChanged) {
+              const snappedScreenH = sizeSnap.height * z;
+              const signH = Math.sign(newBox.height) || 1;
+              const targetH = signH * snappedScreenH;
+              const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
+              if (!topFixed) {
+                newBox.y = newBox.y + newBox.height - targetH;
+              }
+              newBox.height = targetH;
+            }
+          }
+        }
+
         const db = docScreenBounds(doc);
-        if (isImage) {
-          const { x, y, width, height } = newBox;
-          if (x < db.l || y < db.t || x + width > db.r || y + height > db.b)
-            return oldBox;
-        } else {
+        if (!isImage) {
           const c = clampEdges(newBox, db);
           if (c.width < 5 || c.height < 5) return oldBox;
           return { ...newBox, ...c };

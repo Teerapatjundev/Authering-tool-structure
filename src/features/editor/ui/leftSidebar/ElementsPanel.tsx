@@ -23,6 +23,7 @@ import {
 } from "../../core/commands/insert";
 import { useDocStore } from "../../stores/docStore";
 import { useViewStore } from "../../stores/viewStore";
+import { useDragPreviewStore } from "../../stores/dragPreviewStore";
 
 interface ElementType {
   id: string;
@@ -192,13 +193,77 @@ export function ElementsPanel() {
               e.dataTransfer.setData("application/element-type", element.id);
               e.dataTransfer.effectAllowed = "copy";
 
-              const ghostElement = e.currentTarget.cloneNode(true) as HTMLElement;
-              ghostElement.style.opacity = "0.5";
-              ghostElement.style.position = "absolute";
-              ghostElement.style.top = "-1000px";
-              document.body.appendChild(ghostElement);
-              e.dataTransfer.setDragImage(ghostElement, 0, 0);
-              setTimeout(() => document.body.removeChild(ghostElement), 0);
+              useDragPreviewStore.getState().startDrag(element.id);
+
+              const ghost = document.createElement("canvas");
+              const dpr = window.devicePixelRatio || 1;
+              let ghostWidth = 150;
+              let ghostHeight = 100;
+
+              if (element.id === "ellipse") {
+                ghostWidth = 120;
+                ghostHeight = 120;
+              } else if (element.id === "text") {
+                ghostWidth = 200;
+                ghostHeight = 50;
+              }
+
+              ghost.width = ghostWidth * dpr;
+              ghost.height = ghostHeight * dpr;
+              ghost.style.width = `${ghostWidth}px`;
+              ghost.style.height = `${ghostHeight}px`;
+
+              const ctx = ghost.getContext("2d");
+              if (ctx) {
+                ctx.scale(dpr, dpr);
+                ctx.globalAlpha = 0.7;
+
+                if (element.id === "rect") {
+                  ctx.fillStyle = "#3b82f6";
+                  ctx.strokeStyle = "#1e40af";
+                  ctx.lineWidth = 2;
+                  ctx.fillRect(0, 0, ghostWidth, ghostHeight);
+                  ctx.strokeRect(0, 0, ghostWidth, ghostHeight);
+                } else if (element.id === "ellipse") {
+                  ctx.fillStyle = "#10b981";
+                  ctx.strokeStyle = "#059669";
+                  ctx.lineWidth = 2;
+                  ctx.beginPath();
+                  ctx.ellipse(
+                    ghostWidth / 2,
+                    ghostHeight / 2,
+                    ghostWidth / 2,
+                    ghostHeight / 2,
+                    0,
+                    0,
+                    Math.PI * 2,
+                  );
+                  ctx.fill();
+                  ctx.stroke();
+                } else if (element.id === "text") {
+                  ctx.fillStyle = "#f3f4f6";
+                  ctx.strokeStyle = "#9ca3af";
+                  ctx.lineWidth = 1;
+                  ctx.fillRect(0, 0, ghostWidth, ghostHeight);
+                  ctx.strokeRect(0, 0, ghostWidth, ghostHeight);
+                  ctx.fillStyle = "#000000";
+                  ctx.font = "20px Arial";
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "middle";
+                  ctx.fillText("Enter text", ghostWidth / 2, ghostHeight / 2);
+                }
+              }
+
+              ghost.style.position = "absolute";
+              ghost.style.top = "-9999px";
+              document.body.appendChild(ghost);
+              e.dataTransfer.setDragImage(ghost, ghostWidth / 2, ghostHeight / 2);
+              requestAnimationFrame(() => {
+                document.body.removeChild(ghost);
+              });
+            }}
+            onDragEnd={() => {
+              useDragPreviewStore.getState().endDrag();
             }}
             onClick={() => handleAddElement(element.id)}
             className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-all group cursor-move active:cursor-grabbing"

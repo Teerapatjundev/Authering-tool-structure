@@ -1,20 +1,29 @@
 /**
  * ===============================================
- * EVENT BRIDGE - จัดการ Mouse Events
+ * EVENT BRIDGE - จัดการ Mouse/Touch Events บน Canvas
  * ===============================================
  *
  * จัดการ events ทั้งหมดบน canvas:
  *
- * 1. WHEEL - zoom เข้า/ออก
- * 2. MOUSE DOWN:
- *    - คลิกที่ node → เลือก node
- *    - คลิกที่ว่าง → เริ่ม marquee selection
- *    - Middle click → เริ่ม pan
- * 3. MOUSE MOVE:
+ * 1. WHEEL
+ *    - Shift+Wheel → เลื่อนซ้าย-ขวา (เฉพาะซูมเกิน 100%)
+ *    - Ctrl/Cmd+Wheel → Zoom เข้า/ออก (พร้อม clamp ขอบ + ดึงกลับกึ่งกลาง)
+ *    - Wheel ปกติ → เลื่อนขึ้น-ลง (เฉพาะซูมเกิน 100%)
+ *
+ * 2. MOUSE DOWN
+ *    - Transformer handles → ปล่อยให้ Transformer จัดการ
+ *    - Right-click → Context Menu
+ *    - Middle click / Pan tool → Pan
+ *    - Select tool → เลือก node / marquee / Alt+drag duplicate
+ *
+ * 3. MOUSE MOVE
+ *    - Panning
  *    - ลาก nodes ที่เลือก (พร้อม snap + canvas bounds)
- *    - Marquee selection (ลากคลุมเลือก + แสดง rectangle)
- *    - Pan canvas
- * 4. MOUSE UP - จบการ drag/selection
+ *    - Marquee selection
+ *
+ * 4. MOUSE UP → จบ drag + commit history
+ *
+ * 5. TOUCH → เหมือน mouse + long-press context menu + pinch to zoom
  */
 
 "use client";
@@ -36,12 +45,40 @@ import {
   getMultiSelectionBounds,
 } from "../../core/geometry/bounds";
 import { snapNodes } from "../../core/geometry/snap";
-import {
-  commitMoveWithOriginal,
-} from "../../core/commands/transform";
+import { commitMoveWithOriginal } from "../../core/commands/transform";
 import { useHistoryStore } from "../../core/history/historyStore";
 import { InsertOp } from "../../core/history/ops";
 import { generateNodeId } from "@/shared/utils/id";
+
+// ===============================================
+// Constants
+// ===============================================
+
+/** ระยะที่ขอบ document เลยขอบ editor ได้ (px) */
+const OVERFLOW_PAD = 100;
+/** อัตราการซูมต่อ 1 wheel tick */
+const ZOOM_SCALE_BY = 1.05;
+/** ระยะเวลา long-press เพื่อเปิด context menu (ms) */
+const LONG_PRESS_MS = 500;
+
+/** Konva Transformer anchor/element names */
+const TRANSFORMER_ANCHORS = [
+  "top-left",
+  "top-center",
+  "top-right",
+  "middle-left",
+  "middle-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+  "rotater",
+  "_anchor",
+  "back",
+];
+
+// ===============================================
+// Types
+// ===============================================
 
 interface EventBridgeProps {
   stageRef: React.RefObject<Konva.Stage>;
@@ -49,24 +86,30 @@ interface EventBridgeProps {
   height: number;
 }
 
-/**
- * ขยาย selection ให้รวม nodes ทั้ง group
- * ถ้าคลิกที่ node ที่มี groupId → เลือกทุก node ที่มี groupId เดียวกัน
- */
-function expandGroupIds(hitNodeId: string, allNodes: { id: string; groupId?: string }[]): string[] {
-  const hitNode = allNodes.find((n) => n.id === hitNodeId);
-  if (!hitNode || !hitNode.groupId) return [hitNodeId];
-
-  // หาทุก node ที่อยู่ใน group เดียวกัน
-  return allNodes
-    .filter((n) => n.groupId === hitNode.groupId)
-    .map((n) => n.id);
+interface Point {
+  x: number;
+  y: number;
 }
 
-/**
- * ขยาย set ของ IDs ให้รวม group members ทั้งหมด
- */
-function expandAllGroupIds(ids: string[], allNodes: { id: string; groupId?: string }[]): string[] {
+// ===============================================
+// Pure Utility Functions
+// ===============================================
+
+/** ขยาย selection ให้รวม nodes ทั้ง group */
+function expandGroupIds(
+  hitNodeId: string,
+  allNodes: { id: string; groupId?: string }[],
+): string[] {
+  const hitNode = allNodes.find((n) => n.id === hitNodeId);
+  if (!hitNode || !hitNode.groupId) return [hitNodeId];
+  return allNodes.filter((n) => n.groupId === hitNode.groupId).map((n) => n.id);
+}
+
+/** ขยาย set ของ IDs ให้รวม group members ทั้งหมด */
+function expandAllGroupIds(
+  ids: string[],
+  allNodes: { id: string; groupId?: string }[],
+): string[] {
   const result = new Set(ids);
   for (const id of ids) {
     const node = allNodes.find((n) => n.id === id);
@@ -79,21 +122,194 @@ function expandAllGroupIds(ids: string[], allNodes: { id: string; groupId?: stri
   return Array.from(result);
 }
 
+/** ตรวจสอบว่าเป็น macOS หรือไม่ */
+function isMac(): boolean {
+  return navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+}
+
+/** ตรวจสอบว่า Konva target เป็น Transformer handle หรือไม่ */
+function isTransformerTarget(target: Konva.Node): boolean {
+  const name = target?.name?.() || "";
+  const cls = target?.className;
+  const parentCls = target?.getParent()?.className;
+  const grandParentCls = target?.getParent()?.getParent()?.className;
+
+  return (
+    TRANSFORMER_ANCHORS.some((anchor) => name.includes(anchor)) ||
+    cls === "Transformer" ||
+    parentCls === "Transformer" ||
+    grandParentCls === "Transformer" ||
+    target?.getParent()?.name?.()?.includes("_anchor") ||
+    false
+  );
+}
+
+/**
+ * Clamp scroll delta ในแกนเดียว
+ * คืนค่า clamped delta ที่ไม่ให้ document เลยขอบ editor เกิน OVERFLOW_PAD
+ */
+function clampScrollDelta(
+  currentPos: number,
+  rawDelta: number,
+  docScreenSize: number,
+  viewSize: number,
+): number {
+  const minPos = viewSize - docScreenSize - OVERFLOW_PAD;
+  const maxPos = OVERFLOW_PAD;
+  const newPos = currentPos + rawDelta;
+  const clampedPos = Math.max(minPos, Math.min(maxPos, newPos));
+  return clampedPos - currentPos;
+}
+
+/**
+ * Clamp viewport position หลังซูม + ค่อยๆดึงกลับกึ่งกลางตอนซูมออก
+ */
+function clampViewportAfterZoom(
+  pos: Point,
+  docSize: { width: number; height: number },
+  canvasSize: { width: number; height: number },
+  zoom: number,
+  isZoomingOut: boolean,
+): Point {
+  const docScreenW = docSize.width * zoom;
+  const docScreenH = docSize.height * zoom;
+  const centerX = (canvasSize.width - docScreenW) / 2;
+  const centerY = (canvasSize.height - docScreenH) / 2;
+  let cx = pos.x;
+  let cy = pos.y;
+
+  // แกน X
+  if (docScreenW > canvasSize.width) {
+    if (isZoomingOut) {
+      const excess = (docScreenW - canvasSize.width) / canvasSize.width;
+      const pull = Math.max(0, 1 - excess * 2);
+      cx = cx + (centerX - cx) * pull * 0.3;
+    }
+    cx = Math.max(
+      canvasSize.width - docScreenW - OVERFLOW_PAD,
+      Math.min(OVERFLOW_PAD, cx),
+    );
+  } else {
+    cx = centerX;
+  }
+
+  // แกน Y
+  if (docScreenH > canvasSize.height) {
+    if (isZoomingOut) {
+      const excess = (docScreenH - canvasSize.height) / canvasSize.height;
+      const pull = Math.max(0, 1 - excess * 2);
+      cy = cy + (centerY - cy) * pull * 0.3;
+    }
+    cy = Math.max(
+      canvasSize.height - docScreenH - OVERFLOW_PAD,
+      Math.min(OVERFLOW_PAD, cy),
+    );
+  } else {
+    cy = centerY;
+  }
+
+  return { x: cx, y: cy };
+}
+
+/**
+ * สร้าง virtual nodes ที่ตำแหน่ง original + delta
+ */
+function buildVirtualNodes(
+  selectedIds: string[],
+  originalPositions: Map<string, Point>,
+  nodes: any[],
+  dx: number,
+  dy: number,
+): any[] {
+  return selectedIds
+    .map((id) => {
+      const orig = originalPositions.get(id);
+      const node = nodes.find((n: any) => n.id === id);
+      if (!orig || !node) return null;
+      return { ...node, x: orig.x + dx, y: orig.y + dy };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Clamp drag delta ให้ bounding box ไม่ล้นขอบ document
+ */
+function clampDragDelta(
+  groupBounds: { x: number; y: number; width: number; height: number },
+  docWidth: number,
+  docHeight: number,
+  dx: number,
+  dy: number,
+): Point {
+  let cx = dx;
+  let cy = dy;
+  if (groupBounds.x < 0) cx -= groupBounds.x;
+  if (groupBounds.x + groupBounds.width > docWidth)
+    cx -= groupBounds.x + groupBounds.width - docWidth;
+  if (groupBounds.y < 0) cy -= groupBounds.y;
+  if (groupBounds.y + groupBounds.height > docHeight)
+    cy -= groupBounds.y + groupBounds.height - docHeight;
+  return { x: cx, y: cy };
+}
+
+/**
+ * คำนวณ snap + อัพเดทตำแหน่ง nodes
+ */
+function snapAndUpdateNodes(
+  selectedIds: string[],
+  originalPositions: Map<string, Point>,
+  doc: any,
+  dx: number,
+  dy: number,
+  withSpacingGuides: boolean,
+): void {
+  const clampedVirtual = buildVirtualNodes(
+    selectedIds,
+    originalPositions,
+    doc.nodes,
+    dx,
+    dy,
+  );
+
+  const snapResult = snapNodes(
+    clampedVirtual,
+    doc.nodes,
+    0,
+    0,
+    doc.width,
+    doc.height,
+  );
+
+  const finalDx = dx + snapResult.dx;
+  const finalDy = dy + snapResult.dy;
+
+  useSnapGuidesStore.getState().setGuides(snapResult.guides);
+  if (withSpacingGuides) {
+    useSnapGuidesStore.getState().setSpacingGuides(snapResult.spacingGuides);
+  }
+
+  const updates = selectedIds.map((id) => {
+    const orig = originalPositions.get(id);
+    if (!orig) return { id, changes: {} };
+    return { id, changes: { x: orig.x + finalDx, y: orig.y + finalDy } };
+  });
+
+  useDocStore.getState().updateNodes(updates);
+}
+
+// ===============================================
+// Component
+// ===============================================
+
 export function EventBridge({ stageRef }: EventBridgeProps) {
-  // Refs สำหรับเก็บ state ระหว่าง drag
-  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
-  const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
+  // ─── Refs ───
+  const dragStartRef = useRef<Point | null>(null);
+  const marqueeStartRef = useRef<Point | null>(null);
   const isDraggingRef = useRef(false);
   const isMarqueeRef = useRef(false);
-  // เก็บตำแหน่งเดิมของ nodes ก่อนลาก (สำหรับ undo/redo)
-  const originalPositionsRef = useRef<Map<string, { x: number; y: number }>>(
-    new Map(),
-  );
-  // สะสม delta ของเมาส์ตั้งแต่เริ่มลาก (raw, ไม่ถูก snap)
-  const accDeltaRef = useRef({ x: 0, y: 0 });
-  // Alt+drag duplicate: เก็บว่าเป็นการลาก duplicate หรือไม่
+  const originalPositionsRef = useRef<Map<string, Point>>(new Map());
+  const accDeltaRef = useRef<Point>({ x: 0, y: 0 });
   const isAltDuplicatingRef = useRef(false);
-  // Long-press timer สำหรับ context menu บน touch devices
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggeredRef = useRef(false);
 
@@ -101,444 +317,138 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
     const stage = stageRef.current;
     if (!stage) return;
 
-    // ===============================================
-    // WHEEL - Zoom เข้า/ออก
-    // ===============================================
-    const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
-      e.evt.preventDefault();
+    // ─────────────────────────────────────────────
+    // Shared helpers (closure over refs)
+    // ─────────────────────────────────────────────
 
-      const { setZoom, viewport } = useViewStore.getState();
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
+    /** เริ่มลาก - บันทึก original positions, คืนค่า expanded IDs */
+    function initDrag(
+      worldPos: Point,
+      nodeIds: string[],
+      nodes: any[],
+    ): string[] {
+      isDraggingRef.current = true;
+      dragStartRef.current = worldPos;
+      accDeltaRef.current = { x: 0, y: 0 };
+      originalPositionsRef.current.clear();
 
-      // Zoom factor
-      const scaleBy = 1.05;
-      const direction = e.evt.deltaY > 0 ? -1 : 1;
-      const newZoom =
-        direction > 0 ? viewport.zoom * scaleBy : viewport.zoom / scaleBy;
+      const allIds = expandAllGroupIds(nodeIds, nodes);
+      nodes
+        .filter((n: any) => allIds.includes(n.id))
+        .forEach((n: any) => {
+          originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
+        });
+      return allIds;
+    }
 
-      // Zoom ไปที่ตำแหน่ง pointer
-      setZoom(newZoom, pointer.x, pointer.y);
-    };
+    /** Process drag move (shared by mouse & touch) */
+    function processDragMove(
+      worldPos: Point,
+      withSpacingGuides: boolean,
+    ): void {
+      if (!isDraggingRef.current || !dragStartRef.current) return;
 
-    // ===============================================
-    // MOUSE DOWN
-    // ===============================================
-    const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-      const { activeTool } = useToolStore.getState();
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
+      // สะสม raw delta
+      const frameDx = worldPos.x - dragStartRef.current.x;
+      const frameDy = worldPos.y - dragStartRef.current.y;
+      accDeltaRef.current.x += frameDx;
+      accDeltaRef.current.y += frameDy;
+      dragStartRef.current = worldPos;
 
-      const { screenToWorld } = useViewStore.getState();
-      const worldPos = screenToWorld(pointer.x, pointer.y);
+      const dx = accDeltaRef.current.x;
+      const dy = accDeltaRef.current.y;
 
-      // ตรวจสอบว่าคลิกที่ Transformer handles หรือไม่
-      // ถ้าใช่ ให้ Transformer จัดการเอง ไม่ต้องทำอะไร
-      const target = e.target;
-      const targetName = target?.name?.() || "";
-      const targetClassName = target?.className;
-      const parentClassName = target?.getParent()?.className;
-      const grandParentClassName = target?.getParent()?.getParent()?.className;
+      const selectedIds = useSelectionStore.getState().getSelectedIds();
+      if (selectedIds.length === 0) return;
 
-      // Konva Transformer anchor names และ className
-      const transformerAnchorNames = [
-        "top-left",
-        "top-center",
-        "top-right",
-        "middle-left",
-        "middle-right",
-        "bottom-left",
-        "bottom-center",
-        "bottom-right",
-        "rotater",
-        "_anchor", // Konva internal anchor
-        "back", // Transformer back element
-      ];
+      const { doc } = useDocStore.getState();
+      if (!doc) return;
 
-      const isTransformerHandle =
-        transformerAnchorNames.some((name) => targetName.includes(name)) ||
-        targetClassName === "Transformer" ||
-        parentClassName === "Transformer" ||
-        grandParentClassName === "Transformer" ||
-        target?.getParent()?.name?.()?.includes("_anchor");
+      // สร้าง virtual nodes เพื่อคำนวณ bounds
+      const virtualNodes = buildVirtualNodes(
+        selectedIds,
+        originalPositionsRef.current,
+        doc.nodes,
+        dx,
+        dy,
+      );
+      if (virtualNodes.length === 0) return;
 
-      if (isTransformerHandle) {
-        // ให้ Transformer จัดการ rotation/resize
-        return;
-      }
+      const groupBounds = getMultiSelectionBounds(virtualNodes);
+      if (!groupBounds) return;
 
-      // Right-click → เปิด context menu
-      if (e.evt.button === 2) {
-        e.evt.preventDefault();
-        const { doc } = useDocStore.getState();
-        if (!doc) return;
+      // Clamp + snap + update
+      const clamped = clampDragDelta(
+        groupBounds,
+        doc.width,
+        doc.height,
+        dx,
+        dy,
+      );
+      snapAndUpdateNodes(
+        selectedIds,
+        originalPositionsRef.current,
+        doc,
+        clamped.x,
+        clamped.y,
+        withSpacingGuides,
+      );
+    }
 
-        const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
-        if (hitNode) {
-          // ถ้าคลิกขวาที่ node ที่ยังไม่ได้เลือก → เลือกก่อน (รวม group)
-          const { selectedIds, selectMultiple } = useSelectionStore.getState();
-          if (!selectedIds.has(hitNode.id)) {
-            const groupIds = expandGroupIds(hitNode.id, doc.nodes);
-            selectMultiple(groupIds);
-          }
-        }
+    /** Process marquee selection */
+    function processMarquee(worldPos: Point): void {
+      if (!isMarqueeRef.current || !marqueeStartRef.current) return;
 
-        useContextMenuStore.getState().open(
-          e.evt.clientX,
-          e.evt.clientY,
-          hitNode?.id ?? null,
-        );
-        return;
-      }
+      const marqueeBounds = {
+        x: Math.min(marqueeStartRef.current.x, worldPos.x),
+        y: Math.min(marqueeStartRef.current.y, worldPos.y),
+        width: Math.abs(worldPos.x - marqueeStartRef.current.x),
+        height: Math.abs(worldPos.y - marqueeStartRef.current.y),
+      };
 
-      // ปิด context menu เมื่อคลิกซ้าย
-      useContextMenuStore.getState().close();
+      useMarqueeStore.getState().setBounds(marqueeBounds);
 
-      // Middle mouse button = pan
-      if (e.evt.button === 1) {
-        useViewStore.getState().setIsPanning(true);
-        dragStartRef.current = { x: pointer.x, y: pointer.y };
-        return;
-      }
+      const { doc } = useDocStore.getState();
+      if (!doc) return;
 
-      // Pan tool behavior
-      if (activeTool === "pan") {
-        useViewStore.getState().setIsPanning(true);
-        dragStartRef.current = { x: pointer.x, y: pointer.y };
-        return;
-      }
-
-      // Select tool behavior
-      if (activeTool === "select") {
-        const { doc } = useDocStore.getState();
-        if (!doc) return;
-
-        const { viewport } = useViewStore.getState();
-        const { selectedIds, select, toggleSelect, getSelectedIds } =
-          useSelectionStore.getState();
-
-        // ตรวจสอบว่าคลิกอยู่ในพื้นที่ของ nodes ที่เลือกอยู่หรือไม่
-        const currentSelectedIds = getSelectedIds();
-        const selectedNodes = doc.nodes.filter((n) =>
-          currentSelectedIds.includes(n.id),
-        );
-
-        // ถ้ามี selection อยู่แล้ว ตรวจสอบว่าคลิกอยู่ในพื้นที่ selection หรือไม่
-        if (selectedNodes.length > 0) {
-          const selectionBounds = getMultiSelectionBounds(selectedNodes);
-          if (selectionBounds) {
-            // Add padding for transformer handles (approximately 20px at zoom 1)
-            const handlePadding = 30 / viewport.zoom;
-            const expandedBounds = {
-              x: selectionBounds.x - handlePadding,
-              y: selectionBounds.y - handlePadding,
-              width: selectionBounds.width + handlePadding * 2,
-              height: selectionBounds.height + handlePadding * 2,
-            };
-
-            if (boundsContainsPoint(expandedBounds, worldPos.x, worldPos.y)) {
-              // ถ้า nodes ที่เลือกทั้งหมดถูกล็อค → ไม่ให้ลาก
-              const allLocked = selectedNodes.every((n) => n.locked);
-              if (allLocked) {
-                return;
-              }
-
-              // =============================================
-              // ALT + DRAG = Duplicate แบบ Canva
-              // กด Alt ค้าง + คลิกลากที่ selected nodes → สร้าง clone แล้วลาก clone ออก
-              // =============================================
-              if (e.evt.altKey) {
-                const clonedNodes = selectedNodes.map((n) => ({
-                  ...JSON.parse(JSON.stringify(n)),
-                  id: generateNodeId(),
-                }));
-
-                // Insert cloned nodes ผ่าน history (undo ได้)
-                const insertOp: InsertOp = {
-                  type: "insert",
-                  timestamp: Date.now(),
-                  nodes: clonedNodes,
-                };
-                useHistoryStore.getState().commit(insertOp);
-
-                // เลือก cloned nodes แทน originals
-                useSelectionStore.getState().selectMultiple(clonedNodes.map((n) => n.id));
-
-                // เริ่มลาก cloned nodes
-                isDraggingRef.current = true;
-                isAltDuplicatingRef.current = true;
-                dragStartRef.current = worldPos;
-                accDeltaRef.current = { x: 0, y: 0 };
-                originalPositionsRef.current.clear();
-                clonedNodes.forEach((n) => {
-                  originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
-                });
-                useVideoPlayStore.getState().stopVideo();
-                return;
-              }
-
-              // คลิกอยู่ในพื้นที่ selection (รวม handles) → เริ่มลากได้เลย ไม่ต้อง clear selection
-              isDraggingRef.current = true;
-              dragStartRef.current = worldPos;
-              accDeltaRef.current = { x: 0, y: 0 };
-              // บันทึกตำแหน่งเดิมของ selected nodes + group members สำหรับ undo
-              originalPositionsRef.current.clear();
-              const allTrackIds = expandAllGroupIds(currentSelectedIds, doc.nodes);
-              // อัพเดท selection ให้รวม group members ด้วย
-              if (allTrackIds.length > currentSelectedIds.length) {
-                useSelectionStore.getState().selectMultiple(allTrackIds);
-              }
-              doc.nodes.filter((n) => allTrackIds.includes(n.id)).forEach((n) => {
-                originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
-              });
-              // หยุดเล่น video ถ้ากำลังลากขยับ
-              useVideoPlayStore.getState().stopVideo();
-              return;
-            }
-          }
-        }
-
-        // หา node ที่คลิกโดน
-        const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
-
-        if (hitNode) {
-          // หยุดเล่น video ถ้าคลิกที่ node อื่นที่ไม่ใช่ video ที่กำลังเล่น
-          const { playingNodeId, stopVideo } = useVideoPlayStore.getState();
-          if (hitNode.type !== "video" || hitNode.id !== playingNodeId) {
-            stopVideo();
-          }
-
-          // ขยาย selection ให้รวมทั้ง group
-          const groupIds = expandGroupIds(hitNode.id, doc.nodes);
-
-          // คลิกที่ node
-          if (e.evt.shiftKey) {
-            // Shift+click = toggle group selection
-            const { selectMultiple, getSelectedIds } = useSelectionStore.getState();
-            const currentIds = new Set(getSelectedIds());
-            const allInGroup = groupIds.every((id) => currentIds.has(id));
-            if (allInGroup) {
-              // ถ้ากลุ่มทั้งหมดเลือกอยู่แล้ว → ถอดออก
-              groupIds.forEach((id) => currentIds.delete(id));
-            } else {
-              // เพิ่มกลุ่มเข้าไป
-              groupIds.forEach((id) => currentIds.add(id));
-            }
-            selectMultiple(Array.from(currentIds));
-          } else {
-            // ถ้ายังไม่ได้เลือก node นี้ → เลือก (รวม group)
-            if (!selectedIds.has(hitNode.id)) {
-              useSelectionStore.getState().selectMultiple(groupIds);
-            }
-          }
-
-          // ถ้า node ที่คลิกถูกล็อค → เลือกได้แต่ไม่ให้ลาก
-          if (hitNode.locked) {
-            return;
-          }
-
-          // เริ่มลาก
-          isDraggingRef.current = true;
-          dragStartRef.current = worldPos;
-          accDeltaRef.current = { x: 0, y: 0 };
-          // บันทึกตำแหน่งเดิมของ selected nodes สำหรับ undo
-          originalPositionsRef.current.clear();
-          // รวม hitNode + group + nodes ที่เลือกแล้ว
-          const currentSelectedIds = useSelectionStore.getState().getSelectedIds();
-          const allTrackIds = expandAllGroupIds(currentSelectedIds, doc.nodes);
-          const nodesToTrack = doc.nodes.filter((n) => allTrackIds.includes(n.id));
-          nodesToTrack.forEach((n) => {
-            originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
-          });
-        } else {
-          // คลิกที่ว่าง → marquee selection
-          if (!e.evt.shiftKey) {
-            useSelectionStore.getState().clearSelection();
-          }
-          // หยุดเล่น video เพื่อให้ลากคลุมได้
-          useVideoPlayStore.getState().stopVideo();
-          isMarqueeRef.current = true;
-          marqueeStartRef.current = worldPos;
-        }
-      }
-    };
-
-    // ===============================================
-    // MOUSE MOVE
-    // ===============================================
-    const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-      const pointer = stage.getPointerPosition();
-      if (!pointer) return;
-
-      // 1. Panning
-      if (useViewStore.getState().isPanning && dragStartRef.current) {
-        const dx = pointer.x - dragStartRef.current.x;
-        const dy = pointer.y - dragStartRef.current.y;
-        useViewStore.getState().pan(dx, dy);
-        dragStartRef.current = { x: pointer.x, y: pointer.y };
-        return;
-      }
-
-      const { screenToWorld } = useViewStore.getState();
-      const worldPos = screenToWorld(pointer.x, pointer.y);
-
-      // 2. Dragging selected nodes (accumulated delta approach)
-      if (isDraggingRef.current && dragStartRef.current) {
-        // สะสม raw delta จากจุดเริ่มลาก (ไม่ถูก snap)
-        const frameDx = worldPos.x - dragStartRef.current.x;
-        const frameDy = worldPos.y - dragStartRef.current.y;
-        accDeltaRef.current.x += frameDx;
-        accDeltaRef.current.y += frameDy;
-        dragStartRef.current = worldPos;
-
-        let dx = accDeltaRef.current.x;
-        let dy = accDeltaRef.current.y;
-
-        const { getSelectedIds } = useSelectionStore.getState();
-        const selectedIds = getSelectedIds();
-
-        if (selectedIds.length > 0) {
-          const { doc, updateNodes } = useDocStore.getState();
-          if (!doc) return;
-
-          // สร้าง "virtual nodes" ที่ตำแหน่ง original + accumulated delta
-          // เพื่อใช้คำนวณ snap จากตำแหน่งเดิม
-          const virtualNodes = selectedIds
-            .map((id: string) => {
-              const orig = originalPositionsRef.current.get(id);
-              const node = doc.nodes.find((n) => n.id === id);
-              if (!orig || !node) return null;
-              return { ...node, x: orig.x + dx, y: orig.y + dy };
-            })
-            .filter(Boolean) as typeof doc.nodes;
-
-          if (virtualNodes.length === 0) return;
-
-          // คำนวณ bounding box ของ virtual nodes เพื่อ clamp ขอบ canvas
-          const groupBounds = getMultiSelectionBounds(virtualNodes);
-          if (!groupBounds) return;
-
-          // Clamp dx/dy ให้ bounding box ของกลุ่มไม่ล้นขอบ canvas
-          if (groupBounds.x < 0) dx -= groupBounds.x;
-          if (groupBounds.x + groupBounds.width > doc.width)
-            dx -= groupBounds.x + groupBounds.width - doc.width;
-          if (groupBounds.y < 0) dy -= groupBounds.y;
-          if (groupBounds.y + groupBounds.height > doc.height)
-            dy -= groupBounds.y + groupBounds.height - doc.height;
-
-          // อัพเดท virtual nodes หลัง clamp
-          const clampedVirtualNodes = selectedIds
-            .map((id: string) => {
-              const orig = originalPositionsRef.current.get(id);
-              const node = doc.nodes.find((n) => n.id === id);
-              if (!orig || !node) return null;
-              return { ...node, x: orig.x + dx, y: orig.y + dy };
-            })
-            .filter(Boolean) as typeof doc.nodes;
-
-          // ===== SMART SNAP =====
-          // snap คำนวณจาก virtual nodes (original + delta)
-          // ส่ง dx=0,dy=0 เพราะ virtual nodes อยู่ที่ตำแหน่งที่ต้องการแล้ว
-          const snapResult = snapNodes(
-            clampedVirtualNodes,
-            doc.nodes,
-            0,
-            0,
-            doc.width,
-            doc.height,
-          );
-
-          // ปรับ delta ด้วย snap offset
-          const finalDx = dx + snapResult.dx;
-          const finalDy = dy + snapResult.dy;
-
-          // แสดง snap guides
-          useSnapGuidesStore.getState().setGuides(snapResult.guides);
-          useSnapGuidesStore.getState().setSpacingGuides(snapResult.spacingGuides);
-
-          // อัพเดทตำแหน่ง nodes = original + finalDelta
-          const updates = selectedIds.map((id: string) => {
-            const orig = originalPositionsRef.current.get(id);
-            if (!orig) return { id, changes: {} };
-            return {
-              id,
-              changes: {
-                x: orig.x + finalDx,
-                y: orig.y + finalDy,
-              },
-            };
-          });
-
-          updateNodes(updates);
-        }
-      }
-
-      // 3. Marquee selection - แสดง rectangle
-      if (isMarqueeRef.current && marqueeStartRef.current) {
-        const marqueeBounds = {
-          x: Math.min(marqueeStartRef.current.x, worldPos.x),
-          y: Math.min(marqueeStartRef.current.y, worldPos.y),
-          width: Math.abs(worldPos.x - marqueeStartRef.current.x),
-          height: Math.abs(worldPos.y - marqueeStartRef.current.y),
+      const intersecting = doc.nodes.filter((node: any) => {
+        if (node.locked) return false;
+        const nodeBounds = {
+          x: node.x - node.width / 2,
+          y: node.y - node.height / 2,
+          width: node.width,
+          height: node.height,
         };
+        return boundsIntersect(nodeBounds, marqueeBounds);
+      });
 
-        // Update marquee visual
-        useMarqueeStore.getState().setBounds(marqueeBounds);
+      useSelectionStore.getState().selectMultiple(
+        expandAllGroupIds(
+          intersecting.map((n: any) => n.id),
+          doc.nodes,
+        ),
+      );
+    }
 
-        const { doc } = useDocStore.getState();
-        if (doc) {
-          // หา nodes ที่อยู่ใน marquee bounds
-          const intersecting = doc.nodes.filter((node) => {
-            const nodeBounds = {
-              x: node.x - node.width / 2,
-              y: node.y - node.height / 2,
-              width: node.width,
-              height: node.height,
-            };
-            return boundsIntersect(nodeBounds, marqueeBounds);
-          });
+    /** บันทึก history หลังจบ drag */
+    function commitDragHistory(): void {
+      const selectedIds = useSelectionStore.getState().getSelectedIds();
+      if (selectedIds.length === 0 || originalPositionsRef.current.size === 0)
+        return;
 
-          useSelectionStore
-            .getState()
-            .selectMultiple(expandAllGroupIds(intersecting.map((n) => n.id), doc.nodes));
-        }
-      }
-    };
+      const { doc } = useDocStore.getState();
+      if (!doc) return;
 
-    // ===============================================
-    // MOUSE UP - จบการ drag
-    // ===============================================
-    const handleMouseUp = () => {
-      const wasDragging = isDraggingRef.current;
+      const newPositions = new Map<string, Point>();
+      selectedIds.forEach((id: string) => {
+        const node = doc.nodes.find((n: any) => n.id === id);
+        if (node) newPositions.set(id, { x: node.x, y: node.y });
+      });
+      commitMoveWithOriginal(originalPositionsRef.current, newPositions);
+    }
 
-      // จบ pan
-      if (useViewStore.getState().isPanning) {
-        useViewStore.getState().setIsPanning(false);
-      }
-
-      // บันทึกการย้าย (สำหรับ undo/redo)
-      if (wasDragging) {
-        const { getSelectedIds } = useSelectionStore.getState();
-        const selectedIds = getSelectedIds();
-
-        if (selectedIds.length > 0 && originalPositionsRef.current.size > 0) {
-          const { doc } = useDocStore.getState();
-          if (doc) {
-            // สร้าง map ของตำแหน่งใหม่
-            const newPositions = new Map<string, { x: number; y: number }>();
-            selectedIds.forEach((id: string) => {
-              const node = doc.nodes.find((n) => n.id === id);
-              if (node) {
-                newPositions.set(id, { x: node.x, y: node.y });
-              }
-            });
-            // บันทึก history พร้อมตำแหน่งเดิมและใหม่
-            commitMoveWithOriginal(originalPositionsRef.current, newPositions);
-          }
-        }
-      }
-
-      // Reset states
+    /** Reset ทุก state หลังจบ drag/selection */
+    function resetAllState(): void {
       isDraggingRef.current = false;
       isAltDuplicatingRef.current = false;
       isMarqueeRef.current = false;
@@ -547,14 +457,355 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       originalPositionsRef.current.clear();
       accDeltaRef.current = { x: 0, y: 0 };
       useSnapGuidesStore.getState().clearGuides();
-      useMarqueeStore.getState().clear(); // Clear marquee visual
+      useMarqueeStore.getState().clear();
+    }
+
+    /** เปิด context menu + เลือก node ถ้าคลิกโดน */
+    function openContextMenu(
+      worldPos: Point,
+      clientX: number,
+      clientY: number,
+    ): void {
+      const { doc } = useDocStore.getState();
+      if (!doc) return;
+
+      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
+      if (hitNode) {
+        const { selectedIds, selectMultiple } = useSelectionStore.getState();
+        if (!selectedIds.has(hitNode.id)) {
+          selectMultiple(expandGroupIds(hitNode.id, doc.nodes));
+        }
+      }
+      useContextMenuStore
+        .getState()
+        .open(clientX, clientY, hitNode?.id ?? null);
+    }
+
+    /** Alt + drag = duplicate selected nodes แล้วลาก */
+    function handleAltDuplicate(selectedNodes: any[], worldPos: Point): void {
+      const clonedNodes = selectedNodes.map((n: any) => ({
+        ...JSON.parse(JSON.stringify(n)),
+        id: generateNodeId(),
+      }));
+
+      const insertOp: InsertOp = {
+        type: "insert",
+        timestamp: Date.now(),
+        nodes: clonedNodes,
+      };
+      useHistoryStore.getState().commit(insertOp);
+
+      useSelectionStore
+        .getState()
+        .selectMultiple(clonedNodes.map((n: any) => n.id));
+
+      isDraggingRef.current = true;
+      isAltDuplicatingRef.current = true;
+      dragStartRef.current = worldPos;
+      accDeltaRef.current = { x: 0, y: 0 };
+      originalPositionsRef.current.clear();
+      clonedNodes.forEach((n: any) => {
+        originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
+      });
+      useVideoPlayStore.getState().stopVideo();
+    }
+
+    /**
+     * ตรวจสอบว่าคลิก/touch อยู่ในพื้นที่ selection bounds + จัดการ
+     * คืน true ถ้าจัดการแล้ว (ลาก / locked), false ถ้าไม่อยู่ใน bounds
+     */
+    function tryDragExistingSelection(
+      worldPos: Point,
+      selectedNodes: any[],
+      currentSelectedIds: string[],
+      doc: any,
+      handlePadding: number,
+      altKey: boolean,
+    ): boolean {
+      if (selectedNodes.length === 0) return false;
+
+      const selectionBounds = getMultiSelectionBounds(selectedNodes);
+      if (!selectionBounds) return false;
+
+      const expandedBounds = {
+        x: selectionBounds.x - handlePadding,
+        y: selectionBounds.y - handlePadding,
+        width: selectionBounds.width + handlePadding * 2,
+        height: selectionBounds.height + handlePadding * 2,
+      };
+
+      if (!boundsContainsPoint(expandedBounds, worldPos.x, worldPos.y))
+        return false;
+
+      // nodes ทั้งหมดถูกล็อค → ไม่ให้ลาก
+      if (selectedNodes.every((n: any) => n.locked)) return true;
+
+      // Alt + drag = duplicate
+      if (altKey) {
+        handleAltDuplicate(selectedNodes, worldPos);
+        return true;
+      }
+
+      // ลาก selection ที่มีอยู่
+      const allIds = initDrag(worldPos, currentSelectedIds, doc.nodes);
+      if (allIds.length > currentSelectedIds.length) {
+        useSelectionStore.getState().selectMultiple(allIds);
+      }
+      useVideoPlayStore.getState().stopVideo();
+      return true;
+    }
+
+    // ─────────────────────────────────────────────
+    // WHEEL
+    // ─────────────────────────────────────────────
+
+    const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
+      e.evt.preventDefault();
+      const isCtrlOrCmd = isMac() ? e.evt.metaKey : e.evt.ctrlKey;
+
+      // ── Branch 1: Shift + Wheel = เลื่อนซ้าย-ขวา ──
+      // เลื่อนได้เมื่อ document (บนหน้าจอ) กว้างกว่า viewport (เหมือน Canva)
+      if (e.evt.shiftKey && !isCtrlOrCmd) {
+        const { pan, viewport, canvasSize } = useViewStore.getState();
+        const { doc } = useDocStore.getState();
+        if (doc) {
+          const docScreenWidth = doc.width * viewport.zoom;
+          if (docScreenWidth > canvasSize.width) {
+            const delta = clampScrollDelta(
+              viewport.x,
+              -e.evt.deltaY,
+              docScreenWidth,
+              canvasSize.width,
+            );
+            if (Math.abs(delta) > 0.01) pan(delta, 0);
+          }
+        }
+        return;
+      }
+
+      // ── Branch 2: Ctrl/Cmd + Wheel = Zoom ──
+      if (isCtrlOrCmd) {
+        const { setZoom, viewport } = useViewStore.getState();
+        const pointer = stage.getPointerPosition();
+        if (!pointer) return;
+
+        const direction = e.evt.deltaY > 0 ? -1 : 1;
+        const newZoom =
+          direction > 0
+            ? viewport.zoom * ZOOM_SCALE_BY
+            : viewport.zoom / ZOOM_SCALE_BY;
+
+        setZoom(newZoom, pointer.x, pointer.y);
+
+        // Clamp + ดึงกลับกึ่งกลางตอนซูมออก
+        const {
+          viewport: v,
+          canvasSize,
+          setViewport,
+        } = useViewStore.getState();
+        const { doc } = useDocStore.getState();
+        if (doc) {
+          const clamped = clampViewportAfterZoom(
+            v,
+            doc,
+            canvasSize,
+            v.zoom,
+            direction < 0,
+          );
+          if (clamped.x !== v.x || clamped.y !== v.y) {
+            setViewport({ x: clamped.x, y: clamped.y });
+          }
+        }
+        return;
+      }
+
+      // ── Branch 3: Wheel ปกติ = เลื่อนขึ้น-ลง ──
+      // เลื่อนได้เมื่อ document (บนหน้าจอ) สูงกว่า viewport (เหมือน Canva)
+      {
+        const { pan, viewport, canvasSize } = useViewStore.getState();
+        const { doc } = useDocStore.getState();
+        if (doc) {
+          const docScreenHeight = doc.height * viewport.zoom;
+          if (docScreenHeight > canvasSize.height) {
+            const delta = clampScrollDelta(
+              viewport.y,
+              -e.evt.deltaY,
+              docScreenHeight,
+              canvasSize.height,
+            );
+            if (Math.abs(delta) > 0.01) pan(0, delta);
+          }
+        }
+      }
     };
 
-    // ===============================================
-    // TOUCH HANDLERS - สำหรับ Mobile/iPad
-    // ===============================================
+    // ─────────────────────────────────────────────
+    // MOUSE DOWN
+    // ─────────────────────────────────────────────
+
+    const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+      const { activeTool } = useToolStore.getState();
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+
+      const worldPos = useViewStore
+        .getState()
+        .screenToWorld(pointer.x, pointer.y);
+
+      // Transformer handle → ปล่อยให้ Transformer จัดการ
+      if (isTransformerTarget(e.target)) return;
+
+      // Right-click → Context Menu
+      if (e.evt.button === 2) {
+        e.evt.preventDefault();
+        openContextMenu(worldPos, e.evt.clientX, e.evt.clientY);
+        return;
+      }
+
+      useContextMenuStore.getState().close();
+
+      // Middle mouse / Pan tool → Pan
+      if (e.evt.button === 1 || activeTool === "pan") {
+        useViewStore.getState().setIsPanning(true);
+        dragStartRef.current = { x: pointer.x, y: pointer.y };
+        return;
+      }
+
+      // Select tool
+      if (activeTool === "select") {
+        handleSelectDown(worldPos, e.evt.shiftKey, e.evt.altKey);
+      }
+    };
+
+    /** Select tool: mouse down logic */
+    function handleSelectDown(
+      worldPos: Point,
+      shiftKey: boolean,
+      altKey: boolean,
+    ): void {
+      const { doc } = useDocStore.getState();
+      if (!doc) return;
+
+      const { viewport } = useViewStore.getState();
+      const { selectedIds, getSelectedIds } = useSelectionStore.getState();
+      const currentSelectedIds = getSelectedIds();
+      const selectedNodes = doc.nodes.filter((n: any) =>
+        currentSelectedIds.includes(n.id),
+      );
+
+      // หา node ที่คลิกโดนก่อน เพื่อให้คลิกเลือก node ใหม่ได้แม้อยู่ใน selection bounds เดิม
+      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
+      const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, doc.nodes) : [];
+      const hitOnUnselectedNode =
+        !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
+
+      // ตรวจสอบว่าคลิกอยู่ในพื้นที่ selection หรือไม่
+      const handlePadding = 30 / viewport.zoom;
+      if (
+        !hitOnUnselectedNode &&
+        tryDragExistingSelection(
+          worldPos,
+          selectedNodes,
+          currentSelectedIds,
+          doc,
+          handlePadding,
+          altKey,
+        )
+      ) {
+        return;
+      }
+
+      if (hitNode) {
+        // หยุดเล่น video ถ้าคลิกที่ node อื่น
+        const { playingNodeId, stopVideo } = useVideoPlayStore.getState();
+        if (hitNode.type !== "video" || hitNode.id !== playingNodeId) {
+          stopVideo();
+        }
+
+        // ขยาย selection ให้รวมทั้ง group
+        const groupIds = hitGroupIds;
+
+        if (shiftKey) {
+          // Shift+click = toggle group selection
+          const currentIds = new Set(getSelectedIds());
+          const allInGroup = groupIds.every((id) => currentIds.has(id));
+          if (allInGroup) {
+            groupIds.forEach((id) => currentIds.delete(id));
+          } else {
+            groupIds.forEach((id) => currentIds.add(id));
+          }
+          useSelectionStore.getState().selectMultiple(Array.from(currentIds));
+        } else if (!selectedIds.has(hitNode.id)) {
+          useSelectionStore.getState().selectMultiple(groupIds);
+        }
+
+        // node ถูกล็อค → เลือกได้แต่ไม่ให้ลาก
+        if (hitNode.locked) return;
+
+        // เริ่มลาก
+        initDrag(
+          worldPos,
+          useSelectionStore.getState().getSelectedIds(),
+          doc.nodes,
+        );
+      } else {
+        // คลิกที่ว่าง → marquee selection
+        if (!shiftKey) {
+          useSelectionStore.getState().clearSelection();
+        }
+        useVideoPlayStore.getState().stopVideo();
+        isMarqueeRef.current = true;
+        marqueeStartRef.current = worldPos;
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // MOUSE MOVE
+    // ─────────────────────────────────────────────
+
+    const handleMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+
+      // Panning
+      if (useViewStore.getState().isPanning && dragStartRef.current) {
+        const dx = pointer.x - dragStartRef.current.x;
+        const dy = pointer.y - dragStartRef.current.y;
+        useViewStore.getState().pan(dx, dy);
+        dragStartRef.current = { x: pointer.x, y: pointer.y };
+        return;
+      }
+
+      const worldPos = useViewStore
+        .getState()
+        .screenToWorld(pointer.x, pointer.y);
+      processDragMove(worldPos, true);
+      processMarquee(worldPos);
+    };
+
+    // ─────────────────────────────────────────────
+    // MOUSE UP
+    // ─────────────────────────────────────────────
+
+    const handleMouseUp = () => {
+      const wasDragging = isDraggingRef.current;
+
+      if (useViewStore.getState().isPanning) {
+        useViewStore.getState().setIsPanning(false);
+      }
+
+      if (wasDragging) {
+        commitDragHistory();
+      }
+
+      resetAllState();
+    };
+
+    // ─────────────────────────────────────────────
+    // TOUCH START
+    // ─────────────────────────────────────────────
+
     const handleTouchStart = (e: Konva.KonvaEventObject<TouchEvent>) => {
-      // ป้องกัน default behaviors เช่น scroll
       e.evt.preventDefault();
 
       const touch = e.evt.touches[0];
@@ -567,39 +818,20 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const { screenToWorld, viewport } = useViewStore.getState();
       const worldPos = screenToWorld(pointer.x, pointer.y);
 
-      // ปิด context menu เมื่อ touch ใหม่
       useContextMenuStore.getState().close();
 
-      // ===== LONG-PRESS → Context Menu (สำหรับ iPad/Tablet/Mobile) =====
+      // Long-press → Context Menu
       longPressTriggeredRef.current = false;
       const touchClientX = touch.clientX;
       const touchClientY = touch.clientY;
 
-      // เริ่ม long-press timer (500ms)
       longPressTimerRef.current = setTimeout(() => {
         longPressTriggeredRef.current = true;
-        isDraggingRef.current = false; // ยกเลิก drag
+        isDraggingRef.current = false;
+        openContextMenu(worldPos, touchClientX, touchClientY);
+      }, LONG_PRESS_MS);
 
-        const { doc: docNow } = useDocStore.getState();
-        if (!docNow) return;
-
-        const hitNode = findTopNodeAt(docNow.nodes, worldPos.x, worldPos.y);
-        if (hitNode) {
-          const { selectedIds, selectMultiple } = useSelectionStore.getState();
-          if (!selectedIds.has(hitNode.id)) {
-            const groupIds = expandGroupIds(hitNode.id, docNow.nodes);
-            selectMultiple(groupIds);
-          }
-        }
-
-        useContextMenuStore.getState().open(
-          touchClientX,
-          touchClientY,
-          hitNode?.id ?? null,
-        );
-      }, 500);
-
-      // Two-finger touch = pan
+      // Two-finger → pan
       if (e.evt.touches.length >= 2) {
         if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
         useViewStore.getState().setIsPanning(true);
@@ -607,89 +839,73 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         return;
       }
 
-      // Pan tool behavior
+      // Pan tool
       if (activeTool === "pan") {
         useViewStore.getState().setIsPanning(true);
         dragStartRef.current = { x: pointer.x, y: pointer.y };
         return;
       }
 
-      // Select tool behavior (same as mouse)
+      // Select tool
       if (activeTool === "select") {
-        const { doc } = useDocStore.getState();
-        if (!doc) return;
-
-        const { selectedIds, select, getSelectedIds } =
-          useSelectionStore.getState();
-
-        const currentSelectedIds = getSelectedIds();
-        const selectedNodes = doc.nodes.filter((n) =>
-          currentSelectedIds.includes(n.id),
-        );
-
-        if (selectedNodes.length > 0) {
-          const selectionBounds = getMultiSelectionBounds(selectedNodes);
-          if (selectionBounds) {
-            const handlePadding = 40 / viewport.zoom; // Larger padding for touch
-            const expandedBounds = {
-              x: selectionBounds.x - handlePadding,
-              y: selectionBounds.y - handlePadding,
-              width: selectionBounds.width + handlePadding * 2,
-              height: selectionBounds.height + handlePadding * 2,
-            };
-
-            if (boundsContainsPoint(expandedBounds, worldPos.x, worldPos.y)) {
-              // ถ้า nodes ที่เลือกทั้งหมดถูกล็อค → ไม่ให้ลาก (touch)
-              const allLockedTouch = selectedNodes.every((n) => n.locked);
-              if (allLockedTouch) {
-                return;
-              }
-
-              isDraggingRef.current = true;
-              dragStartRef.current = worldPos;
-              accDeltaRef.current = { x: 0, y: 0 };
-              originalPositionsRef.current.clear();
-              const allTrackIds = expandAllGroupIds(currentSelectedIds, doc.nodes);
-              if (allTrackIds.length > currentSelectedIds.length) {
-                useSelectionStore.getState().selectMultiple(allTrackIds);
-              }
-              doc.nodes.filter((n) => allTrackIds.includes(n.id)).forEach((n) => {
-                originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
-              });
-              return;
-            }
-          }
-        }
-
-        const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
-
-        if (hitNode) {
-          // ขยายให้รวมทั้ง group
-          const groupIds = expandGroupIds(hitNode.id, doc.nodes);
-          if (!selectedIds.has(hitNode.id)) {
-            useSelectionStore.getState().selectMultiple(groupIds);
-          }
-
-          // ถ้า node ถูกล็อค → เลือกได้แต่ไม่ให้ลาก (touch)
-          if (hitNode.locked) {
-            return;
-          }
-
-          isDraggingRef.current = true;
-          dragStartRef.current = worldPos;
-          accDeltaRef.current = { x: 0, y: 0 };
-          originalPositionsRef.current.clear();
-          const currentSelectedIds = useSelectionStore.getState().getSelectedIds();
-          const allTrackIds = expandAllGroupIds(currentSelectedIds, doc.nodes);
-          const nodesToTrack = doc.nodes.filter((n) => allTrackIds.includes(n.id));
-          nodesToTrack.forEach((n) => {
-            originalPositionsRef.current.set(n.id, { x: n.x, y: n.y });
-          });
-        } else {
-          useSelectionStore.getState().clearSelection();
-        }
+        handleTouchSelectDown(worldPos, viewport);
       }
     };
+
+    /** Touch select tool: down logic (ไม่มี shift/alt) */
+    function handleTouchSelectDown(worldPos: Point, viewport: any): void {
+      const { doc } = useDocStore.getState();
+      if (!doc) return;
+
+      const { selectedIds, getSelectedIds } = useSelectionStore.getState();
+      const currentSelectedIds = getSelectedIds();
+      const selectedNodes = doc.nodes.filter((n: any) =>
+        currentSelectedIds.includes(n.id),
+      );
+
+      // หา node ที่ touch โดนก่อน เพื่อให้เปลี่ยน selection ได้แม้อยู่ใน bounds เดิม
+      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
+      const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, doc.nodes) : [];
+      const hitOnUnselectedNode =
+        !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
+
+      // ตรวจสอบว่า touch อยู่ใน selection bounds (padding ใหญ่กว่า mouse)
+      const handlePadding = 40 / viewport.zoom;
+      if (
+        !hitOnUnselectedNode &&
+        tryDragExistingSelection(
+          worldPos,
+          selectedNodes,
+          currentSelectedIds,
+          doc,
+          handlePadding,
+          false,
+        )
+      ) {
+        return;
+      }
+
+      if (hitNode) {
+        const groupIds = hitGroupIds;
+        if (!selectedIds.has(hitNode.id)) {
+          useSelectionStore.getState().selectMultiple(groupIds);
+        }
+
+        if (hitNode.locked) return;
+
+        initDrag(
+          worldPos,
+          useSelectionStore.getState().getSelectedIds(),
+          doc.nodes,
+        );
+      } else {
+        useSelectionStore.getState().clearSelection();
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // TOUCH MOVE
+    // ─────────────────────────────────────────────
 
     const handleTouchMove = (e: Konva.KonvaEventObject<TouchEvent>) => {
       e.evt.preventDefault();
@@ -700,26 +916,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         longPressTimerRef.current = null;
       }
 
-      // ถ้า long-press แล้ว → ไม่ทำอะไร (context menu จะแสดงอยู่)
       if (longPressTriggeredRef.current) return;
 
       const pointer = stage.getPointerPosition();
       if (!pointer) return;
 
-      // Two-finger pan
-      if (
-        e.evt.touches.length >= 2 &&
-        useViewStore.getState().isPanning &&
-        dragStartRef.current
-      ) {
-        const dx = pointer.x - dragStartRef.current.x;
-        const dy = pointer.y - dragStartRef.current.y;
-        useViewStore.getState().pan(dx, dy);
-        dragStartRef.current = { x: pointer.x, y: pointer.y };
-        return;
-      }
-
-      // Single touch - same as mouse move
+      // Panning (single-touch pan หรือหลัง two-finger start)
       if (useViewStore.getState().isPanning && dragStartRef.current) {
         const dx = pointer.x - dragStartRef.current.x;
         const dy = pointer.y - dragStartRef.current.y;
@@ -728,111 +930,34 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         return;
       }
 
-      const { screenToWorld } = useViewStore.getState();
-      const worldPos = screenToWorld(pointer.x, pointer.y);
-
-      if (isDraggingRef.current && dragStartRef.current) {
-        // สะสม raw delta (เหมือน mouse)
-        const frameDx = worldPos.x - dragStartRef.current.x;
-        const frameDy = worldPos.y - dragStartRef.current.y;
-        accDeltaRef.current.x += frameDx;
-        accDeltaRef.current.y += frameDy;
-        dragStartRef.current = worldPos;
-
-        let dx = accDeltaRef.current.x;
-        let dy = accDeltaRef.current.y;
-
-        const { getSelectedIds } = useSelectionStore.getState();
-        const selectedIds = getSelectedIds();
-
-        if (selectedIds.length > 0) {
-          const { doc, updateNodes } = useDocStore.getState();
-          if (!doc) return;
-
-          // สร้าง virtual nodes ที่ original + accumulated delta
-          const virtualNodes = selectedIds
-            .map((id: string) => {
-              const orig = originalPositionsRef.current.get(id);
-              const node = doc.nodes.find((n) => n.id === id);
-              if (!orig || !node) return null;
-              return { ...node, x: orig.x + dx, y: orig.y + dy };
-            })
-            .filter(Boolean) as typeof doc.nodes;
-
-          if (virtualNodes.length === 0) return;
-
-          // Clamp ขอบ canvas
-          const groupBounds = getMultiSelectionBounds(virtualNodes);
-          if (!groupBounds) return;
-
-          if (groupBounds.x < 0) dx -= groupBounds.x;
-          if (groupBounds.x + groupBounds.width > doc.width)
-            dx -= groupBounds.x + groupBounds.width - doc.width;
-          if (groupBounds.y < 0) dy -= groupBounds.y;
-          if (groupBounds.y + groupBounds.height > doc.height)
-            dy -= groupBounds.y + groupBounds.height - doc.height;
-
-          // Snap
-          const clampedVirtualNodes = selectedIds
-            .map((id: string) => {
-              const orig = originalPositionsRef.current.get(id);
-              const node = doc.nodes.find((n) => n.id === id);
-              if (!orig || !node) return null;
-              return { ...node, x: orig.x + dx, y: orig.y + dy };
-            })
-            .filter(Boolean) as typeof doc.nodes;
-
-          const snapResult = snapNodes(
-            clampedVirtualNodes,
-            doc.nodes,
-            0,
-            0,
-            doc.width,
-            doc.height,
-          );
-
-          const finalDx = dx + snapResult.dx;
-          const finalDy = dy + snapResult.dy;
-
-          useSnapGuidesStore.getState().setGuides(snapResult.guides);
-
-          // ตำแหน่ง = original + finalDelta
-          const updates = selectedIds.map((id: string) => {
-            const orig = originalPositionsRef.current.get(id);
-            if (!orig) return { id, changes: {} };
-            return {
-              id,
-              changes: {
-                x: orig.x + finalDx,
-                y: orig.y + finalDy,
-              },
-            };
-          });
-
-          updateNodes(updates);
-        }
-      }
+      const worldPos = useViewStore
+        .getState()
+        .screenToWorld(pointer.x, pointer.y);
+      processDragMove(worldPos, false);
     };
 
+    // ─────────────────────────────────────────────
+    // TOUCH END
+    // ─────────────────────────────────────────────
+
     const handleTouchEnd = () => {
-      // ยกเลิก long-press timer
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
       }
 
-      // ถ้า long-press ถูก trigger แล้ว → ไม่ต้อง mouse up
       if (longPressTriggeredRef.current) {
         longPressTriggeredRef.current = false;
         return;
       }
 
-      handleMouseUp(); // ใช้ logic เดียวกับ mouse up
+      handleMouseUp();
     };
 
-    // ===============================================
-    // PINCH TO ZOOM - สำหรับ Mobile
-    // ===============================================
+    // ─────────────────────────────────────────────
+    // PINCH TO ZOOM
+    // ─────────────────────────────────────────────
+
     let lastPinchDist = 0;
 
     const handlePinch = (e: Konva.KonvaEventObject<TouchEvent>) => {
@@ -862,23 +987,20 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       lastPinchDist = dist;
     };
 
-    // ===============================================
-    // PREVENT BROWSER CONTEXT MENU
-    // ===============================================
+    // ─────────────────────────────────────────────
+    // Register Event Listeners
+    // ─────────────────────────────────────────────
+
     const container = stage.container();
     const preventContextMenu = (e: Event) => e.preventDefault();
     container.addEventListener("contextmenu", preventContextMenu);
 
-    // ===============================================
-    // REGISTER EVENT LISTENERS
-    // ===============================================
     stage.on("wheel", handleWheel);
     stage.on("mousedown", handleMouseDown);
     stage.on("mousemove", handleMouseMove);
     stage.on("mouseup", handleMouseUp);
     stage.on("mouseleave", handleMouseUp);
 
-    // Touch events
     stage.on("touchstart", handleTouchStart);
     stage.on("touchmove", (e) => {
       if (e.evt.touches.length === 2) {

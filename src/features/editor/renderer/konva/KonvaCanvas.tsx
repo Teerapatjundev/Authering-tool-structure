@@ -23,9 +23,11 @@ import { Stage, Layer, Rect, Group } from "react-konva";
 import Konva from "konva";
 import { useViewStore } from "../../stores/viewStore";
 import { useDocStore } from "../../stores/docStore";
+import { useToolStore } from "../../stores/toolStore";
 import { RenderNodes } from "./RenderNodes";
 import { GuidesLayer } from "./GuidesLayer";
 import { MarqueeLayer } from "./MarqueeLayer";
+import { DragPreviewLayer } from "./DragPreviewLayer";
 import { EventBridge } from "./EventBridge";
 import { SelectionController } from "./SelectionController";
 
@@ -36,9 +38,17 @@ interface KonvaCanvasProps {
 
 export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { viewport } = useViewStore();
+  const { viewport, isPanning } = useViewStore();
   const { doc } = useDocStore();
+  const activeTool = useToolStore((s) => s.activeTool);
   const nodes = doc?.nodes || [];
+
+  const cursorStyle =
+    activeTool === "pan"
+      ? isPanning
+        ? "grabbing"
+        : "grab"
+      : "default";
 
   // อัพเดท canvas size
   useEffect(() => {
@@ -55,7 +65,7 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
   }
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-gray-200">
+    <div className="relative w-full h-full overflow-hidden bg-gray-200" style={{ cursor: cursorStyle }}>
       {/* Canvas container */}
       <Stage
         ref={stageRef}
@@ -98,6 +108,7 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
           <SelectionController stageRef={stageRef} />
           <GuidesLayer />
           <MarqueeLayer />
+          <DragPreviewLayer />
         </Layer>
       </Stage>
 

@@ -28,7 +28,7 @@ const SPACING_LINE_WIDTH = 1;
 const ARROW_SIZE = 4;
 
 export function GuidesLayer() {
-  const { guides, spacingGuides } = useSnapGuidesStore();
+  const { guides, spacingGuides, sizeGuides } = useSnapGuidesStore();
 
   return (
     <>
@@ -212,6 +212,93 @@ export function GuidesLayer() {
           })}
         </Group>
       ))}
+
+      {/* === Size Snap Guides (Canva-style dimension match indicators) === */}
+      {sizeGuides.map((sg, i) => {
+        const ref = sg.refNode;
+        const TICK = 5;
+        const OFFSET = 14;
+
+        if (sg.axis === "width") {
+          // แสดง dimension bar แนวนอนใต้ reference node
+          const left = ref.x - ref.width / 2;
+          const right = ref.x + ref.width / 2;
+          const barY = ref.y + ref.height / 2 + OFFSET;
+          const midX = ref.x;
+
+          return (
+            <Group key={`size-w-${i}`}>
+              {/* เส้นวัดระยะแนวนอน */}
+              <Line
+                points={[left, barY, right, barY]}
+                stroke={GUIDE_COLOR}
+                strokeWidth={GUIDE_WIDTH}
+              />
+              {/* tick ซ้าย */}
+              <Line
+                points={[left, barY - TICK, left, barY + TICK]}
+                stroke={GUIDE_COLOR}
+                strokeWidth={GUIDE_WIDTH}
+              />
+              {/* tick ขวา */}
+              <Line
+                points={[right, barY - TICK, right, barY + TICK]}
+                stroke={GUIDE_COLOR}
+                strokeWidth={GUIDE_WIDTH}
+              />
+              {/* ค่า width */}
+              <Text
+                text={Math.round(sg.value).toString()}
+                x={midX - 16}
+                y={barY + 4}
+                fontSize={11}
+                fill={GUIDE_COLOR}
+                fontStyle="bold"
+                align="center"
+                width={32}
+              />
+            </Group>
+          );
+        } else {
+          // แสดง dimension bar แนวตั้งข้าง reference node
+          const top = ref.y - ref.height / 2;
+          const bottom = ref.y + ref.height / 2;
+          const barX = ref.x + ref.width / 2 + OFFSET;
+          const midY = ref.y;
+
+          return (
+            <Group key={`size-h-${i}`}>
+              {/* เส้นวัดระยะแนวตั้ง */}
+              <Line
+                points={[barX, top, barX, bottom]}
+                stroke={GUIDE_COLOR}
+                strokeWidth={GUIDE_WIDTH}
+              />
+              {/* tick บน */}
+              <Line
+                points={[barX - TICK, top, barX + TICK, top]}
+                stroke={GUIDE_COLOR}
+                strokeWidth={GUIDE_WIDTH}
+              />
+              {/* tick ล่าง */}
+              <Line
+                points={[barX - TICK, bottom, barX + TICK, bottom]}
+                stroke={GUIDE_COLOR}
+                strokeWidth={GUIDE_WIDTH}
+              />
+              {/* ค่า height */}
+              <Text
+                text={Math.round(sg.value).toString()}
+                x={barX + 4}
+                y={midY - 6}
+                fontSize={11}
+                fill={GUIDE_COLOR}
+                fontStyle="bold"
+              />
+            </Group>
+          );
+        }
+      })}
     </>
   );
 }
