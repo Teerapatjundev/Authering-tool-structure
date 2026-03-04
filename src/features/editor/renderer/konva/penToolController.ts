@@ -19,7 +19,12 @@ import { useToolStore } from "../../stores/toolStore";
 import { useHistoryStore } from "../../core/history/historyStore";
 import { DeleteOp, InsertOp } from "../../core/history/ops";
 import { generateNodeId } from "@/shared/utils/id";
-import { Node as EditorNode, PathNode } from "../../core/doc/types";
+import {
+  Node as EditorNode,
+  PathNode,
+  Document as EditorDocument,
+  Page,
+} from "../../core/doc/types";
 
 /** จุดพิกัดใน world space */
 export interface Point {
@@ -62,6 +67,10 @@ function clampPointToDoc(
     x: Math.max(0, Math.min(doc.width, point.x)),
     y: Math.max(0, Math.min(doc.height, point.y)),
   };
+}
+
+function getActivePage(doc: EditorDocument): Page | null {
+  return doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0] ?? null;
 }
 
 /**
@@ -217,8 +226,10 @@ export function beginFreehandDrawing(
 ): void {
   const { doc } = useDocStore.getState();
   if (!doc) return;
+  const activePage = getActivePage(doc);
+  if (!activePage) return;
 
-  const start = clampPointToDoc(worldPos, doc);
+  const start = clampPointToDoc(worldPos, activePage);
   const style = getFreehandStyle(tool);
   const geometry = buildPathGeometry([start], style.strokeWidth);
   const pathId = generateNodeId();
@@ -260,13 +271,15 @@ export function appendFreehandPoint(worldPos: Point, refs: FreehandRefs): void {
   if (!refs.isFreehandDrawingRef.current || !refs.currentPathIdRef.current) return;
   const { doc } = useDocStore.getState();
   if (!doc) return;
+  const activePage = getActivePage(doc);
+  if (!activePage) return;
 
-  const pathNode = doc.nodes.find(
+  const pathNode = activePage.nodes.find(
     (n) => n.id === refs.currentPathIdRef.current,
   ) as PathNode | undefined;
   if (!pathNode) return;
 
-  const rawPoint = clampPointToDoc(worldPos, doc);
+  const rawPoint = clampPointToDoc(worldPos, activePage);
   const points = refs.currentPathPointsRef.current;
   const lastPoint = points[points.length - 1];
   const next = lastPoint
@@ -308,7 +321,8 @@ export function endFreehandDrawing(refs: FreehandRefs): void {
     const pathId = refs.currentPathIdRef.current;
     if (pathId) {
       const { doc } = useDocStore.getState();
-      const pathNode = doc?.nodes.find((n) => n.id === pathId) as
+      const activePage = doc ? getActivePage(doc) : null;
+      const pathNode = activePage?.nodes.find((n) => n.id === pathId) as
         | PathNode
         | undefined;
       if (pathNode) {
@@ -337,9 +351,11 @@ export function endFreehandDrawing(refs: FreehandRefs): void {
 export function eraseAtPoint(worldPos: Point, refs: FreehandRefs): void {
   const { doc, removeNodes } = useDocStore.getState();
   if (!doc) return;
+  const activePage = getActivePage(doc);
+  if (!activePage) return;
 
-  const clamped = clampPointToDoc(worldPos, doc);
-  const hitPaths = doc.nodes.filter(
+  const clamped = clampPointToDoc(worldPos, activePage);
+  const hitPaths = activePage.nodes.filter(
     (n): n is PathNode =>
       n.type === "path" &&
       n.visible &&

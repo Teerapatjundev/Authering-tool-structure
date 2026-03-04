@@ -313,10 +313,11 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const prevKeyRef = useRef("");
   const sizeSnapResultRef = useRef<SizeSnapResult | null>(null);
 
-  const selectedNodes = doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
-  const selectedNodeMap = new Map(selectedNodes.map((n) => [n.id, n]));
   const selectedNodes =
     activePage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
+  const selectedNodeMap = new Map<string, Node>(
+    selectedNodes.map((n) => [n.id, n]),
+  );
   const bounds = getMultiSelectionBoundsWithRotation(selectedNodes);
   const isMulti = selectedNodes.length > 1;
   const isEditingText = editingNodeId !== null;
@@ -622,9 +623,6 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         positions.forEach((p, i) => {
           let { x: fx, y: fy, width: fw, height: fh } = p;
           const selectedNode = selectedNodeMap.get(p.id);
-          if (doc) {
-            fw = Math.min(fw, doc.width);
-            fh = Math.min(fh, doc.height);
           if (activePage) {
             fw = Math.min(fw, activePage.width);
             fh = Math.min(fh, activePage.height);
@@ -633,6 +631,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
             fx = Math.max(hw, Math.min(activePage.width - hw, fx));
             fy = Math.max(hh, Math.min(activePage.height - hh, fy));
           }
+
           setKonvaShape(
             stage,
             p.id,
@@ -731,10 +730,13 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         // Reset proxy rect with fresh bounds
         pr.scaleX(1);
         pr.scaleY(1);
+        const currentDoc = useDocStore.getState().doc;
+        const currentPage =
+          currentDoc?.pages.find((p) => p.id === currentDoc.activePageId) ??
+          currentDoc?.pages[0] ??
+          null;
         const freshNodes =
-          useDocStore
-            .getState()
-            .doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
+          currentPage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
         const newBounds = getGroupBoundsInRotatedFrame(
           freshNodes,
           groupRotRef.current,
@@ -839,8 +841,8 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
               : Math.abs(oldBox.width - newBox.width) < 1 &&
                 Math.abs(oldBox.height - newBox.height) < 1;
             if (isRot) return newBox;
-            if (!doc) return newBox;
-            const db = docScreenBounds(doc);
+            if (!activePage) return newBox;
+            const db = docScreenBounds(activePage);
             const c = clampEdges(newBox, db);
             return c.width < 10 || c.height < 10 ? oldBox : { ...newBox, ...c };
           }}
@@ -966,7 +968,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           }
         }
 
-        const db = docScreenBounds(doc);
+        const db = docScreenBounds(activePage);
         if (!isImage) {
           const c = clampEdges(newBox, db);
           if (c.width < 5 || c.height < 5) return oldBox;
