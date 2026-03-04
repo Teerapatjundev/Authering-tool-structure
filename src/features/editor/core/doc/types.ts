@@ -17,6 +17,8 @@
 export type NodeType =
   | "rect"
   | "ellipse"
+  | "triangle"
+  | "pentagon"
   | "text"
   | "image"
   | "video"
@@ -95,6 +97,22 @@ export interface EllipseNode extends BaseNode {
   strokeWidth?: number;
 }
 
+// สามเหลี่ยม
+export interface TriangleNode extends BaseNode {
+  type: "triangle";
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+}
+
+// ห้าเหลี่ยม
+export interface PentagonNode extends BaseNode {
+  type: "pentagon";
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+}
+
 // ข้อความ
 export interface TextNode extends BaseNode {
   type: "text";
@@ -132,6 +150,8 @@ export interface PathNode extends BaseNode {
 export type Node =
   | RectNode
   | EllipseNode
+  | TriangleNode
+  | PentagonNode
   | TextNode
   | ImageNode
   | VideoNode

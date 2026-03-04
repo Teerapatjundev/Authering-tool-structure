@@ -70,6 +70,10 @@ const OVERFLOW_PAD = 100;
 const ZOOM_SCALE_BY = 1.05;
 /** ระยะเวลา long-press เพื่อเปิด context menu (ms) */
 const LONG_PRESS_MS = 500;
+const PEN_CURSOR =
+  'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27%3E%3Cg transform=%27rotate(35 12 12)%27%3E%3Crect x=%2710%27 y=%273%27 width=%274%27 height=%2713%27 rx=%271.5%27 fill=%27%2322252b%27/%3E%3Cpolygon points=%2710,16 14,16 12,21%27 fill=%27%23111727%27/%3E%3Crect x=%2710%27 y=%271%27 width=%274%27 height=%272%27 rx=%271%27 fill=%27%23a1a1aa%27/%3E%3C/g%3E%3C/svg%3E") 7 19, crosshair';
+const HIGHLIGHTER_CURSOR =
+  'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27%3E%3Cg transform=%27rotate(35 12 12)%27%3E%3Crect x=%279%27 y=%272%27 width=%276%27 height=%2712%27 rx=%271.5%27 fill=%27%23facc15%27/%3E%3Crect x=%279%27 y=%2714%27 width=%276%27 height=%275%27 rx=%271.5%27 fill=%27%23ca8a04%27/%3E%3Crect x=%279%27 y=%2719%27 width=%276%27 height=%272%27 rx=%271%27 fill=%27%23111727%27/%3E%3C/g%3E%3C/svg%3E") 7 19, crosshair';
 const ERASER_CURSOR =
   'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23ffffff%27 stroke=%27%23111827%27 stroke-width=%271.5%27 d=%27M7 17 17.5 6.5a2.12 2.12 0 0 1 3 3L10 20H7v-3Z%27/%3E%3Cpath fill=%27%23f97316%27 d=%27M6 20h6v2H6z%27/%3E%3C/svg%3E") 4 20, crosshair';
 
@@ -337,8 +341,10 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
     if (activeTool === "eraser") {
       container.style.cursor = ERASER_CURSOR;
-    } else if (activeTool === "pen" || activeTool === "highlighter") {
-      container.style.cursor = "crosshair";
+    } else if (activeTool === "pen") {
+      container.style.cursor = PEN_CURSOR;
+    } else if (activeTool === "highlighter") {
+      container.style.cursor = HIGHLIGHTER_CURSOR;
     } else if (activeTool === "pan") {
       container.style.cursor = "grab";
     } else {

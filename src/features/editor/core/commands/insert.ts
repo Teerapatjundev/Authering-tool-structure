@@ -10,11 +10,16 @@
  * - insertTextLink: เพิ่มลิงก์ข้อความ
  * - insertImage: เพิ่มรูปภาพ
  * - insertVideo: เพิ่มวิดีโอ
+ * - insertTriangle: เพิ่มสามเหลี่ยม
+ * - insertPentagon: เพิ่มห้าเหลี่ยม
  */
 
 import {
+  Node,
   RectNode,
   EllipseNode,
+  TriangleNode,
+  PentagonNode,
   TextNode,
   ImageNode,
   VideoNode,
@@ -191,6 +196,62 @@ export function insertVideo(
     locked: false,
     visible: true,
     src,
+  };
+
+  commitInsert([node]);
+}
+
+/**
+ * เพิ่มสามเหลี่ยมลงใน canvas
+ */
+export function insertTriangle(
+  x: number,
+  y: number,
+  width = 140,
+  height = 120,
+): void {
+  const node: TriangleNode = {
+    id: generateNodeId(),
+    type: "triangle",
+    x,
+    y,
+    width,
+    height,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    fill: "#3b82f6",
+    stroke: "#1e40af",
+    strokeWidth: 2,
+  };
+
+  commitInsert([node]);
+}
+
+/**
+ * เพิ่มห้าเหลี่ยมลงใน canvas
+ */
+export function insertPentagon(
+  x: number,
+  y: number,
+  width = 140,
+  height = 140,
+): void {
+  const node: PentagonNode = {
+    id: generateNodeId(),
+    type: "pentagon",
+    x,
+    y,
+    width,
+    height,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    fill: "#8b5cf6",
+    stroke: "#6d28d9",
+    strokeWidth: 2,
   };
 
   commitInsert([node]);
@@ -510,7 +571,7 @@ export function insertChoiceOptions(
 
 /** Commit insert operation ไปยัง history */
 function commitInsert(
-  nodes: (RectNode | EllipseNode | TextNode | ImageNode | VideoNode)[],
+  nodes: Node[],
 ): void {
   const op: InsertOp = {
     type: "insert",

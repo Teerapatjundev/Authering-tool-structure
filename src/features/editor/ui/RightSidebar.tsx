@@ -202,26 +202,48 @@ export function RightSidebar() {
 
   // Fill color — rect, ellipse, text
   const hasFillNodes = selectedNodes.some(
-    (n) => n.type === "rect" || n.type === "ellipse" || n.type === "text",
+    (n) =>
+      n.type === "rect" ||
+      n.type === "ellipse" ||
+      n.type === "triangle" ||
+      n.type === "pentagon" ||
+      n.type === "text",
   );
   const commonFill = getCommonFiltered(
     selectedNodes,
-    (n) => n.type === "rect" || n.type === "ellipse" || n.type === "text",
+    (n) =>
+      n.type === "rect" ||
+      n.type === "ellipse" ||
+      n.type === "triangle" ||
+      n.type === "pentagon" ||
+      n.type === "text",
     (n) => (n as { fill?: string }).fill || "#000000",
   );
 
   // Stroke — rect, ellipse
   const hasStrokeNodes = selectedNodes.some(
-    (n) => n.type === "rect" || n.type === "ellipse",
+    (n) =>
+      n.type === "rect" ||
+      n.type === "ellipse" ||
+      n.type === "triangle" ||
+      n.type === "pentagon",
   );
   const commonStroke = getCommonFiltered(
     selectedNodes,
-    (n) => n.type === "rect" || n.type === "ellipse",
+    (n) =>
+      n.type === "rect" ||
+      n.type === "ellipse" ||
+      n.type === "triangle" ||
+      n.type === "pentagon",
     (n) => (n as { stroke?: string }).stroke || "#000000",
   );
   const commonStrokeWidth = getCommonFiltered(
     selectedNodes,
-    (n) => n.type === "rect" || n.type === "ellipse",
+    (n) =>
+      n.type === "rect" ||
+      n.type === "ellipse" ||
+      n.type === "triangle" ||
+      n.type === "pentagon",
     (n) => (n as { strokeWidth?: number }).strokeWidth || 0,
   );
 
@@ -333,7 +355,7 @@ export function RightSidebar() {
                 value={mixedToStr(commonFill, "#000000")}
                 mixed={isMixed(commonFill)}
                 onChange={(v) =>
-                  apply({ fill: v }, ["rect", "ellipse", "text"])
+                  apply({ fill: v }, ["rect", "ellipse", "triangle", "pentagon", "text"])
                 }
               />
             </PropertySection>
@@ -348,7 +370,7 @@ export function RightSidebar() {
               <ColorInput
                 value={mixedToStr(commonStroke, "#000000")}
                 mixed={isMixed(commonStroke)}
-                onChange={(v) => apply({ stroke: v }, ["rect", "ellipse"])}
+                onChange={(v) => apply({ stroke: v }, ["rect", "ellipse", "triangle", "pentagon"])}
               />
               <div className="space-y-2">
                 <Slider

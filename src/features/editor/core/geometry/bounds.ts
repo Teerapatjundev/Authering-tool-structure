@@ -14,12 +14,74 @@ import { Node, Bounds } from "../doc/types";
 
 export type { Bounds };
 
+function getRegularPolygonVertices(
+  sides: number,
+  width: number,
+  height: number,
+): Array<{ x: number; y: number }> {
+  // base polygon with radius=50 in local space (center at 0,0)
+  const base: Array<{ x: number; y: number }> = [];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (let i = 0; i < sides; i++) {
+    const angle = -Math.PI / 2 + (i * Math.PI * 2) / sides;
+    const x = Math.cos(angle) * 50;
+    const y = Math.sin(angle) * 50;
+    base.push({ x, y });
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  }
+
+  const baseW = Math.max(1, maxX - minX);
+  const baseH = Math.max(1, maxY - minY);
+  const sx = width / baseW;
+  const sy = height / baseH;
+
+  return base.map((p) => ({ x: p.x * sx, y: p.y * sy }));
+}
+
+function getPolygonBounds(node: Node, sides: 3 | 5): Bounds {
+  const points = getRegularPolygonVertices(sides, node.width, node.height);
+  const rad = ((node.rotation || 0) * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const p of points) {
+    const wx = p.x * cos - p.y * sin + node.x;
+    const wy = p.x * sin + p.y * cos + node.y;
+    minX = Math.min(minX, wx);
+    minY = Math.min(minY, wy);
+    maxX = Math.max(maxX, wx);
+    maxY = Math.max(maxY, wy);
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
 /**
  * หากรอบพื้นที่ของ node (แปลงจาก center-based เป็น top-left)
  * @param node - Node ที่ต้องการหากรอบ
  * @returns Bounds ของ node
  */
 export function getNodeBounds(node: Node): Bounds {
+  if (node.type === "triangle") return getPolygonBounds(node, 3);
+  if (node.type === "pentagon") return getPolygonBounds(node, 5);
+
   return {
     x: node.x - node.width / 2,
     y: node.y - node.height / 2,
@@ -93,6 +155,9 @@ export function getMultiSelectionBounds(nodes: Node[]): Bounds | null {
  * @returns Bounds ที่ครอบ node ที่หมุนแล้วทั้งหมด
  */
 export function getRotatedNodeBounds(node: Node): Bounds {
+  if (node.type === "triangle") return getPolygonBounds(node, 3);
+  if (node.type === "pentagon") return getPolygonBounds(node, 5);
+
   const hw = node.width / 2;
   const hh = node.height / 2;
 

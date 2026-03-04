@@ -10,7 +10,7 @@
 
 "use client";
 
-import { Rect, Ellipse, Text, Group } from "react-konva";
+import { Rect, Ellipse, Text, Group, RegularPolygon } from "react-konva";
 import { useDragPreviewStore } from "../../stores/dragPreviewStore";
 
 // ขนาด default ของ element แต่ละประเภท (ต้องตรงกับ insert commands)
@@ -29,6 +29,18 @@ const SHAPE_DEFAULTS: Record<
     height: 120,
     fill: "#10b981",
     stroke: "#059669",
+  },
+  triangle: {
+    width: 140,
+    height: 120,
+    fill: "#3b82f6",
+    stroke: "#1e40af",
+  },
+  pentagon: {
+    width: 140,
+    height: 140,
+    fill: "#8b5cf6",
+    stroke: "#6d28d9",
   },
   text: {
     width: 200,
@@ -74,6 +86,36 @@ export function DragPreviewLayer() {
           stroke={defaults.stroke}
           strokeWidth={2}
           dash={[6, 3]}
+        />
+      )}
+
+      {elementType === "triangle" && (
+        <RegularPolygon
+          x={worldX}
+          y={worldY}
+          sides={3}
+          radius={50}
+          fill={defaults.fill}
+          stroke={defaults.stroke}
+          strokeWidth={2}
+          dash={[6, 3]}
+          scaleX={defaults.width / 100}
+          scaleY={defaults.height / 100}
+        />
+      )}
+
+      {elementType === "pentagon" && (
+        <RegularPolygon
+          x={worldX}
+          y={worldY}
+          sides={5}
+          radius={50}
+          fill={defaults.fill}
+          stroke={defaults.stroke}
+          strokeWidth={2}
+          dash={[6, 3]}
+          scaleX={defaults.width / 100}
+          scaleY={defaults.height / 100}
         />
       )}
 

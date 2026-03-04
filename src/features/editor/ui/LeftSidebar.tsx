@@ -27,10 +27,13 @@ import {
   Pen,
 } from "lucide-react";
 import { ToolPanel } from "./leftSidebar/ToolPanel";
+import { useToolStore } from "../stores/toolStore";
 
 type LeftSidebarPageId = "elements" | "page" | "practice" | "tool";
 
 export function LeftSidebar() {
+  const { setTool } = useToolStore();
+
   const pages = useMemo(
     () =>
       [
@@ -92,9 +95,10 @@ export function LeftSidebar() {
                     <button
                       type="button"
                       aria-label={p.label}
-                      onClick={() =>
-                        setOpenPageId((curr) => (curr === p.id ? null : p.id))
-                      }
+                      onClick={() => {
+                        setOpenPageId((curr) => (curr === p.id ? null : p.id));
+                        setTool("select");
+                      }}
                       className={
                         "flex items-center justify-center w-10 h-10 transition-colors " +
                         (isActive

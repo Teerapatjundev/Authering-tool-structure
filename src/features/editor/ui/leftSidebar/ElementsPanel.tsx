@@ -17,9 +17,11 @@ import { useCallback, useRef, useState } from "react";
 import {
   insertEllipse,
   insertImage,
+  insertPentagon,
   insertRect,
   insertText,
   insertTextLink,
+  insertTriangle,
   insertVideo,
 } from "../../core/commands/insert";
 import { useDocStore } from "../../stores/docStore";
@@ -45,6 +47,18 @@ const elements: ElementType[] = [
     icon: "○",
     label: "Ellipse",
     description: "Add ellipse",
+  },
+  {
+    id: "triangle",
+    icon: "△",
+    label: "Triangle",
+    description: "Add triangle",
+  },
+  {
+    id: "pentagon",
+    icon: "⬟",
+    label: "Pentagon",
+    description: "Add pentagon",
   },
   {
     id: "text",
@@ -115,6 +129,12 @@ export function ElementsPanel() {
         break;
       case "ellipse":
         insertEllipse(x, y, 120, 120);
+        break;
+      case "triangle":
+        insertTriangle(x, y, 140, 120);
+        break;
+      case "pentagon":
+        insertPentagon(x, y, 140, 140);
         break;
       case "text":
         insertText(x, y, "Enter text");
@@ -239,6 +259,12 @@ export function ElementsPanel() {
                 if (element.id === "ellipse") {
                   ghostWidth = 120;
                   ghostHeight = 120;
+                } else if (element.id === "triangle") {
+                  ghostWidth = 140;
+                  ghostHeight = 120;
+                } else if (element.id === "pentagon") {
+                  ghostWidth = 140;
+                  ghostHeight = 140;
                 } else if (element.id === "text") {
                   ghostWidth = 200;
                   ghostHeight = 50;
@@ -277,6 +303,35 @@ export function ElementsPanel() {
                       0,
                       Math.PI * 2,
                     );
+                    ctx.fill();
+                    ctx.stroke();
+                  } else if (element.id === "triangle") {
+                    ctx.fillStyle = "#3b82f6";
+                    ctx.strokeStyle = "#1e40af";
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(ghostWidth / 2, 6);
+                    ctx.lineTo(ghostWidth - 6, ghostHeight - 6);
+                    ctx.lineTo(6, ghostHeight - 6);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                  } else if (element.id === "pentagon") {
+                    ctx.fillStyle = "#8b5cf6";
+                    ctx.strokeStyle = "#6d28d9";
+                    ctx.lineWidth = 2;
+                    const cx = ghostWidth / 2;
+                    const cy = ghostHeight / 2;
+                    const r = Math.min(ghostWidth, ghostHeight) / 2 - 6;
+                    ctx.beginPath();
+                    for (let i = 0; i < 5; i++) {
+                      const angle = (-Math.PI / 2) + (i * Math.PI * 2) / 5;
+                      const px = cx + r * Math.cos(angle);
+                      const py = cy + r * Math.sin(angle);
+                      if (i === 0) ctx.moveTo(px, py);
+                      else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
                   } else if (element.id === "text") {

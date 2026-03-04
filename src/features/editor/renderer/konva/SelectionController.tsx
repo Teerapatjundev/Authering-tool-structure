@@ -1,4 +1,35 @@
-/** Selection Controller — Transform handles for single & multi-selection (Canva-style) */
+/**
+ * ===============================================
+ * SELECTION CONTROLLER - จัดการกรอบเลือกและการ Transform
+ * ===============================================
+ *
+ * หน้าที่หลัก:
+ * - ผูก Konva Transformer เข้ากับ node ที่เลือก (single / multi)
+ * - รองรับการย่อ/ขยาย/หมุน แบบ Canva-style
+ * - คำนวณ bounds สำหรับ multi-selection ที่มีการหมุนสะสมของกลุ่ม
+ * - แสดง/ซ่อน snap guides ระหว่าง resize
+ * - commit ประวัติการแก้ไข (history) สำหรับ undo/redo
+ *
+ * พฤติกรรมสำคัญ:
+ * 1) Single Selection
+ *    - ใช้ shape จริงของ node เป็นเป้าหมาย transformer
+ *    - finalize ขนาด/ตำแหน่ง/rotation กลับลง store
+ *
+ * 2) Multi Selection
+ *    - ใช้ proxy rect (กรอบเสมือน) เป็นตัว transform
+ *    - กระจายผล transform ไปยังทุก node ในกลุ่ม
+ *    - เก็บ groupRotation เพื่อให้กรอบเลือกเอียงต่อเนื่อง
+ *
+ * 3) Node-specific finalize
+ *    - path: bake geometry กลับเป็น points ใหม่
+ *    - ellipse: อัปเดตผ่าน radiusX/radiusY
+ *    - triangle/pentagon: อัปเดต scale ตาม base bounds ของ polygon
+ *    - video: ใช้ parent group เป็นตัวรับ transform
+ *
+ * หมายเหตุ:
+ * - ปิด flip ขณะ transform เพื่อกันการพลิกแกนที่ทำให้ขนาดเพี้ยน
+ * - เลี่ยง live-clamp บางกรณีที่กรอบหมุน เพื่อลดอาการติดขอบล่องหน
+ */
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -17,6 +48,7 @@ import {
 } from "../../core/geometry/bounds";
 import { snapResizeSize, SizeSnapResult } from "../../core/geometry/snap";
 import { useSnapGuidesStore } from "../../stores/snapGuidesStore";
+import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 
 /* ------------------------------------------------------------------ */
 /*  Types & Constants                                                  */
@@ -34,6 +66,8 @@ interface OrigNodeState {
   width: number;
   height: number;
   rotation: number;
+  scaleX: number;
+  scaleY: number;
 }
 
 const ROTATION_SNAPS = [0, 45, 90, 135, 180, 225, 270, 315];
@@ -211,6 +245,16 @@ function setKonvaShape(
       shape.scaleX(1);
       shape.scaleY(1);
     }
+  } else if (type === "triangle" || type === "pentagon") {
+    const base = type === "triangle" ? TRI_BASE_SIZE : PENT_BASE_SIZE;
+    shape.x(x);
+    shape.y(y);
+    shape.rotation(rot);
+    (shape as Konva.RegularPolygon).radius(50);
+    shape.offsetX(0);
+    shape.offsetY(0);
+    shape.scaleX(w / Math.max(1, base.width));
+    shape.scaleY(h / Math.max(1, base.height));
   } else if (type === "path") {
     shape.x(x);
     shape.y(y);
@@ -312,6 +356,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const groupRotRef = useRef(0);
   const prevKeyRef = useRef("");
   const sizeSnapResultRef = useRef<SizeSnapResult | null>(null);
+  const isRotatingTransformRef = useRef(false);
 
   const selectedNodes =
     activePage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
@@ -323,6 +368,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const isEditingText = editingNodeId !== null;
   const allLocked =
     selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
+  const isImage = selectedNodes[0]?.type === "image";
 
   // Sync group rotation on selection change (synchronous to avoid 1-frame flicker)
   const key = Array.from(selectedIds).sort().join(",");
@@ -377,15 +423,27 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   /* ---- Transform handlers ---- */
 
   const handleTransformStart = () => {
-    origStatesRef.current = selectedNodes.map((n) => ({
-      id: n.id,
-      type: n.type,
-      x: n.x,
-      y: n.y,
-      width: n.width,
-      height: n.height,
-      rotation: n.rotation,
-    }));
+    isRotatingTransformRef.current = trRef.current?.getActiveAnchor() === "rotater";
+
+    const stage = stageRef.current;
+    origStatesRef.current = selectedNodes.map((n) => {
+      const shape = stage?.findOne(`#shape_${n.id}`) as Konva.Node | null;
+      const target =
+        n.type === "video" && shape?.parent && shape.parent !== shape.getLayer()
+          ? shape.parent
+          : shape;
+      return {
+        id: n.id,
+        type: n.type,
+        x: n.x,
+        y: n.y,
+        width: n.width,
+        height: n.height,
+        rotation: n.rotation,
+        scaleX: target?.scaleX() ?? 1,
+        scaleY: target?.scaleY() ?? 1,
+      };
+    });
 
     if (isMulti) {
       const pr = proxyRef.current;
@@ -453,334 +511,507 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     stage.batchDraw();
   };
 
-  const handleTransformEnd = () => {
-    // Read size snap result BEFORE clearing
-    const lastSizeSnap = sizeSnapResultRef.current;
+  const hasHistoryDiff = (updates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>) =>
+    updates.some(
+      (u) =>
+        u.oldProps.x !== u.newProps.x ||
+        u.oldProps.y !== u.newProps.y ||
+        u.oldProps.width !== u.newProps.width ||
+        u.oldProps.height !== u.newProps.height ||
+        u.oldProps.rotation !== u.newProps.rotation ||
+        !samePoints(
+          (u.oldProps as { points?: number[] }).points,
+          (u.newProps as { points?: number[] }).points,
+        ),
+    );
 
-    // Clear size snap guides
+  const commitTransformHistory = (
+    updates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>,
+  ) => {
+    if (updates.length === 0 || !hasHistoryDiff(updates)) return;
+    const op: TransformOp = {
+      type: "transform",
+      timestamp: Date.now(),
+      updates,
+    };
+    const { past } = useHistoryStore.getState();
+    useHistoryStore.setState({ past: [...past, op], future: [] });
+    useDocStore.getState().autoSave();
+  };
+
+  const finalizeSingleTransform = (
+    stage: Konva.Stage,
+    lastSizeSnap: SizeSnapResult | null,
+    historyUpdates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>,
+  ) => {
+    const node = selectedNodes[0];
+    const shape = stage.findOne(`#shape_${node.id}`);
+    const orig = origStatesRef.current[0];
+    if (!shape || !orig) return;
+
+    if (node.type === "path") {
+      const pathNode = node as PathNode;
+      const fr = shape.rotation();
+      const baked = bakePathGeometry(
+        pathNode,
+        shape.x(),
+        shape.y(),
+        fr,
+        shape.scaleX(),
+        shape.scaleY(),
+      );
+
+      shape.scaleX(1);
+      shape.scaleY(1);
+      shape.x(baked.x);
+      shape.y(baked.y);
+      shape.rotation(fr);
+      shape.width(baked.width);
+      shape.height(baked.height);
+      shape.offsetX(baked.width / 2);
+      shape.offsetY(baked.height / 2);
+      (shape as Konva.Line).points(baked.points);
+
+      updateNodes([
+        {
+          id: node.id,
+          changes: {
+            x: baked.x,
+            y: baked.y,
+            width: baked.width,
+            height: baked.height,
+            rotation: fr,
+            points: baked.points,
+          } as Partial<Node>,
+        },
+      ]);
+      historyUpdates.push({
+        id: node.id,
+        oldProps: {
+          x: orig.x,
+          y: orig.y,
+          width: orig.width,
+          height: orig.height,
+          rotation: orig.rotation,
+          points: pathNode.points,
+        } as Partial<Node>,
+        newProps: {
+          x: baked.x,
+          y: baked.y,
+          width: baked.width,
+          height: baked.height,
+          rotation: fr,
+          points: baked.points,
+        } as Partial<Node>,
+      });
+      return;
+    }
+
+    const target =
+      node.type === "video" && shape.parent && shape.parent !== shape.getLayer()
+        ? shape.parent
+        : shape;
+
+    const baseScaleX = Math.max(SCALE_SNAP, Math.abs(orig.scaleX));
+    const baseScaleY = Math.max(SCALE_SNAP, Math.abs(orig.scaleY));
+    const scaleRatioX = Math.abs(target.scaleX()) / baseScaleX;
+    const scaleRatioY = Math.abs(target.scaleY()) / baseScaleY;
+
+    let fw = Math.max(5, Math.abs(orig.width * scaleRatioX));
+    let fh = Math.max(5, Math.abs(orig.height * scaleRatioY));
+
+    if (lastSizeSnap) {
+      if (lastSizeSnap.snappedWidth) fw = lastSizeSnap.width;
+      if (lastSizeSnap.snappedHeight) fh = lastSizeSnap.height;
+    }
+    let fx = target.x();
+    let fy = target.y();
+    const fr = target.rotation();
+
+    if (activePage && !isRotatingTransformRef.current) {
+      if (node.type === "image") {
+        const asp = fw / fh;
+        if (fw > activePage.width) {
+          fw = activePage.width;
+          fh = fw / asp;
+        }
+        if (fh > activePage.height) {
+          fh = activePage.height;
+          fw = fh * asp;
+        }
+      } else {
+        fw = Math.min(fw, activePage.width);
+        fh = Math.min(fh, activePage.height);
+      }
+      const { halfX, halfY } = rotatedHalfExtents(fw, fh, fr);
+      fx = Math.max(halfX, Math.min(activePage.width - halfX, fx));
+      fy = Math.max(halfY, Math.min(activePage.height - halfY, fy));
+    }
+
+    if (node.type === "video") {
+      const parent = shape.parent;
+      if (parent && parent !== shape.getLayer()) {
+        parent.x(fx);
+        parent.y(fy);
+        parent.rotation(fr);
+        parent.scaleX(1);
+        parent.scaleY(1);
+        parent.offsetX(fw / 2);
+        parent.offsetY(fh / 2);
+        shape.width(fw);
+        shape.height(fh);
+      }
+    } else if (node.type === "triangle" || node.type === "pentagon") {
+      const base = node.type === "triangle" ? TRI_BASE_SIZE : PENT_BASE_SIZE;
+      shape.x(fx);
+      shape.y(fy);
+      shape.rotation(fr);
+      (shape as Konva.RegularPolygon).radius(50);
+      shape.offsetX(0);
+      shape.offsetY(0);
+      shape.scaleX(fw / Math.max(1, base.width));
+      shape.scaleY(fh / Math.max(1, base.height));
+    } else if (node.type === "ellipse") {
+      shape.x(fx);
+      shape.y(fy);
+      shape.rotation(fr);
+      (shape as Konva.Ellipse).radiusX(fw / 2);
+      (shape as Konva.Ellipse).radiusY(fh / 2);
+      shape.scaleX(1);
+      shape.scaleY(1);
+    } else {
+      shape.x(fx);
+      shape.y(fy);
+      shape.rotation(fr);
+      shape.scaleX(1);
+      shape.scaleY(1);
+      shape.width(fw);
+      shape.height(fh);
+      if (shape.offsetX() !== 0) {
+        shape.offsetX(fw / 2);
+        shape.offsetY(fh / 2);
+      }
+    }
+
+    updateNodes([
+      {
+        id: node.id,
+        changes: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
+      },
+    ]);
+    historyUpdates.push({
+      id: node.id,
+      oldProps: {
+        x: orig.x,
+        y: orig.y,
+        width: orig.width,
+        height: orig.height,
+        rotation: orig.rotation,
+      },
+      newProps: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
+    });
+  };
+
+  const finalizeMultiTransform = (
+    stage: Konva.Stage,
+    historyUpdates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>,
+  ) => {
+    const pr = proxyRef.current;
+    if (!pr || !origBoundsRef.current) return;
+
+    const proxyRotation = pr.rotation();
+    const positions = computeMultiPositions(
+      origStatesRef.current,
+      {
+        x: origBoundsRef.current.centerX,
+        y: origBoundsRef.current.centerY,
+      },
+      groupRotRef.current,
+      pr.scaleX(),
+      pr.scaleY(),
+      proxyRotation,
+      pr.x(),
+      pr.y(),
+    );
+
+    const storeUpdates: Array<{ id: string; changes: Partial<Node> }> = [];
+    const rawScaleX = pr.scaleX();
+    const rawScaleY = pr.scaleY();
+    const isPureRotation =
+      Math.abs(rawScaleX - 1) < SCALE_SNAP &&
+      Math.abs(rawScaleY - 1) < SCALE_SNAP &&
+      Math.abs(proxyRotation - groupRotRef.current) > 0.1;
+
+    positions.forEach((p, i) => {
+      let { x: fx, y: fy, width: fw, height: fh } = p;
+      const selectedNode = selectedNodeMap.get(p.id);
+      if (activePage && !isPureRotation) {
+        fw = Math.min(fw, activePage.width);
+        fh = Math.min(fh, activePage.height);
+        const hw = fw / 2;
+        const hh = fh / 2;
+        fx = Math.max(hw, Math.min(activePage.width - hw, fx));
+        fy = Math.max(hh, Math.min(activePage.height - hh, fy));
+      }
+
+      setKonvaShape(
+        stage,
+        p.id,
+        p.type,
+        fx,
+        fy,
+        fw,
+        fh,
+        p.rotation,
+        p.origWidth,
+        p.origHeight,
+        true,
+      );
+
+      let pathPoints: number[] | undefined;
+      if (selectedNode?.type === "path") {
+        const pathNode = selectedNode as PathNode;
+        const sx = (Math.sign(rawScaleX) || 1) * (fw / Math.max(1, p.origWidth));
+        const sy = (Math.sign(rawScaleY) || 1) * (fh / Math.max(1, p.origHeight));
+        const baked = bakePathGeometry(pathNode, fx, fy, p.rotation, sx, sy);
+        fx = baked.x;
+        fy = baked.y;
+        fw = baked.width;
+        fh = baked.height;
+        pathPoints = baked.points;
+
+        const pathShape = stage.findOne(`#shape_${p.id}`) as Konva.Line | null;
+        if (pathShape) {
+          pathShape.x(fx);
+          pathShape.y(fy);
+          pathShape.rotation(p.rotation);
+          pathShape.width(fw);
+          pathShape.height(fh);
+          pathShape.offsetX(fw / 2);
+          pathShape.offsetY(fh / 2);
+          pathShape.points(pathPoints);
+          pathShape.scaleX(1);
+          pathShape.scaleY(1);
+        }
+      }
+
+      storeUpdates.push({
+        id: p.id,
+        changes: {
+          x: fx,
+          y: fy,
+          width: fw,
+          height: fh,
+          rotation: p.rotation,
+          ...(pathPoints ? { points: pathPoints } : {}),
+        },
+      });
+
+      const orig = origStatesRef.current[i];
+      historyUpdates.push({
+        id: p.id,
+        oldProps: {
+          x: orig.x,
+          y: orig.y,
+          width: orig.width,
+          height: orig.height,
+          rotation: orig.rotation,
+          ...(selectedNode?.type === "path"
+            ? { points: (selectedNode as PathNode).points }
+            : {}),
+        },
+        newProps: {
+          x: fx,
+          y: fy,
+          width: fw,
+          height: fh,
+          rotation: p.rotation,
+          ...(pathPoints ? { points: pathPoints } : {}),
+        },
+      });
+    });
+
+    if (storeUpdates.length > 0) updateNodes(storeUpdates);
+
+    groupRotRef.current = proxyRotation;
+    const gid = selectedNodes[0]?.groupId;
+    const allSameGroup = gid && selectedNodes.every((n) => n.groupId === gid);
+    if (allSameGroup) {
+      updateNodes(
+        selectedNodes.map((n) => ({
+          id: n.id,
+          changes: {
+            groupRotation: proxyRotation || undefined,
+          } as Partial<Node>,
+        })),
+      );
+    }
+
+    pr.scaleX(1);
+    pr.scaleY(1);
+    const currentDoc = useDocStore.getState().doc;
+    const currentPage =
+      currentDoc?.pages.find((p) => p.id === currentDoc.activePageId) ??
+      currentDoc?.pages[0] ??
+      null;
+    const freshNodes = currentPage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
+    const newBounds = getGroupBoundsInRotatedFrame(freshNodes, groupRotRef.current);
+    if (newBounds) {
+      pr.x(newBounds.centerX);
+      pr.y(newBounds.centerY);
+      pr.width(newBounds.width);
+      pr.height(newBounds.height);
+      pr.offsetX(newBounds.width / 2);
+      pr.offsetY(newBounds.height / 2);
+      pr.rotation(groupRotRef.current);
+    }
+  };
+
+  const multiBoundBoxFunc = (
+    oldBox: { x: number; y: number; width: number; height: number; rotation: number },
+    newBox: { x: number; y: number; width: number; height: number; rotation: number },
+  ) => {
+    const activeAnchor = trRef.current?.getActiveAnchor();
+    if (activeAnchor === "rotater") return newBox;
+    if (oldBox.width * newBox.width < 0 || oldBox.height * newBox.height < 0)
+      return oldBox;
+    if (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10)
+      return oldBox;
+
+    const p = proxyRef.current;
+    const isRot = p
+      ? Math.abs(p.scaleX() - 1) < 0.001 && Math.abs(p.scaleY() - 1) < 0.001
+      : Math.abs(oldBox.width - newBox.width) < 1 &&
+        Math.abs(oldBox.height - newBox.height) < 1;
+    if (isRot) return newBox;
+
+    const proxyRot = p?.rotation() ?? 0;
+    if (Math.abs(proxyRot % 360) > 0.01) return newBox;
+
+    if (!activePage) return newBox;
+    const db = docScreenBounds(activePage);
+    const c = clampEdges(newBox, db);
+    return c.width < 10 || c.height < 10 ? oldBox : { ...newBox, ...c };
+  };
+
+  const singleBoundBoxFunc = (
+    oldBox: { x: number; y: number; width: number; height: number; rotation: number },
+    newBox: { x: number; y: number; width: number; height: number; rotation: number },
+  ) => {
+    const activeAnchor = trRef.current?.getActiveAnchor();
+    if (activeAnchor === "rotater") {
+      sizeSnapResultRef.current = null;
+      return newBox;
+    }
+    if (oldBox.width * newBox.width < 0 || oldBox.height * newBox.height < 0)
+      return oldBox;
+    if (Math.abs(newBox.width) < 5 || Math.abs(newBox.height) < 5)
+      return oldBox;
+    if (!activePage) return newBox;
+
+    const isRot =
+      Math.abs(oldBox.width - newBox.width) < 1 &&
+      Math.abs(oldBox.height - newBox.height) < 1;
+    if (isRot) {
+      sizeSnapResultRef.current = null;
+      return newBox;
+    }
+
+    const z = viewport.zoom;
+    const worldW = Math.abs(newBox.width) / z;
+    const worldH = Math.abs(newBox.height) / z;
+    const widthChanged = Math.abs(Math.abs(newBox.width) - Math.abs(oldBox.width)) > 0.5;
+    const heightChanged = Math.abs(Math.abs(newBox.height) - Math.abs(oldBox.height)) > 0.5;
+
+    const otherNodes = activePage.nodes.filter((n) => !selectedIds.has(n.id) && n.visible);
+    const sizeSnap = snapResizeSize(worldW, worldH, selectedIds, otherNodes);
+    sizeSnapResultRef.current = sizeSnap;
+
+    if (isImage) {
+      const orig = origStatesRef.current[0];
+      const aspect = orig
+        ? orig.width / orig.height
+        : Math.abs(oldBox.width) / Math.abs(oldBox.height);
+
+      if (sizeSnap.snappedWidth && widthChanged) {
+        const snappedScreenW = sizeSnap.width * z;
+        const snappedScreenH = snappedScreenW / aspect;
+        const signW = Math.sign(newBox.width) || 1;
+        const signH = Math.sign(newBox.height) || 1;
+        const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
+        const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
+
+        if (!leftFixed) newBox.x = newBox.x + newBox.width - signW * snappedScreenW;
+        newBox.width = signW * snappedScreenW;
+
+        if (!topFixed) newBox.y = newBox.y + newBox.height - signH * snappedScreenH;
+        newBox.height = signH * snappedScreenH;
+      } else if (sizeSnap.snappedHeight && heightChanged) {
+        const snappedScreenH = sizeSnap.height * z;
+        const snappedScreenW = snappedScreenH * aspect;
+        const signW = Math.sign(newBox.width) || 1;
+        const signH = Math.sign(newBox.height) || 1;
+        const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
+        const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
+
+        if (!leftFixed) newBox.x = newBox.x + newBox.width - signW * snappedScreenW;
+        newBox.width = signW * snappedScreenW;
+
+        if (!topFixed) newBox.y = newBox.y + newBox.height - signH * snappedScreenH;
+        newBox.height = signH * snappedScreenH;
+      }
+    } else {
+      if (sizeSnap.snappedWidth && widthChanged) {
+        const snappedScreenW = sizeSnap.width * z;
+        const signW = Math.sign(newBox.width) || 1;
+        const targetW = signW * snappedScreenW;
+        const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
+        if (!leftFixed) newBox.x = newBox.x + newBox.width - targetW;
+        newBox.width = targetW;
+      }
+
+      if (sizeSnap.snappedHeight && heightChanged) {
+        const snappedScreenH = sizeSnap.height * z;
+        const signH = Math.sign(newBox.height) || 1;
+        const targetH = signH * snappedScreenH;
+        const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
+        if (!topFixed) newBox.y = newBox.y + newBox.height - targetH;
+        newBox.height = targetH;
+      }
+    }
+
+    const nodeRot = selectedNodes[0]?.rotation ?? 0;
+    if (Math.abs(nodeRot % 360) > 0.01) return newBox;
+
+    const db = docScreenBounds(activePage);
+    if (!isImage) {
+      const c = clampEdges(newBox, db);
+      if (c.width < 5 || c.height < 5) return oldBox;
+      return { ...newBox, ...c };
+    }
+    return newBox;
+  };
+
+  const handleTransformEnd = () => {
+    const lastSizeSnap = sizeSnapResultRef.current;
     useSnapGuidesStore.getState().setSizeGuides([]);
     sizeSnapResultRef.current = null;
 
     const stage = stageRef.current;
     if (!stage) return;
 
-    const historyUpdates: Array<{
-      id: string;
-      oldProps: Partial<Node>;
-      newProps: Partial<Node>;
-    }> = [];
+    const historyUpdates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }> = [];
 
     if (!isMulti && selectedNodes.length === 1) {
-      /* --- Single selection --- */
-      const node = selectedNodes[0];
-      const shape = stage.findOne(`#shape_${node.id}`);
-      const orig = origStatesRef.current[0];
-
-      if (shape && orig) {
-        if (node.type === "path") {
-          const pathNode = node as PathNode;
-          const fr = shape.rotation();
-          const baked = bakePathGeometry(
-            pathNode,
-            shape.x(),
-            shape.y(),
-            fr,
-            shape.scaleX(),
-            shape.scaleY(),
-          );
-
-          shape.scaleX(1);
-          shape.scaleY(1);
-          shape.x(baked.x);
-          shape.y(baked.y);
-          shape.rotation(fr);
-          shape.width(baked.width);
-          shape.height(baked.height);
-          shape.offsetX(baked.width / 2);
-          shape.offsetY(baked.height / 2);
-          (shape as Konva.Line).points(baked.points);
-
-          updateNodes([
-            {
-              id: node.id,
-              changes: {
-                x: baked.x,
-                y: baked.y,
-                width: baked.width,
-                height: baked.height,
-                rotation: fr,
-                points: baked.points,
-              } as Partial<Node>,
-            },
-          ]);
-          historyUpdates.push({
-            id: node.id,
-            oldProps: {
-              x: orig.x,
-              y: orig.y,
-              width: orig.width,
-              height: orig.height,
-              rotation: orig.rotation,
-              points: pathNode.points,
-            } as Partial<Node>,
-            newProps: {
-              x: baked.x,
-              y: baked.y,
-              width: baked.width,
-              height: baked.height,
-              rotation: fr,
-              points: baked.points,
-            } as Partial<Node>,
-          });
-        } else {
-          let fw = Math.max(5, Math.abs(shape.width() * shape.scaleX()));
-        let fh = Math.max(5, Math.abs(shape.height() * shape.scaleY()));
-
-        // Apply exact snapped dimensions (fix floating-point drift from Konva scale)
-        if (lastSizeSnap) {
-          if (lastSizeSnap.snappedWidth) fw = lastSizeSnap.width;
-          if (lastSizeSnap.snappedHeight) fh = lastSizeSnap.height;
-        }
-        let fx = shape.x(),
-          fy = shape.y();
-        const fr = shape.rotation();
-
-        // Clamp to document bounds
-        if (activePage) {
-          if (node.type === "image") {
-            const asp = fw / fh;
-            if (fw > activePage.width) {
-              fw = activePage.width;
-              fh = fw / asp;
-            }
-            if (fh > activePage.height) {
-              fh = activePage.height;
-              fw = fh * asp;
-            }
-          } else {
-            fw = Math.min(fw, activePage.width);
-            fh = Math.min(fh, activePage.height);
-          }
-          const { halfX, halfY } = rotatedHalfExtents(fw, fh, fr);
-          fx = Math.max(halfX, Math.min(activePage.width - halfX, fx));
-          fy = Math.max(halfY, Math.min(activePage.height - halfY, fy));
-        }
-
-        // Reset scale & apply final dimensions
-        shape.scaleX(1);
-        shape.scaleY(1);
-        shape.x(fx);
-        shape.y(fy);
-        shape.width(fw);
-        shape.height(fh);
-        if (shape.offsetX() !== 0) {
-          shape.offsetX(fw / 2);
-          shape.offsetY(fh / 2);
-        }
-
-        updateNodes([
-          {
-            id: node.id,
-            changes: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
-          },
-        ]);
-        historyUpdates.push({
-          id: node.id,
-          oldProps: {
-            x: orig.x,
-            y: orig.y,
-            width: orig.width,
-            height: orig.height,
-            rotation: orig.rotation,
-          },
-          newProps: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
-        });
-        }
-      }
+      finalizeSingleTransform(stage, lastSizeSnap, historyUpdates);
     } else {
-      /* --- Multi selection --- */
-      const pr = proxyRef.current;
-      if (pr && origBoundsRef.current) {
-        const proxyRotation = pr.rotation();
-        const positions = computeMultiPositions(
-          origStatesRef.current,
-          {
-            x: origBoundsRef.current.centerX,
-            y: origBoundsRef.current.centerY,
-          },
-          groupRotRef.current,
-          pr.scaleX(),
-          pr.scaleY(),
-          proxyRotation,
-          pr.x(),
-          pr.y(),
-        );
-
-        const storeUpdates: Array<{ id: string; changes: Partial<Node> }> = [];
-        const rawScaleX = pr.scaleX();
-        const rawScaleY = pr.scaleY();
-
-        positions.forEach((p, i) => {
-          let { x: fx, y: fy, width: fw, height: fh } = p;
-          const selectedNode = selectedNodeMap.get(p.id);
-          if (activePage) {
-            fw = Math.min(fw, activePage.width);
-            fh = Math.min(fh, activePage.height);
-            const hw = fw / 2,
-              hh = fh / 2;
-            fx = Math.max(hw, Math.min(activePage.width - hw, fx));
-            fy = Math.max(hh, Math.min(activePage.height - hh, fy));
-          }
-
-          setKonvaShape(
-            stage,
-            p.id,
-            p.type,
-            fx,
-            fy,
-            fw,
-            fh,
-            p.rotation,
-            p.origWidth,
-            p.origHeight,
-            true,
-          );
-
-          let pathPoints: number[] | undefined;
-          if (selectedNode?.type === "path") {
-            const pathNode = selectedNode as PathNode;
-            const sx = (Math.sign(rawScaleX) || 1) * (fw / Math.max(1, p.origWidth));
-            const sy = (Math.sign(rawScaleY) || 1) * (fh / Math.max(1, p.origHeight));
-            const baked = bakePathGeometry(pathNode, fx, fy, p.rotation, sx, sy);
-            fx = baked.x;
-            fy = baked.y;
-            fw = baked.width;
-            fh = baked.height;
-            pathPoints = baked.points;
-
-            const pathShape = stage.findOne(`#shape_${p.id}`) as Konva.Line | null;
-            if (pathShape) {
-              pathShape.x(fx);
-              pathShape.y(fy);
-              pathShape.rotation(p.rotation);
-              pathShape.width(fw);
-              pathShape.height(fh);
-              pathShape.offsetX(fw / 2);
-              pathShape.offsetY(fh / 2);
-              pathShape.points(pathPoints);
-              pathShape.scaleX(1);
-              pathShape.scaleY(1);
-            }
-          }
-
-          storeUpdates.push({
-            id: p.id,
-            changes: {
-              x: fx,
-              y: fy,
-              width: fw,
-              height: fh,
-              rotation: p.rotation,
-              ...(pathPoints ? { points: pathPoints } : {}),
-            },
-          });
-
-          const orig = origStatesRef.current[i];
-          historyUpdates.push({
-            id: p.id,
-            oldProps: {
-              x: orig.x,
-              y: orig.y,
-              width: orig.width,
-              height: orig.height,
-              rotation: orig.rotation,
-              ...(selectedNode?.type === "path"
-                ? { points: (selectedNode as PathNode).points }
-                : {}),
-            },
-            newProps: {
-              x: fx,
-              y: fy,
-              width: fw,
-              height: fh,
-              rotation: p.rotation,
-              ...(pathPoints ? { points: pathPoints } : {}),
-            },
-          });
-        });
-
-        if (storeUpdates.length > 0) updateNodes(storeUpdates);
-
-        // Persist group rotation (Canva-style tilted frame)
-        groupRotRef.current = proxyRotation;
-        const gid = selectedNodes[0]?.groupId;
-        const allSameGroup =
-          gid && selectedNodes.every((n) => n.groupId === gid);
-        if (allSameGroup) {
-          updateNodes(
-            selectedNodes.map((n) => ({
-              id: n.id,
-              changes: {
-                groupRotation: proxyRotation || undefined,
-              } as Partial<Node>,
-            })),
-          );
-        }
-
-        // Reset proxy rect with fresh bounds
-        pr.scaleX(1);
-        pr.scaleY(1);
-        const currentDoc = useDocStore.getState().doc;
-        const currentPage =
-          currentDoc?.pages.find((p) => p.id === currentDoc.activePageId) ??
-          currentDoc?.pages[0] ??
-          null;
-        const freshNodes =
-          currentPage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
-        const newBounds = getGroupBoundsInRotatedFrame(
-          freshNodes,
-          groupRotRef.current,
-        );
-        if (newBounds) {
-          pr.x(newBounds.centerX);
-          pr.y(newBounds.centerY);
-          pr.width(newBounds.width);
-          pr.height(newBounds.height);
-          pr.offsetX(newBounds.width / 2);
-          pr.offsetY(newBounds.height / 2);
-          pr.rotation(groupRotRef.current);
-        }
-      }
+      finalizeMultiTransform(stage, historyUpdates);
     }
 
-    // Commit history
-    if (
-      historyUpdates.length > 0 &&
-      historyUpdates.some(
-        (u) =>
-          u.oldProps.x !== u.newProps.x ||
-          u.oldProps.y !== u.newProps.y ||
-          u.oldProps.width !== u.newProps.width ||
-          u.oldProps.height !== u.newProps.height ||
-          u.oldProps.rotation !== u.newProps.rotation ||
-          !samePoints(
-            (u.oldProps as { points?: number[] }).points,
-            (u.newProps as { points?: number[] }).points,
-          ),
-      )
-    ) {
-      const op: TransformOp = {
-        type: "transform",
-        timestamp: Date.now(),
-        updates: historyUpdates,
-      };
-      const { past } = useHistoryStore.getState();
-      useHistoryStore.setState({ past: [...past, op], future: [] });
-      useDocStore.getState().autoSave();
-    }
-
+    commitTransformHistory(historyUpdates);
     origStatesRef.current = [];
     origBoundsRef.current = null;
+    isRotatingTransformRef.current = false;
     trRef.current?.forceUpdate();
   };
 
@@ -826,156 +1057,30 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           onTransformStart={handleTransformStart}
           onTransform={handleTransform}
           onTransformEnd={handleTransformEnd}
+          flipEnabled={false}
           rotationSnaps={ROTATION_SNAPS}
           rotationSnapTolerance={5}
           keepRatio={false}
           enabledAnchors={[...ALL_ANCHORS]}
-          boundBoxFunc={(oldBox, newBox) => {
-            if (Math.abs(newBox.width) < 10 || Math.abs(newBox.height) < 10)
-              return oldBox;
-            // Detect rotation via proxy scale (AABB changes size when rotated even without resize)
-            const p = proxyRef.current;
-            const isRot = p
-              ? Math.abs(p.scaleX() - 1) < 0.001 &&
-                Math.abs(p.scaleY() - 1) < 0.001
-              : Math.abs(oldBox.width - newBox.width) < 1 &&
-                Math.abs(oldBox.height - newBox.height) < 1;
-            if (isRot) return newBox;
-            if (!activePage) return newBox;
-            const db = docScreenBounds(activePage);
-            const c = clampEdges(newBox, db);
-            return c.width < 10 || c.height < 10 ? oldBox : { ...newBox, ...c };
-          }}
+          boundBoxFunc={multiBoundBoxFunc}
         />
       </>
     );
   }
 
   // Single selection
-  const isImage = selectedNodes[0]?.type === "image";
   return (
     <Transformer
       ref={trRef}
       onTransformStart={handleTransformStart}
       onTransform={handleTransform}
       onTransformEnd={handleTransformEnd}
+      flipEnabled={false}
       rotationSnaps={ROTATION_SNAPS}
       rotationSnapTolerance={5}
       keepRatio={isImage}
       enabledAnchors={isImage ? [...CORNER_ANCHORS] : [...ALL_ANCHORS]}
-      boundBoxFunc={(oldBox, newBox) => {
-        if (Math.abs(newBox.width) < 5 || Math.abs(newBox.height) < 5)
-          return oldBox;
-        if (!activePage) return newBox;
-        const isRot =
-          Math.abs(oldBox.width - newBox.width) < 1 &&
-          Math.abs(oldBox.height - newBox.height) < 1;
-        if (isRot) {
-          sizeSnapResultRef.current = null;
-          return newBox;
-        }
-
-        // --- Size snap (Canva-style: ดูดติดเมื่อขนาดเท่ากัน) ---
-        {
-          const z = viewport.zoom;
-          const worldW = Math.abs(newBox.width) / z;
-          const worldH = Math.abs(newBox.height) / z;
-          const widthChanged =
-            Math.abs(Math.abs(newBox.width) - Math.abs(oldBox.width)) > 0.5;
-          const heightChanged =
-            Math.abs(Math.abs(newBox.height) - Math.abs(oldBox.height)) > 0.5;
-
-          const otherNodes = activePage.nodes.filter(
-            (n) => !selectedIds.has(n.id) && n.visible,
-          );
-          const sizeSnap = snapResizeSize(
-            worldW,
-            worldH,
-            selectedIds,
-            otherNodes,
-          );
-          sizeSnapResultRef.current = sizeSnap;
-
-          if (isImage) {
-            // keepRatio: snap หนึ่ง dimension แล้ว derive อีกด้านตาม aspect ratio
-            const orig = origStatesRef.current[0];
-            const aspect = orig
-              ? orig.width / orig.height
-              : Math.abs(oldBox.width) / Math.abs(oldBox.height);
-
-            if (sizeSnap.snappedWidth && widthChanged) {
-              const snappedScreenW = sizeSnap.width * z;
-              const snappedScreenH = snappedScreenW / aspect;
-              const signW = Math.sign(newBox.width) || 1;
-              const signH = Math.sign(newBox.height) || 1;
-              const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
-              const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
-
-              if (!leftFixed) {
-                newBox.x =
-                  newBox.x + newBox.width - signW * snappedScreenW;
-              }
-              newBox.width = signW * snappedScreenW;
-
-              if (!topFixed) {
-                newBox.y =
-                  newBox.y + newBox.height - signH * snappedScreenH;
-              }
-              newBox.height = signH * snappedScreenH;
-            } else if (sizeSnap.snappedHeight && heightChanged) {
-              const snappedScreenH = sizeSnap.height * z;
-              const snappedScreenW = snappedScreenH * aspect;
-              const signW = Math.sign(newBox.width) || 1;
-              const signH = Math.sign(newBox.height) || 1;
-              const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
-              const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
-
-              if (!leftFixed) {
-                newBox.x =
-                  newBox.x + newBox.width - signW * snappedScreenW;
-              }
-              newBox.width = signW * snappedScreenW;
-
-              if (!topFixed) {
-                newBox.y =
-                  newBox.y + newBox.height - signH * snappedScreenH;
-              }
-              newBox.height = signH * snappedScreenH;
-            }
-          } else {
-            // Non-keepRatio: snap แต่ละ dimension อิสระ
-            if (sizeSnap.snappedWidth && widthChanged) {
-              const snappedScreenW = sizeSnap.width * z;
-              const signW = Math.sign(newBox.width) || 1;
-              const targetW = signW * snappedScreenW;
-              const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
-              if (!leftFixed) {
-                newBox.x = newBox.x + newBox.width - targetW;
-              }
-              newBox.width = targetW;
-            }
-
-            if (sizeSnap.snappedHeight && heightChanged) {
-              const snappedScreenH = sizeSnap.height * z;
-              const signH = Math.sign(newBox.height) || 1;
-              const targetH = signH * snappedScreenH;
-              const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
-              if (!topFixed) {
-                newBox.y = newBox.y + newBox.height - targetH;
-              }
-              newBox.height = targetH;
-            }
-          }
-        }
-
-        const db = docScreenBounds(activePage);
-        if (!isImage) {
-          const c = clampEdges(newBox, db);
-          if (c.width < 5 || c.height < 5) return oldBox;
-          return { ...newBox, ...c };
-        }
-        return newBox;
-      }}
+      boundBoxFunc={singleBoundBoxFunc}
     />
   );
 }

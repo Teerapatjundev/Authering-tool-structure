@@ -33,6 +33,8 @@ import {
   Node,
   RectNode,
   EllipseNode,
+  TriangleNode,
+  PentagonNode,
   TextNode,
   ImageNode,
   VideoNode,
@@ -41,6 +43,7 @@ import {
 import { useTextEditStore } from "../../stores/textEditStore";
 import { useVideoPlayStore } from "../../stores/videoPlayStore";
 import { useSelectionStore } from "../../stores/selectionStore";
+import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 
 interface RenderNodesProps {
   nodes: Node[];
@@ -88,6 +91,12 @@ function RenderNode({ node }: { node: Node }) {
 
     case "ellipse":
       return <RenderEllipse node={node} commonProps={commonProps} />;
+
+    case "triangle":
+      return <RenderTriangle node={node} commonProps={commonProps} />;
+
+    case "pentagon":
+      return <RenderPentagon node={node} commonProps={commonProps} />;
 
     case "text":
       return (
@@ -180,6 +189,52 @@ function RenderText({
       height={node.height}
       onDblClick={onDoubleClick}
       onDblTap={onDoubleClick} // สำหรับ touch devices
+    />
+  );
+}
+
+function RenderTriangle({
+  node,
+  commonProps,
+}: {
+  node: TriangleNode;
+  commonProps: Record<string, unknown>;
+}) {
+  return (
+    <RegularPolygon
+      {...commonProps}
+      sides={3}
+      radius={50}
+      fill={node.fill}
+      stroke={node.stroke}
+      strokeWidth={node.strokeWidth || 0}
+      scaleX={node.width / Math.max(1, TRI_BASE_SIZE.width)}
+      scaleY={node.height / Math.max(1, TRI_BASE_SIZE.height)}
+      offsetX={0}
+      offsetY={0}
+    />
+  );
+}
+
+function RenderPentagon({
+  node,
+  commonProps,
+}: {
+  node: PentagonNode;
+  commonProps: Record<string, unknown>;
+}) {
+  return (
+    <RegularPolygon
+      {...commonProps}
+      sides={5}
+      radius={50}
+      fill={node.fill}
+      stroke={node.stroke}
+      strokeWidth={node.strokeWidth || 0}
+      scaleX={node.width / Math.max(1, PENT_BASE_SIZE.width)}
+      scaleY={node.height / Math.max(1, PENT_BASE_SIZE.height)}
+      offsetX={0}
+      offsetY={0}
     />
   );
 }
