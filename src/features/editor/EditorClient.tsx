@@ -735,7 +735,7 @@ export function EditorClient({ docId }: EditorClientProps) {
                       type="button"
                       onClick={confirmChoiceModal}
                       disabled={!choiceMode || !pendingChoiceDrop}
-                      className="w-full px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-md disabled:opacity-50"
+                      className="w-full px-4 py-2 text-sm font-medium text-white bg-[#ED1C24] rounded-md disabled:opacity-50"
                     >
                       ยืนยัน
                     </button>
