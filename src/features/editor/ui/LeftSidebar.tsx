@@ -35,6 +35,13 @@ export function LeftSidebar() {
     () =>
       [
         {
+          id: "practice" as const,
+          label: "Practice",
+          title: "เลือกรูปแบบแบบฝึกหัด",
+          subtitle: "เลือกประเภทแบบฝึกหัดที่ต้องการสร้าง",
+          render: () => <PracticePanel />,
+        },
+        {
           id: "elements" as const,
           label: "Elements",
           title: "Elements",
@@ -42,6 +49,7 @@ export function LeftSidebar() {
           icon: LayoutGrid,
           render: () => <ElementsPanel />,
         },
+
         {
           id: "page" as const,
           label: "Page",
@@ -70,6 +78,7 @@ export function LeftSidebar() {
     [],
   );
 
+  // Default: no panel selected/open when entering the editor.
   const [openPageId, setOpenPageId] = useState<LeftSidebarPageId | null>(null);
 
   const openPage =

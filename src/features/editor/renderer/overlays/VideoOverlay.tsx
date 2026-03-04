@@ -27,11 +27,14 @@ export function VideoOverlay() {
   const { bounds: marqueeBounds } = useMarqueeStore();
   const { select } = useSelectionStore();
 
+  const activePage =
+    doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
+
   // ไม่มี video กำลังเล่น
   if (!playingNodeId || !youtubeId) return null;
 
   // หา video node
-  const node = doc?.nodes.find(
+  const node = activePage?.nodes.find(
     (n) => n.id === playingNodeId && n.type === "video",
   ) as VideoNode | undefined;
 

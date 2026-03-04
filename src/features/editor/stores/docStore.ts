@@ -16,10 +16,11 @@
 
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { Document, Node } from "../core/doc/types";
+import { Document, Node, Page } from "../core/doc/types";
 import { createEmptyDocument, A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT } from "../core/doc/migrate";
 import { docsService } from "@/services/api/docs.service";
 import { debounce } from "@/shared/utils/debounce";
+import { generateId } from "@/shared/utils/id";
 
 interface DocState {
   doc: Document | null;
@@ -28,6 +29,8 @@ interface DocState {
 
   loadDoc: (docId: string) => Promise<void>;
   setDoc: (doc: Document) => void;
+  setActivePage: (pageId: string) => void;
+  insertPageAt: (insertIndex: number) => void;
   addNode: (node: Node) => void;
   removeNodes: (nodeIds: string[]) => void;
   updateNode: (nodeId: string, updates: Partial<Node>) => void;
@@ -35,6 +38,81 @@ interface DocState {
   updateBackgroundColor: (color: string) => void;
   saveDoc: () => void;
   autoSave: () => void;
+}
+
+function ensureActivePage(doc: Document): Page {
+  const active = doc.pages.find((p) => p.id === doc.activePageId);
+  if (active) return active;
+  const fallback = doc.pages[0];
+  if (!fallback) {
+    const pageId = `page_${doc.id}_1`;
+    const newPage: Page = {
+      id: pageId,
+      title: "Page 1",
+      nodes: [],
+      width: A4_LANDSCAPE_WIDTH,
+      height: A4_LANDSCAPE_HEIGHT,
+      backgroundColor: "#ffffff",
+    };
+    doc.pages = [newPage];
+    doc.activePageId = pageId;
+    return newPage;
+  }
+  doc.activePageId = fallback.id;
+  return fallback;
+}
+
+function migrateToPagedDocument(raw: any, docId: string): Document {
+  // Already v2
+  if (raw?.pages && Array.isArray(raw.pages) && raw.pages.length > 0) {
+    const pages: Page[] = raw.pages.map((p: any, idx: number) => ({
+      id: p.id || `page_${docId}_${idx + 1}`,
+      title: p.title || `Page ${idx + 1}`,
+      nodes: Array.isArray(p.nodes) ? p.nodes : [],
+      width: p.width || raw.width || A4_LANDSCAPE_WIDTH,
+      height: p.height || raw.height || A4_LANDSCAPE_HEIGHT,
+      backgroundColor: p.backgroundColor || raw.backgroundColor || "#ffffff",
+    }));
+
+    const activePageId =
+      typeof raw.activePageId === "string" && pages.some((p) => p.id === raw.activePageId)
+        ? raw.activePageId
+        : pages[0].id;
+
+    return {
+      id: raw.id || docId,
+      title: raw.title || "Untitled",
+      version: raw.version || 2,
+      pages,
+      activePageId,
+      updatedAt: raw.updatedAt || Date.now(),
+    };
+  }
+
+  // Legacy v1
+  const pageId = `page_${docId}_1`;
+  const width = raw?.width || A4_LANDSCAPE_WIDTH;
+  const height = raw?.height || A4_LANDSCAPE_HEIGHT;
+  const backgroundColor = raw?.backgroundColor || "#ffffff";
+  const nodes = Array.isArray(raw?.nodes) ? raw.nodes : [];
+
+  return {
+    id: raw?.id || docId,
+    title: raw?.title || "Untitled",
+    version: raw?.version || 2,
+    pages: [
+      {
+        id: pageId,
+        title: "Page 1",
+        nodes,
+        width,
+        height,
+        backgroundColor,
+      },
+    ],
+    activePageId: pageId,
+    updatedAt: raw?.updatedAt || Date.now(),
+  };
 }
 
 // Debounced save function
@@ -64,19 +142,56 @@ export const useDocStore = create<DocState>()(
         docsService.saveDoc(doc);
       }
 
-      // กันกระดาษหาย: เติม width/height/backgroundColor ถ้าไม่มี (ข้อมูลเก่าที่บันทึกไม่ครบ)
-      const fullDoc: Document = {
-        ...(doc as Document),
-        width: (doc as Document).width || A4_LANDSCAPE_WIDTH,
-        height: (doc as Document).height || A4_LANDSCAPE_HEIGHT,
-        backgroundColor: (doc as Document).backgroundColor || "#ffffff",
-      };
+      const migrated = migrateToPagedDocument(doc as any, docId);
+      // Ensure active page is valid
+      ensureActivePage(migrated);
 
-      set({ doc: fullDoc, isLoading: false });
+      // Requirement: when opening a document (e.g. from dashboard), always show the first page.
+      // This overrides any previously-saved activePageId.
+      if (migrated.pages.length > 0) {
+        migrated.activePageId = migrated.pages[0].id;
+      }
+
+      set({ doc: migrated, isLoading: false });
     },
 
     setDoc: (doc: Document) => {
       set({ doc });
+    },
+
+    setActivePage: (pageId: string) => {
+      set((state) => {
+        if (!state.doc) return;
+        if (!state.doc.pages.some((p) => p.id === pageId)) return;
+        state.doc.activePageId = pageId;
+      });
+    },
+
+    insertPageAt: (insertIndex: number) => {
+      set((state) => {
+        if (!state.doc) return;
+        const doc = state.doc;
+        const activePage = ensureActivePage(doc);
+
+        const safeIndex = Math.max(0, Math.min(insertIndex, doc.pages.length));
+        const newPageId = `page_${generateId()}`;
+        const newPage: Page = {
+          id: newPageId,
+          title: `Page ${safeIndex + 1}`,
+          nodes: [],
+          width: activePage.width,
+          height: activePage.height,
+          backgroundColor: activePage.backgroundColor,
+        };
+
+        doc.pages.splice(safeIndex, 0, newPage);
+        // รีเซ็ตชื่อหน้าให้เรียงตามลำดับแบบง่ายๆ
+        doc.pages.forEach((p, idx) => {
+          if (p.title?.startsWith("Page ")) p.title = `Page ${idx + 1}`;
+        });
+        doc.activePageId = newPageId;
+        doc.updatedAt = Date.now();
+      });
     },
 
     /**
@@ -85,7 +200,8 @@ export const useDocStore = create<DocState>()(
     addNode: (node: Node) => {
       set((state) => {
         if (!state.doc) return;
-        state.doc.nodes.push(node);
+        const page = ensureActivePage(state.doc);
+        page.nodes.push(node);
         state.doc.updatedAt = Date.now();
       });
     },
@@ -97,7 +213,8 @@ export const useDocStore = create<DocState>()(
       set((state) => {
         if (!state.doc) return;
         const idsSet = new Set(nodeIds);
-        state.doc.nodes = state.doc.nodes.filter((n) => !idsSet.has(n.id));
+        const page = ensureActivePage(state.doc);
+        page.nodes = page.nodes.filter((n) => !idsSet.has(n.id));
         state.doc.updatedAt = Date.now();
       });
     },
@@ -108,7 +225,8 @@ export const useDocStore = create<DocState>()(
     updateNode: (nodeId: string, updates: Partial<Node>) => {
       set((state) => {
         if (!state.doc) return;
-        const node = state.doc.nodes.find((n) => n.id === nodeId);
+        const page = ensureActivePage(state.doc);
+        const node = page.nodes.find((n) => n.id === nodeId);
         if (node) {
           Object.assign(node, updates);
           state.doc.updatedAt = Date.now();
@@ -122,8 +240,9 @@ export const useDocStore = create<DocState>()(
     updateNodes: (updates: Array<{ id: string; changes: Partial<Node> }>) => {
       set((state) => {
         if (!state.doc) return;
+        const page = ensureActivePage(state.doc);
         for (const { id, changes } of updates) {
-          const node = state.doc.nodes.find((n) => n.id === id);
+          const node = page.nodes.find((n) => n.id === id);
           if (node) {
             Object.assign(node, changes);
           }
@@ -138,7 +257,8 @@ export const useDocStore = create<DocState>()(
     updateBackgroundColor: (color: string) => {
       set((state) => {
         if (!state.doc) return;
-        state.doc.backgroundColor = color;
+        const page = ensureActivePage(state.doc);
+        page.backgroundColor = color;
         state.doc.updatedAt = Date.now();
       });
     },
@@ -154,12 +274,10 @@ export const useDocStore = create<DocState>()(
       docsService.saveDoc({
         id: state.doc.id,
         title: state.doc.title,
-        nodes: state.doc.nodes,
         version: state.doc.version,
         updatedAt: state.doc.updatedAt,
-        width: state.doc.width,
-        height: state.doc.height,
-        backgroundColor: state.doc.backgroundColor,
+        pages: state.doc.pages,
+        activePageId: state.doc.activePageId,
       });
       set({ isSaving: false });
     },

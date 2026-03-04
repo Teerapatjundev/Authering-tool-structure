@@ -48,6 +48,8 @@ import {
   insertText,
   insertTextLink,
   insertPracticeCard,
+  insertConnectionPair,
+  insertChoiceOptions,
 } from "./core/commands/insert";
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
@@ -63,6 +65,8 @@ interface EditorClientProps {
 export function EditorClient({ docId }: EditorClientProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { loadDoc, doc } = useDocStore();
+  const activePage =
+    doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
   const { undo, redo } = useHistoryStore();
   const { setTool } = useToolStore();
   const { centerDocument } = useViewStore();
@@ -70,6 +74,22 @@ export function EditorClient({ docId }: EditorClientProps) {
   const [draggingElementType, setDraggingElementType] = useState<string | null>(
     null,
   );
+
+  // Choice modal state (when dropping practiceType === "choice")
+  const [choiceModalOpen, setChoiceModalOpen] = useState(false);
+  const [choiceStep, setChoiceStep] = useState<1 | 2>(1);
+  const [choiceMode, setChoiceMode] = useState<"single" | "multiple" | null>(null);
+  const [choiceTotalOptions, setChoiceTotalOptions] = useState(4);
+  const [choiceCorrectCount, setChoiceCorrectCount] = useState(2);
+  const [pendingChoiceDrop, setPendingChoiceDrop] = useState<
+    | {
+        x: number;
+        y: number;
+        title: string;
+        description: string;
+      }
+    | null
+  >(null);
 
   // Canvas size state
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
@@ -83,15 +103,15 @@ export function EditorClient({ docId }: EditorClientProps) {
 
   // Center document when loaded or canvas size changes
   useEffect(() => {
-    if (doc && canvasSize.width > 0 && canvasSize.height > 0) {
+    if (activePage && canvasSize.width > 0 && canvasSize.height > 0) {
       centerDocument(
-        doc.width,
-        doc.height,
+        activePage.width,
+        activePage.height,
         canvasSize.width,
         canvasSize.height,
       );
     }
-  }, [doc?.id, canvasSize.width, canvasSize.height, centerDocument]);
+  }, [doc?.id, doc?.activePageId, canvasSize.width, canvasSize.height, centerDocument]);
 
   // ===============================================
   // Resize Observer - อัพเดท canvas size
@@ -180,7 +200,7 @@ export function EditorClient({ docId }: EditorClientProps) {
 
       const { screenToWorld } = useViewStore.getState();
       const container = containerRef.current;
-      if (!container || !doc) return;
+      if (!container || !activePage) return;
 
       // คำนวณตำแหน่ง drop ใน world coordinates
       const rect = container.getBoundingClientRect();
@@ -189,8 +209,8 @@ export function EditorClient({ docId }: EditorClientProps) {
       const worldPos = screenToWorld(clientX - rect.left, clientY - rect.top);
 
       // ตรวจสอบว่า drop อยู่ใน canvas bounds หรือไม่
-      const dropX = Math.max(50, Math.min(doc.width - 50, worldPos.x));
-      const dropY = Math.max(50, Math.min(doc.height - 50, worldPos.y));
+      const dropX = Math.max(50, Math.min(activePage.width - 50, worldPos.x));
+      const dropY = Math.max(50, Math.min(activePage.height - 50, worldPos.y));
 
       // ตรวจสอบว่าเป็นการลาก element type หรือไม่
       const elementType =
@@ -220,7 +240,22 @@ export function EditorClient({ docId }: EditorClientProps) {
           ) ||
           "";
 
-        insertPracticeCard(dropX, dropY, title, description);
+        // Choice: open modal wizard instead of inserting immediately
+        if (practiceType === "choice") {
+          setPendingChoiceDrop({ x: dropX, y: dropY, title, description });
+          setChoiceStep(1);
+          setChoiceMode(null);
+          setChoiceTotalOptions(4);
+          setChoiceCorrectCount(2);
+          setChoiceModalOpen(true);
+          return;
+        }
+
+        if (practiceType === "connection") {
+          insertConnectionPair(dropX, dropY, title, description);
+        } else {
+          insertPracticeCard(dropX, dropY, title, description);
+        }
         return;
       }
 
@@ -292,6 +327,41 @@ export function EditorClient({ docId }: EditorClientProps) {
     },
     [doc],
   );
+
+  const confirmChoiceModal = useCallback(() => {
+    if (!pendingChoiceDrop || !choiceMode) return;
+
+    const total = Math.max(1, Math.floor(choiceTotalOptions));
+    const correct =
+      choiceMode === "single"
+        ? 1
+        : Math.max(1, Math.min(Math.floor(choiceCorrectCount), total));
+
+    insertChoiceOptions(
+      pendingChoiceDrop.x,
+      pendingChoiceDrop.y,
+      choiceMode,
+      total,
+      correct,
+      pendingChoiceDrop.title,
+      pendingChoiceDrop.description,
+    );
+
+    setChoiceModalOpen(false);
+    setPendingChoiceDrop(null);
+  }, [
+    pendingChoiceDrop,
+    choiceMode,
+    choiceTotalOptions,
+    choiceCorrectCount,
+  ]);
+
+  const closeChoiceModal = useCallback(() => {
+    setChoiceModalOpen(false);
+    setPendingChoiceDrop(null);
+    setChoiceStep(1);
+    setChoiceMode(null);
+  }, []);
 
   // Helper: โหลดรูปจาก URL
   const loadImageFromUrl = useCallback((url: string, x: number, y: number) => {
@@ -453,7 +523,7 @@ export function EditorClient({ docId }: EditorClientProps) {
         const { doc } = useDocStore.getState();
         const ids = useSelectionStore.getState().getSelectedIds();
         if (!doc || ids.length === 0) return false;
-        const nodes = doc.nodes.filter((n) => ids.includes(n.id));
+        const nodes = (activePage?.nodes || []).filter((n) => ids.includes(n.id));
         return nodes.length > 0 && nodes.every((n) => n.locked);
       };
 
@@ -567,6 +637,121 @@ export function EditorClient({ docId }: EditorClientProps) {
 
         {/* Context Menu (right-click / long-press) */}
         <ContextMenu />
+
+        {choiceModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30">
+            <div className="w-full max-w-md p-4 bg-white border border-gray-200 rounded-lg">
+              {choiceStep === 1 ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-gray-800">
+                      เลือกรูปแบบของ Choice
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeChoiceModal}
+                      className="flex items-center justify-center w-5 h-5 text-gray-800 border border-gray-800 rounded-full hover:bg-gray-50"
+                      aria-label="Close"
+                    >
+                      <span className="text-sm leading-none">×</span>
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChoiceMode("single");
+                        setChoiceCorrectCount(1);
+                        setChoiceStep(2);
+                      }}
+                      className="p-3 text-left transition-colors bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="text-sm font-medium text-gray-800">
+                        Single Choice
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">คำตอบเดียว</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setChoiceMode("multiple");
+                        setChoiceStep(2);
+                      }}
+                      className="p-3 text-left transition-colors bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="text-sm font-medium text-gray-800">
+                        Multiple Choice
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">หลายคำตอบ</div>
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold text-gray-800">
+                      ระบุจำนวนตัวเลือก
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeChoiceModal}
+                      className="flex items-center justify-center w-5 h-5 text-gray-800 border border-gray-800 rounded-full hover:bg-gray-50"
+                      aria-label="Close"
+                    >
+                      <span className="text-sm leading-none">×</span>
+                    </button>
+                  </div>
+
+                  <div className="mt-3 space-y-3">
+                    <label className="block">
+                      <div className="text-xs text-gray-600">จำนวนตัวเลือกทั้งหมด</div>
+                      <input
+                        type="number"
+                        min={1}
+                        value={choiceTotalOptions}
+                        onChange={(e) => setChoiceTotalOptions(Number(e.target.value))}
+                        className="w-full px-3 py-2 mt-1 text-sm border border-gray-200 rounded-md"
+                      />
+                    </label>
+
+                    {choiceMode === "multiple" ? (
+                      <label className="block">
+                        <div className="text-xs text-gray-600">จำนวนคำตอบที่ถูก</div>
+                        <input
+                          type="number"
+                          min={1}
+                          value={choiceCorrectCount}
+                          onChange={(e) => setChoiceCorrectCount(Number(e.target.value))}
+                          className="w-full px-3 py-2 mt-1 text-sm border border-gray-200 rounded-md"
+                        />
+                      </label>
+                    ) : (
+                      <div className="text-xs text-gray-600">จำนวนคำตอบที่ถูก: 1</div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    <button
+                      type="button"
+                      onClick={confirmChoiceModal}
+                      disabled={!choiceMode || !pendingChoiceDrop}
+                      className="w-full px-4 py-2 text-sm font-medium text-white bg-gray-800 rounded-md disabled:opacity-50"
+                    >
+                      ยืนยัน
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChoiceStep(1)}
+                      className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50"
+                    >
+                      ย้อนกลับ
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </EditorLayout>
   );

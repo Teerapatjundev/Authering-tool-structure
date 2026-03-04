@@ -23,7 +23,10 @@ export function editNode(nodeId: string, changes: Partial<Node>): void {
   const { doc } = useDocStore.getState();
   if (!doc) return;
 
-  const node = doc.nodes.find((n) => n.id === nodeId);
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
+  const node = page.nodes.find((n) => n.id === nodeId);
   if (!node) return;
 
   // เก็บค่าเดิมและค่าใหม่
@@ -63,6 +66,9 @@ export function editNodes(
   const { doc } = useDocStore.getState();
   if (!doc) return;
 
+  const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
+  if (!page) return;
+
   const updates: Array<{
     id: string;
     oldProps: Partial<Node>;
@@ -70,7 +76,7 @@ export function editNodes(
   }> = [];
 
   for (const nodeId of nodeIds) {
-    const node = doc.nodes.find((n) => n.id === nodeId);
+    const node = page.nodes.find((n) => n.id === nodeId);
     if (!node) continue;
     if (typeFilter && !typeFilter.includes(node.type)) continue;
 

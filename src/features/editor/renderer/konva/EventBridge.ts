@@ -397,11 +397,15 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const { doc } = useDocStore.getState();
       if (!doc) return;
 
+      const page =
+        doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+      if (!page) return;
+
       // สร้าง virtual nodes เพื่อคำนวณ bounds
       const virtualNodes = buildVirtualNodes(
         selectedIds,
         originalPositionsRef.current,
-        doc.nodes,
+        page.nodes,
         dx,
         dy,
       );
@@ -413,15 +417,15 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       // Clamp + snap + update
       const clamped = clampDragDelta(
         groupBounds,
-        doc.width,
-        doc.height,
+        page.width,
+        page.height,
         dx,
         dy,
       );
       snapAndUpdateNodes(
         selectedIds,
         originalPositionsRef.current,
-        doc,
+        { nodes: page.nodes, width: page.width, height: page.height },
         clamped.x,
         clamped.y,
         withSpacingGuides,
@@ -485,7 +489,11 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const { doc } = useDocStore.getState();
       if (!doc) return;
 
-      const intersecting = doc.nodes.filter((node: any) => {
+      const page =
+        doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+      if (!page) return;
+
+      const intersecting = page.nodes.filter((node: any) => {
         if (node.locked) return false;
         const nodeBounds = {
           x: node.x - node.width / 2,
@@ -499,7 +507,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       useSelectionStore.getState().selectMultiple(
         expandAllGroupIds(
           intersecting.map((n: any) => n.id),
-          doc.nodes,
+          page.nodes,
         ),
       );
     }
@@ -513,9 +521,13 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const { doc } = useDocStore.getState();
       if (!doc) return;
 
+      const page =
+        doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+      if (!page) return;
+
       const newPositions = new Map<string, Point>();
       selectedIds.forEach((id: string) => {
-        const node = doc.nodes.find((n: any) => n.id === id);
+        const node = page.nodes.find((n: any) => n.id === id);
         if (node) newPositions.set(id, { x: node.x, y: node.y });
       });
       commitMoveWithOriginal(originalPositionsRef.current, newPositions);
@@ -544,11 +556,15 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const { doc } = useDocStore.getState();
       if (!doc) return;
 
-      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
+      const page =
+        doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+      if (!page) return;
+
+      const hitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
       if (hitNode) {
         const { selectedIds, selectMultiple } = useSelectionStore.getState();
         if (!selectedIds.has(hitNode.id)) {
-          selectMultiple(expandGroupIds(hitNode.id, doc.nodes));
+          selectMultiple(expandGroupIds(hitNode.id, page.nodes));
         }
       }
       useContextMenuStore
@@ -593,7 +609,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       worldPos: Point,
       selectedNodes: any[],
       currentSelectedIds: string[],
-      doc: any,
+      allNodes: any[],
       handlePadding: number,
       altKey: boolean,
     ): boolean {
@@ -622,7 +638,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       }
 
       // ลาก selection ที่มีอยู่
-      const allIds = initDrag(worldPos, currentSelectedIds, doc.nodes);
+      const allIds = initDrag(worldPos, currentSelectedIds, allNodes);
       if (allIds.length > currentSelectedIds.length) {
         useSelectionStore.getState().selectMultiple(allIds);
       }
@@ -644,7 +660,10 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         const { pan, viewport, canvasSize } = useViewStore.getState();
         const { doc } = useDocStore.getState();
         if (doc) {
-          const docScreenWidth = doc.width * viewport.zoom;
+          const page =
+            doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+          if (!page) return;
+          const docScreenWidth = page.width * viewport.zoom;
           if (docScreenWidth > canvasSize.width) {
             const delta = clampScrollDelta(
               viewport.x,
@@ -680,9 +699,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         } = useViewStore.getState();
         const { doc } = useDocStore.getState();
         if (doc) {
+          const page =
+            doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+          if (!page) return;
           const clamped = clampViewportAfterZoom(
             v,
-            doc,
+            { width: page.width, height: page.height },
             canvasSize,
             v.zoom,
             direction < 0,
@@ -700,7 +722,10 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         const { pan, viewport, canvasSize } = useViewStore.getState();
         const { doc } = useDocStore.getState();
         if (doc) {
-          const docScreenHeight = doc.height * viewport.zoom;
+          const page =
+            doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+          if (!page) return;
+          const docScreenHeight = page.height * viewport.zoom;
           if (docScreenHeight > canvasSize.height) {
             const delta = clampScrollDelta(
               viewport.y,
@@ -765,16 +790,20 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const { doc } = useDocStore.getState();
       if (!doc) return;
 
+      const page =
+        doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+      if (!page) return;
+
       const { viewport } = useViewStore.getState();
       const { selectedIds, getSelectedIds } = useSelectionStore.getState();
       const currentSelectedIds = getSelectedIds();
-      const selectedNodes = doc.nodes.filter((n: any) =>
+      const selectedNodes = page.nodes.filter((n: any) =>
         currentSelectedIds.includes(n.id),
       );
 
       // หา node ที่คลิกโดนก่อน เพื่อให้คลิกเลือก node ใหม่ได้แม้อยู่ใน selection bounds เดิม
-      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
-      const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, doc.nodes) : [];
+      const hitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
+      const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, page.nodes) : [];
       const hitOnUnselectedNode =
         !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
 
@@ -786,7 +815,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
           worldPos,
           selectedNodes,
           currentSelectedIds,
-          doc,
+          page.nodes,
           handlePadding,
           altKey,
         )
@@ -825,7 +854,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         initDrag(
           worldPos,
           useSelectionStore.getState().getSelectedIds(),
-          doc.nodes,
+          page.nodes,
         );
       } else {
         // คลิกที่ว่าง → marquee selection
@@ -955,15 +984,19 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const { doc } = useDocStore.getState();
       if (!doc) return;
 
+      const page =
+        doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
+      if (!page) return;
+
       const { selectedIds, getSelectedIds } = useSelectionStore.getState();
       const currentSelectedIds = getSelectedIds();
-      const selectedNodes = doc.nodes.filter((n: any) =>
+      const selectedNodes = page.nodes.filter((n: any) =>
         currentSelectedIds.includes(n.id),
       );
 
       // หา node ที่ touch โดนก่อน เพื่อให้เปลี่ยน selection ได้แม้อยู่ใน bounds เดิม
-      const hitNode = findTopNodeAt(doc.nodes, worldPos.x, worldPos.y);
-      const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, doc.nodes) : [];
+      const hitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
+      const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, page.nodes) : [];
       const hitOnUnselectedNode =
         !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
 
@@ -975,7 +1008,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
           worldPos,
           selectedNodes,
           currentSelectedIds,
-          doc,
+          page.nodes,
           handlePadding,
           false,
         )
@@ -994,7 +1027,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         initDrag(
           worldPos,
           useSelectionStore.getState().getSelectedIds(),
-          doc.nodes,
+          page.nodes,
         );
       } else {
         useSelectionStore.getState().clearSelection();

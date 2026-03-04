@@ -47,7 +47,9 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
   const { viewport, isPanning } = useViewStore();
   const { doc } = useDocStore();
   const activeTool = useToolStore((s) => s.activeTool);
-  const nodes = doc?.nodes || [];
+  const activePage =
+    doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
+  const nodes = activePage?.nodes || [];
 
   const cursorStyle =
     activeTool === "pan"
@@ -68,7 +70,7 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
   }, [width, height]);
 
   // แสดง loading ถ้ายังไม่มี document
-  if (!doc) {
+  if (!doc || !activePage) {
     return (
       <div className="flex items-center justify-center w-full h-full bg-gray-100">
         <p className="text-gray-500">Loading...</p>
@@ -94,9 +96,9 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
           <Rect
             x={0}
             y={0}
-            width={doc.width}
-            height={doc.height}
-            fill={doc.backgroundColor || "#ffffff"}
+            width={activePage.width}
+            height={activePage.height}
+            fill={activePage.backgroundColor || "#ffffff"}
             shadowColor="black"
             shadowBlur={10}
             shadowOpacity={0.3}
@@ -107,7 +109,7 @@ export function KonvaCanvas({ width, height }: KonvaCanvasProps) {
           {/* Group ที่ clip content ให้อยู่ภายใน document bounds */}
           <Group
             clipFunc={(ctx) => {
-              ctx.rect(0, 0, doc.width, doc.height);
+              ctx.rect(0, 0, activePage.width, activePage.height);
             }}
           >
             {/* Render ทุก nodes */}

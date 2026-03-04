@@ -523,12 +523,16 @@ export function ContextMenu() {
   // =============================================
   if (!isOpen || !doc) return null;
 
+  const activePage =
+    doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0] ?? null;
+
   const selectedIds = getSelectedIds();
   const hasSelection = selectedIds.length > 0;
   const multipleSelected = selectedIds.length >= 2;
 
   // ตรวจสอบว่ามี node ที่ล็อคอยู่หรือไม่
-  const selectedNodes = doc.nodes.filter((n) => selectedIds.includes(n.id));
+  const selectedNodes =
+    activePage?.nodes.filter((n) => selectedIds.includes(n.id)) || [];
   const allLocked =
     selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
   const isGrouped = hasGroup();

@@ -295,6 +295,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const { viewport } = useViewStore();
   const { editingNodeId } = useTextEditStore();
 
+  const activePage =
+    doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
+
   const trRef = useRef<Konva.Transformer>(null);
   const proxyRef = useRef<Konva.Rect>(null);
   const origStatesRef = useRef<OrigNodeState[]>([]);
@@ -312,6 +315,8 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
 
   const selectedNodes = doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
   const selectedNodeMap = new Map(selectedNodes.map((n) => [n.id, n]));
+  const selectedNodes =
+    activePage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
   const bounds = getMultiSelectionBoundsWithRotation(selectedNodes);
   const isMulti = selectedNodes.length > 1;
   const isEditingText = editingNodeId !== null;
@@ -540,24 +545,24 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         const fr = shape.rotation();
 
         // Clamp to document bounds
-        if (doc) {
+        if (activePage) {
           if (node.type === "image") {
             const asp = fw / fh;
-            if (fw > doc.width) {
-              fw = doc.width;
+            if (fw > activePage.width) {
+              fw = activePage.width;
               fh = fw / asp;
             }
-            if (fh > doc.height) {
-              fh = doc.height;
+            if (fh > activePage.height) {
+              fh = activePage.height;
               fw = fh * asp;
             }
           } else {
-            fw = Math.min(fw, doc.width);
-            fh = Math.min(fh, doc.height);
+            fw = Math.min(fw, activePage.width);
+            fh = Math.min(fh, activePage.height);
           }
           const { halfX, halfY } = rotatedHalfExtents(fw, fh, fr);
-          fx = Math.max(halfX, Math.min(doc.width - halfX, fx));
-          fy = Math.max(halfY, Math.min(doc.height - halfY, fy));
+          fx = Math.max(halfX, Math.min(activePage.width - halfX, fx));
+          fy = Math.max(halfY, Math.min(activePage.height - halfY, fy));
         }
 
         // Reset scale & apply final dimensions
@@ -620,10 +625,13 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           if (doc) {
             fw = Math.min(fw, doc.width);
             fh = Math.min(fh, doc.height);
+          if (activePage) {
+            fw = Math.min(fw, activePage.width);
+            fh = Math.min(fh, activePage.height);
             const hw = fw / 2,
               hh = fh / 2;
-            fx = Math.max(hw, Math.min(doc.width - hw, fx));
-            fy = Math.max(hh, Math.min(doc.height - hh, fy));
+            fx = Math.max(hw, Math.min(activePage.width - hw, fx));
+            fy = Math.max(hh, Math.min(activePage.height - hh, fy));
           }
           setKonvaShape(
             stage,
@@ -856,7 +864,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       boundBoxFunc={(oldBox, newBox) => {
         if (Math.abs(newBox.width) < 5 || Math.abs(newBox.height) < 5)
           return oldBox;
-        if (!doc) return newBox;
+        if (!activePage) return newBox;
         const isRot =
           Math.abs(oldBox.width - newBox.width) < 1 &&
           Math.abs(oldBox.height - newBox.height) < 1;
@@ -875,7 +883,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           const heightChanged =
             Math.abs(Math.abs(newBox.height) - Math.abs(oldBox.height)) > 0.5;
 
-          const otherNodes = doc.nodes.filter(
+          const otherNodes = activePage.nodes.filter(
             (n) => !selectedIds.has(n.id) && n.visible,
           );
           const sizeSnap = snapResizeSize(

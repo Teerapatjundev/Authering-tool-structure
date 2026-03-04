@@ -147,8 +147,12 @@ export function RightSidebar() {
   const { selectedIds } = useSelectionStore();
   const { doc } = useDocStore();
 
+  const activePage =
+    doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
+
   // ดึง selected nodes
-  const selectedNodes = doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
+  const selectedNodes =
+    activePage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
   const ids = selectedNodes.map((n) => n.id);
 
   // ถ้าไม่มี selection → แสดง Background Color
@@ -159,7 +163,7 @@ export function RightSidebar() {
         <div className={SIDEBAR_DESIGN.contentDefault}>
           <PropertySection icon={Palette} title="Background">
             <ColorInput
-              value={doc?.backgroundColor || "#ffffff"}
+              value={activePage?.backgroundColor || "#ffffff"}
               onChange={(v) => {
                 useDocStore.getState().updateBackgroundColor(v);
                 useDocStore.getState().autoSave();

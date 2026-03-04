@@ -25,14 +25,22 @@ export const A4_LANDSCAPE_HEIGHT = 794;
  * @returns Document ใหม่ที่ว่างเปล่า
  */
 export function createEmptyDocument(id: string, title = "Untitled"): Document {
+  const firstPageId = `page_${id}_1`;
   return {
     id,
     title,
     version: 1,
-    nodes: [],
-    width: A4_LANDSCAPE_WIDTH,
-    height: A4_LANDSCAPE_HEIGHT,
-    backgroundColor: "#ffffff",
+    pages: [
+      {
+        id: firstPageId,
+        title: "Page 1",
+        nodes: [],
+        width: A4_LANDSCAPE_WIDTH,
+        height: A4_LANDSCAPE_HEIGHT,
+        backgroundColor: "#ffffff",
+      },
+    ],
+    activePageId: firstPageId,
     updatedAt: Date.now(),
   };
 }

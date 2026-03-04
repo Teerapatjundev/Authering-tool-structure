@@ -86,6 +86,8 @@ function extractYouTubeId(url: string): string | null {
 export function ElementsPanel() {
   const { canvasSize, viewport } = useViewStore();
   const { doc } = useDocStore();
+  const activePage =
+    doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
 
   const [videoUrl, setVideoUrl] = useState("");
   const [textLinkUrl, setTextLinkUrl] = useState("");
@@ -96,8 +98,8 @@ export function ElementsPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getCenterPos = () => {
-    if (doc) {
-      return { x: doc.width / 2, y: doc.height / 2 };
+    if (activePage) {
+      return { x: activePage.width / 2, y: activePage.height / 2 };
     }
     const centerX = (-viewport.x + canvasSize.width / 2) / viewport.zoom;
     const centerY = (-viewport.y + canvasSize.height / 2) / viewport.zoom;
