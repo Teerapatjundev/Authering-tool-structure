@@ -7,6 +7,7 @@
  * - insertRect: เพิ่มสี่เหลี่ยม
  * - insertEllipse: เพิ่มวงรี
  * - insertText: เพิ่มข้อความ
+ * - insertTextLink: เพิ่มลิงก์ข้อความ
  * - insertImage: เพิ่มรูปภาพ
  * - insertVideo: เพิ่มวิดีโอ
  */
@@ -102,6 +103,36 @@ export function insertText(x: number, y: number, text = "Text"): void {
     fontSize: 24,
     fontFamily: "Arial",
     fill: "#000000",
+    fontStyle: "normal",
+    align: "left",
+  };
+
+  commitInsert([node]);
+}
+
+/**
+ * เพิ่มลิงก์ข้อความลงใน canvas
+ */
+export function insertTextLink(
+  x: number,
+  y: number,
+  url = "https://example.com",
+): void {
+  const node: TextNode = {
+    id: generateNodeId(),
+    type: "text",
+    x,
+    y,
+    width: 280,
+    height: 40,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    text: url,
+    fontSize: 20,
+    fontFamily: "Arial",
+    fill: "#2563eb",
     fontStyle: "normal",
     align: "left",
   };

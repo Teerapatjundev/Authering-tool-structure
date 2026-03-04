@@ -70,6 +70,8 @@ const OVERFLOW_PAD = 100;
 const ZOOM_SCALE_BY = 1.05;
 /** ระยะเวลา long-press เพื่อเปิด context menu (ms) */
 const LONG_PRESS_MS = 500;
+const ERASER_CURSOR =
+  'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724%27 height=%2724%27 viewBox=%270 0 24 24%27%3E%3Cpath fill=%27%23ffffff%27 stroke=%27%23111827%27 stroke-width=%271.5%27 d=%27M7 17 17.5 6.5a2.12 2.12 0 0 1 3 3L10 20H7v-3Z%27/%3E%3Cpath fill=%27%23f97316%27 d=%27M6 20h6v2H6z%27/%3E%3C/svg%3E") 4 20, crosshair';
 
 /** Konva Transformer anchor/element names */
 const TRANSFORMER_ANCHORS = [
@@ -307,6 +309,8 @@ function snapAndUpdateNodes(
 // ===============================================
 
 export function EventBridge({ stageRef }: EventBridgeProps) {
+  const activeTool = useToolStore((s) => s.activeTool);
+
   // ─── Refs ───
   const dragStartRef = useRef<Point | null>(null);
   const marqueeStartRef = useRef<Point | null>(null);
@@ -323,6 +327,24 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
   const isErasingRef = useRef(false);
   const erasedNodeIdsRef = useRef<Set<string>>(new Set());
   const erasedNodesRef = useRef<EditorNode[]>([]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    const container = stage.container();
+    if (!container) return;
+
+    if (activeTool === "eraser") {
+      container.style.cursor = ERASER_CURSOR;
+    } else if (activeTool === "pen" || activeTool === "highlighter") {
+      container.style.cursor = "crosshair";
+    } else if (activeTool === "pan") {
+      container.style.cursor = "grab";
+    } else {
+      container.style.cursor = "default";
+    }
+  }, [activeTool, stageRef]);
 
   useEffect(() => {
     const stage = stageRef.current;

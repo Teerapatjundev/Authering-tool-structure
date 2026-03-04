@@ -29,14 +29,26 @@ export type Tool =
 interface ToolState {
   activeTool: Tool;
   isDrawing: boolean;
+  penColor: string;
+  penStrokeWidth: number;
+  highlighterColor: string;
+  highlighterStrokeWidth: number;
 
   setTool: (tool: Tool) => void;
   setIsDrawing: (isDrawing: boolean) => void;
+  setPenColor: (color: string) => void;
+  setPenStrokeWidth: (width: number) => void;
+  setHighlighterColor: (color: string) => void;
+  setHighlighterStrokeWidth: (width: number) => void;
 }
 
 export const useToolStore = create<ToolState>((set) => ({
   activeTool: "select",
   isDrawing: false,
+  penColor: "#111827",
+  penStrokeWidth: 3,
+  highlighterColor: "#facc15",
+  highlighterStrokeWidth: 16,
 
   /** เปลี่ยนเครื่องมือ */
   setTool: (tool: Tool) => {
@@ -46,5 +58,21 @@ export const useToolStore = create<ToolState>((set) => ({
   /** ตั้งค่าสถานะการวาด */
   setIsDrawing: (isDrawing: boolean) => {
     set({ isDrawing });
+  },
+
+  setPenColor: (color: string) => {
+    set({ penColor: color });
+  },
+
+  setPenStrokeWidth: (width: number) => {
+    set({ penStrokeWidth: Math.max(1, Math.min(50, width)) });
+  },
+
+  setHighlighterColor: (color: string) => {
+    set({ highlighterColor: color });
+  },
+
+  setHighlighterStrokeWidth: (width: number) => {
+    set({ highlighterStrokeWidth: Math.max(1, Math.min(80, width)) });
   },
 }));

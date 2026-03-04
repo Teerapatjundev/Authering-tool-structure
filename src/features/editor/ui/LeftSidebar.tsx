@@ -114,7 +114,7 @@ export function LeftSidebar() {
       {/* Tab panel (togglable) */}
       {openPage && (
         <div className="relative h-full">
-          <div className="flex flex-col w-64 h-full overflow-hidden bg-white border-r border-gray-200">
+          <div className="flex flex-col w-72 h-full overflow-hidden bg-white border-r border-gray-200">
             <div className="px-4 py-3 border-b border-gray-100">
               <h2 className="font-semibold text-gray-800">{openPage.title}</h2>
               <p className="mt-1 text-xs text-gray-500">{openPage.subtitle}</p>
@@ -129,7 +129,7 @@ export function LeftSidebar() {
             type="button"
             aria-label="Collapse left panel"
             onClick={() => setOpenPageId(null)}
-            className="absolute z-10 flex items-center justify-center w-6 h-6 -translate-y-1/2 bg-white border border-gray-200 rounded-full -right-3 top-1/2 text-gray-500 hover:bg-gray-50"
+            className="absolute z-10 flex items-center justify-center w-6 h-20 -translate-y-1/2 bg-white border border-gray-200 rounded-full -right-4 top-1/2 text-gray-500 hover:bg-gray-50"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>

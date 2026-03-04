@@ -46,6 +46,7 @@ import {
   insertRect,
   insertEllipse,
   insertText,
+  insertTextLink,
   insertPracticeCard,
 } from "./core/commands/insert";
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
@@ -234,6 +235,9 @@ export function EditorClient({ docId }: EditorClientProps) {
             break;
           case "text":
             insertText(dropX, dropY, "Enter text");
+            break;
+          case "textlink":
+            insertTextLink(dropX, dropY, "https://example.com");
             break;
         }
         return;

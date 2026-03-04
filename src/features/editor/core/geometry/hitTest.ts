@@ -32,15 +32,27 @@ function pointToSegmentDistance(
   return Math.hypot(point.x - projX, point.y - projY);
 }
 
+function worldToPathLocal(pathNode: PathNode, x: number, y: number) {
+  const rad = ((pathNode.rotation || 0) * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = x - pathNode.x;
+  const dy = y - pathNode.y;
+
+  return {
+    x: dx * cos + dy * sin + pathNode.width / 2,
+    y: -dx * sin + dy * cos + pathNode.height / 2,
+  };
+}
+
 function hitTestPath(pathNode: PathNode, x: number, y: number): boolean {
-  const left = pathNode.x - pathNode.width / 2;
-  const top = pathNode.y - pathNode.height / 2;
+  const localPoint = worldToPathLocal(pathNode, x, y);
 
   const points: Array<{ x: number; y: number }> = [];
   for (let i = 0; i < pathNode.points.length; i += 2) {
     points.push({
-      x: left + pathNode.points[i],
-      y: top + pathNode.points[i + 1],
+      x: pathNode.points[i],
+      y: pathNode.points[i + 1],
     });
   }
 
@@ -48,14 +60,14 @@ function hitTestPath(pathNode: PathNode, x: number, y: number): boolean {
 
   if (points.length === 1) {
     return (
-      Math.hypot(x - points[0].x, y - points[0].y) <=
+      Math.hypot(localPoint.x - points[0].x, localPoint.y - points[0].y) <=
       pathNode.strokeWidth / 2 + PATH_HIT_PADDING
     );
   }
 
   const threshold = pathNode.strokeWidth / 2 + PATH_HIT_PADDING;
   for (let i = 0; i < points.length - 1; i++) {
-    if (pointToSegmentDistance({ x, y }, points[i], points[i + 1]) <= threshold) {
+    if (pointToSegmentDistance(localPoint, points[i], points[i + 1]) <= threshold) {
       return true;
     }
   }

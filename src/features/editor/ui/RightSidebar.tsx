@@ -51,13 +51,16 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  Bold,
   ChevronDown,
+  Italic,
   Palette,
   Move,
   Maximize2,
   RotateCw,
   Eye,
   Type,
+  Underline,
   PenLine,
   RectangleHorizontal,
 } from "lucide-react";
@@ -72,8 +75,9 @@ const MIXED = Symbol("mixed");
 type MixedValue<T> = T | typeof MIXED;
 
 const SIDEBAR_DESIGN = {
-  aside: "flex flex-col h-full bg-background border-l w-64",
-  asideScrollable: "flex flex-col h-full overflow-y-auto bg-background border-l w-64",
+  aside: "flex flex-col h-full bg-background border-l w-72",
+  asideScrollable:
+    "flex flex-col h-full overflow-y-auto bg-background border-l w-72",
   contentCompact: "flex-1 p-4 space-y-1",
   contentDefault: "flex-1 p-4 space-y-4",
   header: "px-4 py-3 border-b",
@@ -81,11 +85,16 @@ const SIDEBAR_DESIGN = {
   headerSubtitle: "mt-0.5 text-xs text-muted-foreground capitalize",
   section: "py-2",
   sectionTrigger: "flex w-full items-center justify-between group",
-  sectionLabel: "flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground tracking-wide",
+  sectionLabel:
+    "flex items-center gap-1.5 text-xs font-semibold uppercase text-muted-foreground tracking-wide",
   sectionIcon: "h-3.5 w-3.5",
   sectionChevron: "h-3.5 w-3.5 text-muted-foreground transition-transform",
   sectionContent: "pt-2 space-y-2",
 } as const;
+
+const FONT_SIZE_OPTIONS = [
+  8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 56, 64, 72, 96,
+];
 
 /** หาค่าร่วมจากหลาย nodes — ถ้าค่าเหมือนกันหมดจะ return ค่านั้น, ถ้าต่างกัน return MIXED */
 function getCommon<T>(nodes: Node[], getter: (n: Node) => T): MixedValue<T> {
@@ -118,6 +127,16 @@ function mixedToStr(
 
 function isMixed(v: MixedValue<unknown> | undefined): boolean {
   return v === MIXED;
+}
+
+function buildFontStyle(
+  isBold: boolean,
+  isItalic: boolean,
+): TextNode["fontStyle"] {
+  if (isBold && isItalic) return "bold italic";
+  if (isBold) return "bold";
+  if (isItalic) return "italic";
+  return "normal";
 }
 
 // =============================================
@@ -295,9 +314,7 @@ export function RightSidebar() {
               onValueChange={([v]) => apply({ opacity: v / 100 })}
             />
             <p className="text-xs text-center text-muted-foreground">
-              {isMixed(commonOpacity)
-                ? "Mixed"
-                : `${commonOpacity as number}%`}
+              {isMixed(commonOpacity) ? "Mixed" : `${commonOpacity as number}%`}
             </p>
           </div>
         </PropertySection>
@@ -334,7 +351,11 @@ export function RightSidebar() {
                   min={0}
                   max={50}
                   step={1}
-                  value={[isMixed(commonStrokeWidth) ? 0 : (commonStrokeWidth as number)]}
+                  value={[
+                    isMixed(commonStrokeWidth)
+                      ? 0
+                      : (commonStrokeWidth as number),
+                  ]}
                   onValueChange={([v]) =>
                     apply({ strokeWidth: v }, ["rect", "ellipse"])
                   }
@@ -353,10 +374,7 @@ export function RightSidebar() {
         {/* Corner Radius — rect */}
         {hasRectNodes && (
           <>
-            <PropertySection
-              icon={RectangleHorizontal}
-              title="Corner Radius"
-            >
+            <PropertySection icon={RectangleHorizontal} title="Corner Radius">
               <NumberField
                 label="Radius"
                 value={
@@ -364,9 +382,7 @@ export function RightSidebar() {
                     ? undefined
                     : (commonCornerRadius as number)
                 }
-                placeholder={
-                  isMixed(commonCornerRadius) ? "Mixed" : undefined
-                }
+                placeholder={isMixed(commonCornerRadius) ? "Mixed" : undefined}
                 onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
                 min={0}
                 max={100}
@@ -404,9 +420,7 @@ function SidebarHeader({
   return (
     <div className={SIDEBAR_DESIGN.header}>
       <h2 className={SIDEBAR_DESIGN.headerTitle}>{title}</h2>
-      {subtitle && (
-        <p className={SIDEBAR_DESIGN.headerSubtitle}>{subtitle}</p>
-      )}
+      {subtitle && <p className={SIDEBAR_DESIGN.headerSubtitle}>{subtitle}</p>}
     </div>
   );
 }
@@ -431,17 +445,18 @@ function PropertySection({
   const Icon = icon;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className={SIDEBAR_DESIGN.section}>
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className={SIDEBAR_DESIGN.section}
+    >
       <CollapsibleTrigger className={SIDEBAR_DESIGN.sectionTrigger}>
         <span className={SIDEBAR_DESIGN.sectionLabel}>
           {Icon && <Icon className={SIDEBAR_DESIGN.sectionIcon} />}
           {title}
         </span>
         <ChevronDown
-          className={cn(
-            SIDEBAR_DESIGN.sectionChevron,
-            open && "rotate-180",
-          )}
+          className={cn(SIDEBAR_DESIGN.sectionChevron, open && "rotate-180")}
         />
       </CollapsibleTrigger>
       <CollapsibleContent className={SIDEBAR_DESIGN.sectionContent}>
@@ -558,10 +573,29 @@ function MultiTextProperties({
     textNodes as Node[],
     (n) => (n as TextNode).fontStyle || "normal",
   );
+  const commonUnderline = getCommon(textNodes as Node[], (n) =>
+    Boolean((n as TextNode).underline),
+  );
   const commonAlign = getCommon(
     textNodes as Node[],
     (n) => (n as TextNode).align || "left",
   );
+
+  const styleFromFirst = textNodes[0]?.fontStyle || "normal";
+  const underlineFromFirst = Boolean(textNodes[0]?.underline);
+  const boldMixed = isMixed(commonFontStyle);
+  const italicMixed = isMixed(commonFontStyle);
+  const underlineMixed = isMixed(commonUnderline);
+
+  const boldValue = boldMixed
+    ? styleFromFirst.includes("bold")
+    : (commonFontStyle as string).includes("bold");
+  const italicValue = italicMixed
+    ? styleFromFirst.includes("italic")
+    : (commonFontStyle as string).includes("italic");
+  const underlineValue = underlineMixed
+    ? underlineFromFirst
+    : (commonUnderline as boolean);
 
   return (
     <>
@@ -581,21 +615,37 @@ function MultiTextProperties({
       {/* Font Settings */}
       <PropertySection icon={Type} title="Font">
         <div className="space-y-2">
-          <NumberField
-            label="Size"
-            value={
-              isMixed(commonFontSize) ? undefined : (commonFontSize as number)
-            }
-            placeholder={isMixed(commonFontSize) ? "Mixed" : undefined}
-            onChange={(v) => applyText({ fontSize: v })}
-            min={8}
-            max={200}
-          />
+          <div className="space-y-1">
+            <div className="text-[11px] text-muted-foreground">Size</div>
+            <Select
+              value={
+                isMixed(commonFontSize)
+                  ? undefined
+                  : String(commonFontSize as number)
+              }
+              onValueChange={(v) => applyText({ fontSize: Number(v) })}
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue
+                  placeholder={isMixed(commonFontSize) ? "Mixed" : "Size"}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {FONT_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={String(size)}>
+                    {size}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Font Family — shadcn Select */}
           <Select
             value={
-              isMixed(commonFontFamily) ? undefined : (commonFontFamily as string)
+              isMixed(commonFontFamily)
+                ? undefined
+                : (commonFontFamily as string)
             }
             onValueChange={(v) => applyText({ fontFamily: v })}
           >
@@ -614,28 +664,66 @@ function MultiTextProperties({
             </SelectContent>
           </Select>
 
-          {/* Font Style — shadcn Select */}
-          <Select
-            value={
-              isMixed(commonFontStyle) ? undefined : (commonFontStyle as string)
-            }
-            onValueChange={(v) =>
-              applyText({
-                fontStyle: v as "normal" | "bold" | "italic",
-              })
-            }
-          >
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue
-                placeholder={isMixed(commonFontStyle) ? "Mixed" : "Style"}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="normal">Normal</SelectItem>
-              <SelectItem value="bold">Bold</SelectItem>
-              <SelectItem value="italic">Italic</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Font Style Toggles */}
+          <div className="space-y-1">
+            <div className="text-[11px] text-muted-foreground">Style</div>
+            <ToggleGroup
+              type="multiple"
+              value={[
+                ...(boldValue ? ["bold"] : []),
+                ...(italicValue ? ["italic"] : []),
+                ...(underlineValue ? ["underline"] : []),
+              ]}
+              onValueChange={(values) => {
+                applyText({
+                  fontStyle: buildFontStyle(
+                    values.includes("bold"),
+                    values.includes("italic"),
+                  ),
+                  underline: values.includes("underline"),
+                });
+              }}
+              className="justify-start"
+            >
+              <ToggleGroupItem value="bold" size="sm" aria-label="Bold">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  height="24px"
+                  viewBox="0 -960 960 960"
+                  width="24px"
+                  fill="#1f1f1f"
+                >
+                  <path d="M272-200v-560h221q65 0 120 40t55 111q0 51-23 78.5T602-491q25 11 55.5 41t30.5 90q0 89-65 124.5T501-200H272Zm121-112h104q48 0 58.5-24.5T566-372q0-11-10.5-35.5T494-432H393v120Zm0-228h93q33 0 48-17t15-38q0-24-17-39t-44-15h-95v109Z" />
+                </svg>
+              </ToggleGroupItem>
+              <ToggleGroupItem value="italic" size="sm" aria-label="Italic">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  height="24px"
+                  viewBox="0 -960 960 960"
+                  width="24px"
+                  fill="#1f1f1f"
+                >
+                  <path d="M200-200v-100h160l120-360H320v-100h400v100H580L460-300h140v100H200Z" />
+                </svg>{" "}
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="underline"
+                size="sm"
+                aria-label="Underline"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  height="24px"
+                  viewBox="0 -960 960 960"
+                  width="24px"
+                  fill="#1f1f1f"
+                >
+                  <path d="M200-120v-80h560v80H200Zm123-223q-56-63-56-167v-330h103v336q0 56 28 91t82 35q54 0 82-35t28-91v-336h103v330q0 104-56 167t-157 63q-101 0-157-63Z" />
+                </svg>
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         </div>
       </PropertySection>
 

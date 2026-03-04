@@ -15,6 +15,7 @@ import { useDocStore } from "../../stores/docStore";
 import { useSelectionStore } from "../../stores/selectionStore";
 import { useContextMenuStore } from "../../stores/contextMenuStore";
 import { useVideoPlayStore } from "../../stores/videoPlayStore";
+import { useToolStore } from "../../stores/toolStore";
 import { useHistoryStore } from "../../core/history/historyStore";
 import { DeleteOp, InsertOp } from "../../core/history/ops";
 import { generateNodeId } from "@/shared/utils/id";
@@ -120,26 +121,41 @@ function pointToSegmentDistance(point: Point, a: Point, b: Point): number {
   return Math.hypot(point.x - projX, point.y - projY);
 }
 
+function worldToPathLocal(pathNode: PathNode, point: Point): Point {
+  const rad = ((pathNode.rotation || 0) * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const dx = point.x - pathNode.x;
+  const dy = point.y - pathNode.y;
+
+  return {
+    x: dx * cos + dy * sin + pathNode.width / 2,
+    y: -dx * sin + dy * cos + pathNode.height / 2,
+  };
+}
+
 /** ตรวจว่า point อยู่ใกล้เส้น path พอสำหรับใช้เป็น eraser hit test หรือไม่ */
 function isPointNearPath(pathNode: PathNode, point: Point, radius: number): boolean {
-  const left = pathNode.x - pathNode.width / 2;
-  const top = pathNode.y - pathNode.height / 2;
+  const localPoint = worldToPathLocal(pathNode, point);
   const absPoints: Point[] = [];
 
   for (let i = 0; i < pathNode.points.length; i += 2) {
-    absPoints.push({ x: left + pathNode.points[i], y: top + pathNode.points[i + 1] });
+    absPoints.push({ x: pathNode.points[i], y: pathNode.points[i + 1] });
   }
 
   if (absPoints.length < 2) {
     if (absPoints.length === 1) {
-      return Math.hypot(point.x - absPoints[0].x, point.y - absPoints[0].y) <= radius;
+      return (
+        Math.hypot(localPoint.x - absPoints[0].x, localPoint.y - absPoints[0].y) <=
+        radius
+      );
     }
     return false;
   }
 
   const threshold = radius + pathNode.strokeWidth / 2;
   for (let i = 0; i < absPoints.length - 1; i++) {
-    if (pointToSegmentDistance(point, absPoints[i], absPoints[i + 1]) <= threshold) {
+    if (pointToSegmentDistance(localPoint, absPoints[i], absPoints[i + 1]) <= threshold) {
       return true;
     }
   }
@@ -164,18 +180,26 @@ function smoothFreehandPoint(
 
 /** preset ของปากกา/ไฮไลท์ */
 function getFreehandStyle(tool: "pen" | "highlighter"): FreehandStyle {
+  const {
+    penColor,
+    penStrokeWidth,
+    highlighterColor,
+    highlighterStrokeWidth,
+  } = useToolStore.getState();
+
   if (tool === "highlighter") {
     return {
       mode: "highlighter",
-      stroke: "#facc15",
-      strokeWidth: 16,
+      stroke: highlighterColor,
+      strokeWidth: Math.max(1, highlighterStrokeWidth),
       opacity: 0.35,
     };
   }
+
   return {
     mode: "pen",
-    stroke: "#111827",
-    strokeWidth: 3,
+    stroke: penColor,
+    strokeWidth: Math.max(1, penStrokeWidth),
     opacity: 1,
   };
 }

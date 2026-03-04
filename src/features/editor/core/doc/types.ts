@@ -74,7 +74,8 @@ export interface TextNode extends BaseNode {
   fontSize: number; // ขนาดตัวอักษร
   fontFamily: string; // ฟอนต์
   fill: string; // สีตัวอักษร
-  fontStyle?: "normal" | "bold" | "italic";
+  fontStyle?: "normal" | "bold" | "italic" | "bold italic";
+  underline?: boolean;
   align?: "left" | "center" | "right";
 }
 

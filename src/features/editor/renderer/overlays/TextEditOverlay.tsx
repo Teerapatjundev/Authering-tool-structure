@@ -197,6 +197,7 @@ export function TextEditOverlay() {
           fontFamily: node.fontFamily,
           fontWeight: node.fontStyle?.includes("bold") ? "bold" : "normal",
           fontStyle: node.fontStyle?.includes("italic") ? "italic" : "normal",
+          textDecoration: node.underline ? "underline" : "none",
           color: node.fill,
           textAlign: node.align as "left" | "center" | "right" | undefined,
           lineHeight: 1.2,

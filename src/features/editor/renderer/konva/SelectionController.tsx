@@ -10,7 +10,7 @@ import { useViewStore } from "../../stores/viewStore";
 import { useHistoryStore } from "../../core/history/historyStore";
 import { useTextEditStore } from "../../stores/textEditStore";
 import { TransformOp } from "../../core/history/ops";
-import { Node, NodeType } from "../../core/doc/types";
+import { Node, NodeType, PathNode } from "../../core/doc/types";
 import {
   getMultiSelectionBoundsWithRotation,
   getGroupBoundsInRotatedFrame,
@@ -108,6 +108,65 @@ function computeMultiPositions(
   });
 }
 
+function bakePathGeometry(
+  node: PathNode,
+  centerX: number,
+  centerY: number,
+  rotation: number,
+  scaleX: number,
+  scaleY: number,
+) {
+  const baseCx = node.width / 2;
+  const baseCy = node.height / 2;
+
+  const transformed: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < node.points.length; i += 2) {
+    transformed.push({
+      x: (node.points[i] - baseCx) * scaleX + baseCx,
+      y: (node.points[i + 1] - baseCy) * scaleY + baseCy,
+    });
+  }
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of transformed) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const points = transformed.flatMap((p) => [p.x - minX, p.y - minY]);
+
+  const localDeltaX = minX + width / 2 - baseCx;
+  const localDeltaY = minY + height / 2 - baseCy;
+  const rad = (rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  return {
+    x: centerX + localDeltaX * cos - localDeltaY * sin,
+    y: centerY + localDeltaX * sin + localDeltaY * cos,
+    width,
+    height,
+    points,
+  };
+}
+
+function samePoints(a?: number[], b?: number[]) {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (Math.abs(a[i] - b[i]) > 0.0001) return false;
+  }
+  return true;
+}
+
 /** Apply position/size to a Konva shape. finalize=true resets scale to 1. */
 function setKonvaShape(
   stage: Konva.Stage,
@@ -151,6 +210,21 @@ function setKonvaShape(
     if (finalize) {
       shape.scaleX(1);
       shape.scaleY(1);
+    }
+  } else if (type === "path") {
+    shape.x(x);
+    shape.y(y);
+    shape.rotation(rot);
+    if (finalize) {
+      shape.width(w);
+      shape.height(h);
+      shape.offsetX(w / 2);
+      shape.offsetY(h / 2);
+      shape.scaleX(1);
+      shape.scaleY(1);
+    } else {
+      shape.scaleX(w / Math.max(1, origW));
+      shape.scaleY(h / Math.max(1, origH));
     }
   } else {
     shape.x(x);
@@ -237,12 +311,12 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const sizeSnapResultRef = useRef<SizeSnapResult | null>(null);
 
   const selectedNodes = doc?.nodes.filter((n) => selectedIds.has(n.id)) || [];
+  const selectedNodeMap = new Map(selectedNodes.map((n) => [n.id, n]));
   const bounds = getMultiSelectionBoundsWithRotation(selectedNodes);
   const isMulti = selectedNodes.length > 1;
   const isEditingText = editingNodeId !== null;
   const allLocked =
     selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
-  const hasPathSelection = selectedNodes.some((n) => n.type === "path");
 
   // Sync group rotation on selection change (synchronous to avoid 1-frame flicker)
   const key = Array.from(selectedIds).sort().join(",");
@@ -397,7 +471,63 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       const orig = origStatesRef.current[0];
 
       if (shape && orig) {
-        let fw = Math.max(5, Math.abs(shape.width() * shape.scaleX()));
+        if (node.type === "path") {
+          const pathNode = node as PathNode;
+          const fr = shape.rotation();
+          const baked = bakePathGeometry(
+            pathNode,
+            shape.x(),
+            shape.y(),
+            fr,
+            shape.scaleX(),
+            shape.scaleY(),
+          );
+
+          shape.scaleX(1);
+          shape.scaleY(1);
+          shape.x(baked.x);
+          shape.y(baked.y);
+          shape.rotation(fr);
+          shape.width(baked.width);
+          shape.height(baked.height);
+          shape.offsetX(baked.width / 2);
+          shape.offsetY(baked.height / 2);
+          (shape as Konva.Line).points(baked.points);
+
+          updateNodes([
+            {
+              id: node.id,
+              changes: {
+                x: baked.x,
+                y: baked.y,
+                width: baked.width,
+                height: baked.height,
+                rotation: fr,
+                points: baked.points,
+              } as Partial<Node>,
+            },
+          ]);
+          historyUpdates.push({
+            id: node.id,
+            oldProps: {
+              x: orig.x,
+              y: orig.y,
+              width: orig.width,
+              height: orig.height,
+              rotation: orig.rotation,
+              points: pathNode.points,
+            } as Partial<Node>,
+            newProps: {
+              x: baked.x,
+              y: baked.y,
+              width: baked.width,
+              height: baked.height,
+              rotation: fr,
+              points: baked.points,
+            } as Partial<Node>,
+          });
+        } else {
+          let fw = Math.max(5, Math.abs(shape.width() * shape.scaleX()));
         let fh = Math.max(5, Math.abs(shape.height() * shape.scaleY()));
 
         // Apply exact snapped dimensions (fix floating-point drift from Konva scale)
@@ -459,6 +589,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           },
           newProps: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
         });
+        }
       }
     } else {
       /* --- Multi selection --- */
@@ -480,9 +611,12 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         );
 
         const storeUpdates: Array<{ id: string; changes: Partial<Node> }> = [];
+        const rawScaleX = pr.scaleX();
+        const rawScaleY = pr.scaleY();
 
         positions.forEach((p, i) => {
           let { x: fx, y: fy, width: fw, height: fh } = p;
+          const selectedNode = selectedNodeMap.get(p.id);
           if (doc) {
             fw = Math.min(fw, doc.width);
             fh = Math.min(fh, doc.height);
@@ -504,6 +638,34 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
             p.origHeight,
             true,
           );
+
+          let pathPoints: number[] | undefined;
+          if (selectedNode?.type === "path") {
+            const pathNode = selectedNode as PathNode;
+            const sx = (Math.sign(rawScaleX) || 1) * (fw / Math.max(1, p.origWidth));
+            const sy = (Math.sign(rawScaleY) || 1) * (fh / Math.max(1, p.origHeight));
+            const baked = bakePathGeometry(pathNode, fx, fy, p.rotation, sx, sy);
+            fx = baked.x;
+            fy = baked.y;
+            fw = baked.width;
+            fh = baked.height;
+            pathPoints = baked.points;
+
+            const pathShape = stage.findOne(`#shape_${p.id}`) as Konva.Line | null;
+            if (pathShape) {
+              pathShape.x(fx);
+              pathShape.y(fy);
+              pathShape.rotation(p.rotation);
+              pathShape.width(fw);
+              pathShape.height(fh);
+              pathShape.offsetX(fw / 2);
+              pathShape.offsetY(fh / 2);
+              pathShape.points(pathPoints);
+              pathShape.scaleX(1);
+              pathShape.scaleY(1);
+            }
+          }
+
           storeUpdates.push({
             id: p.id,
             changes: {
@@ -512,6 +674,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
               width: fw,
               height: fh,
               rotation: p.rotation,
+              ...(pathPoints ? { points: pathPoints } : {}),
             },
           });
 
@@ -524,6 +687,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
               width: orig.width,
               height: orig.height,
               rotation: orig.rotation,
+              ...(selectedNode?.type === "path"
+                ? { points: (selectedNode as PathNode).points }
+                : {}),
             },
             newProps: {
               x: fx,
@@ -531,6 +697,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
               width: fw,
               height: fh,
               rotation: p.rotation,
+              ...(pathPoints ? { points: pathPoints } : {}),
             },
           });
         });
@@ -585,7 +752,11 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           u.oldProps.y !== u.newProps.y ||
           u.oldProps.width !== u.newProps.width ||
           u.oldProps.height !== u.newProps.height ||
-          u.oldProps.rotation !== u.newProps.rotation,
+          u.oldProps.rotation !== u.newProps.rotation ||
+          !samePoints(
+            (u.oldProps as { points?: number[] }).points,
+            (u.newProps as { points?: number[] }).points,
+          ),
       )
     ) {
       const op: TransformOp = {
@@ -617,16 +788,6 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         rotateEnabled={false}
         borderStroke="#ff4444"
         borderDash={[4, 4]}
-      />
-    );
-  }
-
-  if (hasPathSelection && !isMulti) {
-    return (
-      <Transformer
-        ref={trRef}
-        enabledAnchors={[]}
-        rotateEnabled={false}
       />
     );
   }

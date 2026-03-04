@@ -174,6 +174,7 @@ function RenderText({
       fontFamily={node.fontFamily}
       fill={node.fill}
       fontStyle={node.fontStyle || "normal"}
+      textDecoration={node.underline ? "underline" : undefined}
       align={node.align || "left"}
       width={node.width}
       height={node.height}
@@ -307,3 +308,4 @@ function RenderPath({
     />
   );
 }
+
