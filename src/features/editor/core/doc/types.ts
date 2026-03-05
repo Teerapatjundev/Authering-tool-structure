@@ -22,6 +22,7 @@ export type NodeType =
   | "text"
   | "image"
   | "video"
+  | "audio"
   | "path";
 
 // ===============================================
@@ -137,6 +138,13 @@ export interface VideoNode extends BaseNode {
   src: string; // URL ของวิดีโอ
 }
 
+// เสียง
+export interface AudioNode extends BaseNode {
+  type: "audio";
+  src: string; // URL ของไฟล์เสียง
+  name?: string; // ชื่อไฟล์ (ถ้ามี)
+}
+
 // เส้นวาดอิสระ (pen/highlighter)
 export interface PathNode extends BaseNode {
   type: "path";
@@ -155,6 +163,7 @@ export type Node =
   | TextNode
   | ImageNode
   | VideoNode
+  | AudioNode
   | PathNode;
 
 // ===============================================

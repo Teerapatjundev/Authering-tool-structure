@@ -38,6 +38,7 @@ import {
   TextNode,
   ImageNode,
   VideoNode,
+  AudioNode,
   PathNode,
 } from "../../core/doc/types";
 import { useTextEditStore } from "../../stores/textEditStore";
@@ -112,6 +113,9 @@ function RenderNode({ node }: { node: Node }) {
 
     case "video":
       return <RenderVideo node={node} commonProps={commonProps} />;
+
+    case "audio":
+      return <RenderAudio node={node} commonProps={commonProps} />;
 
     case "path":
       return <RenderPath node={node} commonProps={commonProps} />;
@@ -268,10 +272,11 @@ function RenderVideo({
 }) {
   const { playVideo, playingNodeId } = useVideoPlayStore();
   const { clearSelection } = useSelectionStore();
+  const isYouTubeSource = /^[a-zA-Z0-9_-]{11}$/.test(node.src);
 
-  // Video thumbnail from YouTube
+  // Video thumbnail from YouTube (เฉพาะแหล่ง YouTube)
   const [thumbnail] = useImage(
-    `https://img.youtube.com/vi/${node.src}/hqdefault.jpg`,
+    isYouTubeSource ? `https://img.youtube.com/vi/${node.src}/hqdefault.jpg` : "",
     "anonymous",
   );
 
@@ -322,6 +327,19 @@ function RenderVideo({
         />
       )}
 
+      {!isPlaying && !thumbnail && (
+        <Text
+          x={0}
+          y={node.height / 2 - 10}
+          width={node.width}
+          text="Video file"
+          align="center"
+          fill="#ffffff"
+          fontSize={16}
+          fontStyle="bold"
+        />
+      )}
+
       {/* Play button overlay - แสดงเฉพาะตอนไม่ได้เล่น */}
       {!isPlaying && (
         <Group x={node.width / 2} y={node.height / 2}>
@@ -338,6 +356,51 @@ function RenderVideo({
         </Group>
       )}
     </Group>
+  );
+}
+
+function RenderAudio({
+  node,
+  commonProps,
+}: {
+  node: AudioNode;
+  commonProps: Record<string, unknown>;
+}) {
+  return (
+    <>
+      <Rect
+        {...commonProps}
+        width={node.width}
+        height={node.height}
+        fill="#f8fafc"
+        stroke="#cbd5e1"
+        strokeWidth={2}
+        cornerRadius={8}
+      />
+      <Text
+        x={node.x - node.width / 2 + 14}
+        y={node.y - node.height / 2 + 12}
+        rotation={node.rotation}
+        width={node.width - 28}
+        text={`🔊 ${node.name || "Audio file"}`}
+        fill="#0f172a"
+        fontSize={14}
+        fontStyle="bold"
+        align="left"
+      />
+      <Text
+        x={node.x - node.width / 2 + 14}
+        y={node.y - node.height / 2 + 36}
+        rotation={node.rotation}
+        width={node.width - 28}
+        text="Double-click to open audio"
+        fill="#64748b"
+        fontSize={12}
+        align="left"
+        onDblClick={() => window.open(node.src, "_blank", "noopener,noreferrer")}
+        onDblTap={() => window.open(node.src, "_blank", "noopener,noreferrer")}
+      />
+    </>
   );
 }
 

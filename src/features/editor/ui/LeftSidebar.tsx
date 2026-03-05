@@ -10,9 +10,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ElementsPanel } from "@/features/editor/ui/leftSidebar/ElementsPanel";
 import { PagePanel } from "@/features/editor/ui/leftSidebar/PagePanel";
 import { PracticePanel } from "@/features/editor/ui/leftSidebar/PracticePanel";
+import { ControlsPanel } from "@/features/editor/ui/leftSidebar/ControlsPanel";
 import {
   Tooltip,
   TooltipContent,
@@ -24,12 +24,19 @@ import {
   LayoutGrid,
   FileText,
   PenSquare,
+  ListChecks,
   Pen,
 } from "lucide-react";
 import { ToolPanel } from "./leftSidebar/ToolPanel";
 import { useToolStore } from "../stores/toolStore";
+import { ElementsPanel } from "./leftSidebar/ElementsPanel";
 
-type LeftSidebarPageId = "elements" | "page" | "practice" | "tool";
+type LeftSidebarPageId =
+  | "elements"
+  | "page"
+  | "practice"
+  | "controls"
+  | "tool";
 
 export function LeftSidebar() {
   const { setTool } = useToolStore();
@@ -61,6 +68,14 @@ export function LeftSidebar() {
           subtitle: "เลือกประเภทแบบฝึกหัดที่ต้องการสร้าง",
           icon: PenSquare,
           render: () => <PracticePanel />,
+        },
+        {
+          id: "controls" as const,
+          label: "Controls",
+          title: "Exercise Controls",
+          subtitle: "Submit button, restart button, timer",
+          icon: ListChecks,
+          render: () => <ControlsPanel />,
         },
         {
           id: "tool" as const,

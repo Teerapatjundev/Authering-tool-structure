@@ -2,19 +2,13 @@
  * ===============================================
  * ELEMENTS PANEL - หน้ารายการ Elements
  * ===============================================
- *
- * แสดง elements ที่สามารถลากมาวางบน canvas:
- * - Rectangle (ลากหรือคลิกเพื่อเพิ่ม)
- * - Ellipse / Circle (ลากหรือคลิกเพื่อเพิ่ม)
- * - Text (ลากหรือคลิกเพื่อเพิ่ม)
- * - Image (อัปโหลดไฟล์ หรือ ลากรูปมาวาง)
- * - Video (YouTube URL)
  */
 
 "use client";
 
 import { useCallback, useRef, useState } from "react";
 import {
+  insertAudio,
   insertEllipse,
   insertImage,
   insertPentagon,
@@ -36,54 +30,15 @@ interface ElementType {
 }
 
 const elements: ElementType[] = [
-  {
-    id: "rect",
-    icon: "□",
-    label: "Rectangle",
-    description: "Add rectangle",
-  },
-  {
-    id: "ellipse",
-    icon: "○",
-    label: "Ellipse",
-    description: "Add ellipse",
-  },
-  {
-    id: "triangle",
-    icon: "△",
-    label: "Triangle",
-    description: "Add triangle",
-  },
-  {
-    id: "pentagon",
-    icon: "⬟",
-    label: "Pentagon",
-    description: "Add pentagon",
-  },
-  {
-    id: "text",
-    icon: "T",
-    label: "Text",
-    description: "Add text",
-  },
-  {
-    id: "textlink",
-    icon: "🔗",
-    label: "Textlink",
-    description: "Add URL text",
-  },
-  {
-    id: "image",
-    icon: "🖼",
-    label: "Image",
-    description: "Upload or drag",
-  },
-  {
-    id: "video",
-    icon: "▶",
-    label: "YouTube",
-    description: "Add YouTube video",
-  },
+  { id: "rect", icon: "□", label: "Rectangle", description: "Add rectangle" },
+  { id: "ellipse", icon: "○", label: "Ellipse", description: "Add ellipse" },
+  { id: "triangle", icon: "△", label: "Triangle", description: "Add triangle" },
+  { id: "pentagon", icon: "⬟", label: "Pentagon", description: "Add pentagon" },
+  { id: "text", icon: "T", label: "Text", description: "Add text" },
+  { id: "textlink", icon: "🔗", label: "Textlink", description: "Add URL text" },
+  { id: "image", icon: "🖼", label: "Image", description: "Upload or drag" },
+  { id: "video", icon: "▶", label: "Video", description: "YouTube or upload" },
+  { id: "audio", icon: "🔊", label: "Audio", description: "Upload audio file" },
 ];
 
 function extractYouTubeId(url: string): string | null {
@@ -107,9 +62,13 @@ export function ElementsPanel() {
   const [textLinkUrl, setTextLinkUrl] = useState("");
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [showVideoInput, setShowVideoInput] = useState(false);
+  const [showAudioUpload, setShowAudioUpload] = useState(false);
   const [showTextLinkInput, setShowTextLinkInput] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const getCenterPos = () => {
     if (activePage) {
@@ -148,6 +107,9 @@ export function ElementsPanel() {
       case "video":
         setShowVideoInput(true);
         break;
+      case "audio":
+        setShowAudioUpload(true);
+        break;
     }
   };
 
@@ -169,41 +131,50 @@ export function ElementsPanel() {
       };
       reader.readAsDataURL(file);
     },
-    [
-      doc,
-      canvasSize.width,
-      canvasSize.height,
-      viewport.x,
-      viewport.y,
-      viewport.zoom,
-    ],
+    [doc, canvasSize.width, canvasSize.height, viewport.x, viewport.y, viewport.zoom],
   );
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleImageFile(file);
-    }
-  };
+  const handleVideoFile = useCallback(
+    (file: File) => {
+      if (!file.type.startsWith("video/")) {
+        alert("Please select a video file");
+        return;
+      }
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        if (result) {
+          const { x, y } = getCenterPos();
+          insertVideo(x, y, result);
+          setShowVideoInput(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [doc, canvasSize.width, canvasSize.height, viewport.x, viewport.y, viewport.zoom],
+  );
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
+  const handleAudioFile = useCallback(
+    (file: File) => {
+      if (!file.type.startsWith("audio/")) {
+        alert("Please select an audio file");
+        return;
+      }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleImageFile(file);
-    }
-  };
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        if (result) {
+          const { x, y } = getCenterPos();
+          insertAudio(x, y, result, file.name);
+          setShowAudioUpload(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [doc, canvasSize.width, canvasSize.height, viewport.x, viewport.y, viewport.zoom],
+  );
 
   const handleAddVideo = () => {
     const youtubeId = extractYouTubeId(videoUrl.trim());
@@ -219,12 +190,10 @@ export function ElementsPanel() {
 
   const handleAddTextLink = () => {
     const url = textLinkUrl.trim();
-
     if (!url) {
       alert("Please enter a URL");
       return;
     }
-
     if (!/^https?:\/\//i.test(url)) {
       alert("URL must start with http:// or https://");
       return;
@@ -236,6 +205,16 @@ export function ElementsPanel() {
     setShowTextLinkInput(false);
   };
 
+  const handleMediaDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleMediaDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
   return (
     <>
       <div className="flex-1 p-3 overflow-auto">
@@ -244,7 +223,9 @@ export function ElementsPanel() {
           {elements.map((element) => (
             <div
               key={element.id}
-              draggable={element.id !== "image" && element.id !== "video"}
+              draggable={
+                element.id !== "image" && element.id !== "video" && element.id !== "audio"
+              }
               onDragStart={(e) => {
                 e.dataTransfer.setData("application/element-type", element.id);
                 e.dataTransfer.effectAllowed = "copy";
@@ -325,7 +306,7 @@ export function ElementsPanel() {
                     const r = Math.min(ghostWidth, ghostHeight) / 2 - 6;
                     ctx.beginPath();
                     for (let i = 0; i < 5; i++) {
-                      const angle = (-Math.PI / 2) + (i * Math.PI * 2) / 5;
+                      const angle = -Math.PI / 2 + (i * Math.PI * 2) / 5;
                       const px = cx + r * Math.cos(angle);
                       const py = cy + r * Math.sin(angle);
                       if (i === 0) ctx.moveTo(px, py);
@@ -362,11 +343,7 @@ export function ElementsPanel() {
                 ghost.style.position = "absolute";
                 ghost.style.top = "-9999px";
                 document.body.appendChild(ghost);
-                e.dataTransfer.setDragImage(
-                  ghost,
-                  ghostWidth / 2,
-                  ghostHeight / 2,
-                );
+                e.dataTransfer.setDragImage(ghost, ghostWidth / 2, ghostHeight / 2);
                 requestAnimationFrame(() => {
                   document.body.removeChild(ghost);
                 });
@@ -377,7 +354,7 @@ export function ElementsPanel() {
               onClick={() => handleAddElement(element.id)}
               className={
                 "p-3 transition-colors bg-white border border-gray-200 rounded-lg active:cursor-grabbing hover:bg-gray-50 " +
-                (element.id !== "image" && element.id !== "video"
+                (element.id !== "image" && element.id !== "video" && element.id !== "audio"
                   ? "cursor-move"
                   : "cursor-pointer")
               }
@@ -390,9 +367,7 @@ export function ElementsPanel() {
                 </div>
                 <div className="text-sm font-medium text-gray-800">{element.label}</div>
               </div>
-              <div className="mt-1 text-xs text-center text-gray-500">
-                {element.description}
-              </div>
+              <div className="mt-1 text-xs text-center text-gray-500">{element.description}</div>
             </div>
           ))}
         </div>
@@ -400,36 +375,36 @@ export function ElementsPanel() {
 
       {showImageUpload && (
         <div className="p-3 border-t border-gray-200 bg-gray-50">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Upload Image:
-          </label>
-
+          <label className="block text-sm font-medium text-gray-700 mb-2">Upload Image:</label>
           <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`
-              border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all
-              ${
-                isDragging
-                  ? "border-blue-500 bg-blue-50"
-                  : "border-gray-300 hover:border-blue-400 hover:bg-gray-100"
-              }
-            `}
+            onDragOver={handleMediaDragOver}
+            onDragLeave={handleMediaDragLeave}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              const file = e.dataTransfer.files[0];
+              if (file) handleImageFile(file);
+            }}
+            onClick={() => imageInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
+              isDragging
+                ? "border-blue-500 bg-blue-50"
+                : "border-gray-300 hover:border-blue-400 hover:bg-gray-100"
+            }`}
           >
             <div className="text-3xl mb-2">📁</div>
-            <p className="text-sm text-gray-600">
-              {isDragging ? "Drop image here" : "Click or drag image here"}
-            </p>
+            <p className="text-sm text-gray-600">{isDragging ? "Drop image here" : "Click or drag image here"}</p>
             <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF, SVG</p>
           </div>
 
           <input
-            ref={fileInputRef}
+            ref={imageInputRef}
             type="file"
             accept="image/*"
-            onChange={handleFileChange}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImageFile(file);
+            }}
             className="hidden"
           />
 
@@ -444,9 +419,7 @@ export function ElementsPanel() {
 
       {showVideoInput && (
         <div className="p-3 border-t border-gray-200 bg-gray-50">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            YouTube URL:
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">YouTube URL:</label>
           <input
             type="text"
             value={videoUrl}
@@ -454,9 +427,40 @@ export function ElementsPanel() {
             placeholder="https://www.youtube.com/watch?v=..."
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <p className="text-xs text-gray-400 mt-1">
-            Supports: youtube.com/watch?v=, youtu.be/
-          </p>
+          <p className="text-xs text-gray-400 mt-1">Supports: youtube.com/watch?v=, youtu.be/</p>
+
+          <div
+            onDragOver={handleMediaDragOver}
+            onDragLeave={handleMediaDragLeave}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              const file = e.dataTransfer.files[0];
+              if (file) handleVideoFile(file);
+            }}
+            onClick={() => videoInputRef.current?.click()}
+            className={`mt-3 border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-all ${
+              isDragging
+                ? "border-blue-500 bg-blue-50"
+                : "border-gray-300 hover:border-blue-400 hover:bg-gray-100"
+            }`}
+          >
+            <div className="text-2xl mb-1">🎬</div>
+            <p className="text-sm text-gray-600">{isDragging ? "Drop video here" : "Click or drag video file here"}</p>
+            <p className="text-xs text-gray-400 mt-1">MP4, WebM, OGG</p>
+          </div>
+
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleVideoFile(file);
+            }}
+            className="hidden"
+          />
+
           <div className="flex gap-2 mt-2">
             <button
               onClick={handleAddVideo}
@@ -474,11 +478,53 @@ export function ElementsPanel() {
         </div>
       )}
 
+      {showAudioUpload && (
+        <div className="p-3 border-t border-gray-200 bg-gray-50">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Upload Audio:</label>
+          <div
+            onDragOver={handleMediaDragOver}
+            onDragLeave={handleMediaDragLeave}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              const file = e.dataTransfer.files[0];
+              if (file) handleAudioFile(file);
+            }}
+            onClick={() => audioInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all ${
+              isDragging
+                ? "border-blue-500 bg-blue-50"
+                : "border-gray-300 hover:border-blue-400 hover:bg-gray-100"
+            }`}
+          >
+            <div className="text-3xl mb-2">🎵</div>
+            <p className="text-sm text-gray-600">{isDragging ? "Drop audio here" : "Click or drag audio here"}</p>
+            <p className="text-xs text-gray-400 mt-1">MP3, WAV, OGG, M4A</p>
+          </div>
+
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleAudioFile(file);
+            }}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => setShowAudioUpload(false)}
+            className="w-full mt-2 px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-md"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {showTextLinkInput && (
         <div className="p-3 border-t border-gray-200 bg-gray-50">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Textlink URL:
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Textlink URL:</label>
           <input
             type="text"
             value={textLinkUrl}

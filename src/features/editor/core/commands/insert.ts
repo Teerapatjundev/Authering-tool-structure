@@ -23,6 +23,7 @@ import {
   TextNode,
   ImageNode,
   VideoNode,
+  AudioNode,
 } from "../doc/types";
 import { generateNodeId } from "@/shared/utils/id";
 import { useHistoryStore } from "../history/historyStore";
@@ -196,6 +197,36 @@ export function insertVideo(
     locked: false,
     visible: true,
     src,
+  };
+
+  commitInsert([node]);
+}
+
+/**
+ * เพิ่มไฟล์เสียงลงใน canvas
+ * @param src - URL ของไฟล์เสียง
+ */
+export function insertAudio(
+  x: number,
+  y: number,
+  src: string,
+  name?: string,
+  width = 320,
+  height = 80,
+): void {
+  const node: AudioNode = {
+    id: generateNodeId(),
+    type: "audio",
+    x,
+    y,
+    width,
+    height,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    src,
+    name,
   };
 
   commitInsert([node]);

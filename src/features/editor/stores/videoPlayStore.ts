@@ -5,7 +5,7 @@
  *
  * เก็บสถานะเมื่อต้องการเล่น video:
  * - playingNodeId: ID ของ video node ที่กำลังเล่น
- * - youtubeId: YouTube ID ของวิดีโอ
+ * - videoSrc: แหล่งที่มาของวิดีโอ (YouTube ID หรือ file/data URL)
  */
 
 "use client";
@@ -14,23 +14,23 @@ import { create } from "zustand";
 
 interface VideoPlayState {
   playingNodeId: string | null;
-  youtubeId: string | null;
+  videoSrc: string | null;
 
-  playVideo: (nodeId: string, youtubeId: string) => void;
+  playVideo: (nodeId: string, videoSrc: string) => void;
   stopVideo: () => void;
 }
 
 export const useVideoPlayStore = create<VideoPlayState>((set) => ({
   playingNodeId: null,
-  youtubeId: null,
+  videoSrc: null,
 
   /** เริ่มเล่น video */
-  playVideo: (nodeId: string, youtubeId: string) => {
-    set({ playingNodeId: nodeId, youtubeId });
+  playVideo: (nodeId: string, videoSrc: string) => {
+    set({ playingNodeId: nodeId, videoSrc });
   },
 
   /** หยุดเล่น video */
   stopVideo: () => {
-    set({ playingNodeId: null, youtubeId: null });
+    set({ playingNodeId: null, videoSrc: null });
   },
 }));

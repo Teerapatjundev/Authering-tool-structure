@@ -21,7 +21,7 @@ import { useSelectionStore } from "../../stores/selectionStore";
 import { VideoNode } from "../../core/doc/types";
 
 export function VideoOverlay() {
-  const { playingNodeId, youtubeId, stopVideo } = useVideoPlayStore();
+  const { playingNodeId, videoSrc, stopVideo } = useVideoPlayStore();
   const { viewport, worldToScreen } = useViewStore();
   const { doc } = useDocStore();
   const { bounds: marqueeBounds } = useMarqueeStore();
@@ -31,7 +31,7 @@ export function VideoOverlay() {
     doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
 
   // ไม่มี video กำลังเล่น
-  if (!playingNodeId || !youtubeId) return null;
+  if (!playingNodeId || !videoSrc) return null;
 
   // หา video node
   const node = activePage?.nodes.find(
@@ -60,6 +60,8 @@ export function VideoOverlay() {
     e.stopPropagation();
   };
 
+  const isYouTubeSource = /^[a-zA-Z0-9_-]{11}$/.test(videoSrc);
+
   return (
     <div
       className="absolute"
@@ -75,16 +77,25 @@ export function VideoOverlay() {
       }}
       onClick={handleVideoClick}
     >
-      {/* YouTube iframe */}
-      <iframe
-        className="w-full h-full rounded-lg"
-        src={`https://www.youtube.com/embed/${youtubeId}?autoplay=1&enablejsapi=1`}
-        title="YouTube Video"
-        frameBorder="0"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        style={{ pointerEvents: isMarqueeActive ? "none" : "auto" }}
-      />
+      {isYouTubeSource ? (
+        <iframe
+          className="w-full h-full rounded-lg"
+          src={`https://www.youtube.com/embed/${videoSrc}?autoplay=1&enablejsapi=1`}
+          title="YouTube Video"
+          frameBorder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          style={{ pointerEvents: isMarqueeActive ? "none" : "auto" }}
+        />
+      ) : (
+        <video
+          className="w-full h-full rounded-lg bg-black"
+          src={videoSrc}
+          controls
+          autoPlay
+          style={{ pointerEvents: isMarqueeActive ? "none" : "auto" }}
+        />
+      )}
 
       {/* Edit button - top left */}
       <button
