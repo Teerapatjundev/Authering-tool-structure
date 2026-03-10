@@ -14,10 +14,10 @@
  * - edit: แก้ไขคุณสมบัติอื่นๆ
  */
 
-import { Node } from "../doc/types";
+import { Node, Page } from "../doc/types";
 
 // ประเภทของ Operation
-export type OpType = "insert" | "delete" | "move" | "transform" | "edit";
+export type OpType = "insert" | "delete" | "move" | "transform" | "edit" | "pages";
 
 // Base interface ที่ทุก operation มี
 export interface BaseOp {
@@ -28,12 +28,14 @@ export interface BaseOp {
 // เพิ่ม nodes ใหม่
 export interface InsertOp extends BaseOp {
   type: "insert";
+  pageId: string;
   nodes: Node[];
 }
 
 // ลบ nodes
 export interface DeleteOp extends BaseOp {
   type: "delete";
+  pageId: string;
   nodeIds: string[];
   deletedNodes: Node[]; // เก็บไว้สำหรับ undo
 }
@@ -41,6 +43,7 @@ export interface DeleteOp extends BaseOp {
 // ย้าย nodes
 export interface MoveOp extends BaseOp {
   type: "move";
+  pageId: string;
   updates: Array<{
     id: string;
     oldX: number;
@@ -53,6 +56,7 @@ export interface MoveOp extends BaseOp {
 // เปลี่ยน size/rotation
 export interface TransformOp extends BaseOp {
   type: "transform";
+  pageId: string;
   updates: Array<{
     id: string;
     oldProps: Partial<Node>;
@@ -63,13 +67,23 @@ export interface TransformOp extends BaseOp {
 // แก้ไขคุณสมบัติอื่นๆ (เช่น text, fill)
 export interface EditOp extends BaseOp {
   type: "edit";
+  pageId: string;
   nodeId: string;
   oldProps: Partial<Node>;
   newProps: Partial<Node>;
 }
 
+// เปลี่ยนแปลง pages / activePageId (สำหรับ undo/redo ของการจัดการหน้า)
+export interface PagesOp extends BaseOp {
+  type: "pages";
+  oldPages: Page[];
+  newPages: Page[];
+  oldActivePageId: string;
+  newActivePageId: string;
+}
+
 // รวม Operation ทั้งหมด
-export type Operation = InsertOp | DeleteOp | MoveOp | TransformOp | EditOp;
+export type Operation = InsertOp | DeleteOp | MoveOp | TransformOp | EditOp | PagesOp;
 
 /**
  * สร้าง Operation ที่ตรงข้าม (สำหรับ Undo)
@@ -83,6 +97,7 @@ export function inverseOp(op: Operation): Operation {
       return {
         type: "delete",
         timestamp: Date.now(),
+        pageId: op.pageId,
         nodeIds: op.nodes.map((n) => n.id),
         deletedNodes: op.nodes,
       };
@@ -92,6 +107,7 @@ export function inverseOp(op: Operation): Operation {
       return {
         type: "insert",
         timestamp: Date.now(),
+        pageId: op.pageId,
         nodes: op.deletedNodes,
       };
 
@@ -100,6 +116,7 @@ export function inverseOp(op: Operation): Operation {
       return {
         type: "move",
         timestamp: Date.now(),
+        pageId: op.pageId,
         updates: op.updates.map((u) => ({
           id: u.id,
           oldX: u.newX,
@@ -114,6 +131,7 @@ export function inverseOp(op: Operation): Operation {
       return {
         type: "transform",
         timestamp: Date.now(),
+        pageId: op.pageId,
         updates: op.updates.map((u) => ({
           id: u.id,
           oldProps: u.newProps,
@@ -126,9 +144,20 @@ export function inverseOp(op: Operation): Operation {
       return {
         type: "edit",
         timestamp: Date.now(),
+        pageId: op.pageId,
         nodeId: op.nodeId,
         oldProps: op.newProps,
         newProps: op.oldProps,
+      };
+
+    case "pages":
+      return {
+        type: "pages",
+        timestamp: Date.now(),
+        oldPages: op.newPages,
+        newPages: op.oldPages,
+        oldActivePageId: op.newActivePageId,
+        newActivePageId: op.oldActivePageId,
       };
   }
 }

@@ -32,6 +32,7 @@ export function commitMove(
   const moveOp: MoveOp = {
     type: "move",
     timestamp: Date.now(),
+    pageId: doc.activePageId,
     updates: updates.map((u) => {
       const node = page.nodes.find((n) => n.id === u.id)!;
       return {
@@ -58,6 +59,9 @@ export function commitMoveWithOriginal(
 ): void {
   if (originalPositions.size === 0) return;
 
+  const { doc } = useDocStore.getState();
+  if (!doc) return;
+
   // ตรวจสอบว่ามีการเปลี่ยนตำแหน่งจริงหรือไม่
   let hasChanged = false;
   originalPositions.forEach((orig, id) => {
@@ -72,6 +76,7 @@ export function commitMoveWithOriginal(
   const moveOp: MoveOp = {
     type: "move",
     timestamp: Date.now(),
+    pageId: doc.activePageId,
     updates: Array.from(originalPositions.entries()).map(([id, orig]) => {
       const newPos = newPositions.get(id) || orig;
       return {
@@ -103,6 +108,7 @@ export function commitTransform(
   const transformOp: TransformOp = {
     type: "transform",
     timestamp: Date.now(),
+    pageId: doc.activePageId,
     updates: updates.map((u) => {
       const node = page.nodes.find((n) => n.id === u.id)!;
       const oldProps: Partial<Node> = {};

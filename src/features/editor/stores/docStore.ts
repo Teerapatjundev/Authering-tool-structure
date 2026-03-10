@@ -103,11 +103,17 @@ interface DocState {
   insertPageAt: (insertIndex: number) => void;
   duplicatePage: (pageId: string) => void;
   deletePage: (pageId: string) => void;
+  setPagesSnapshot: (pages: Page[], activePageId: string) => void;
   movePageToIndex: (pageId: string, toIndex: number) => void;
   addNode: (node: Node) => void;
   removeNodes: (nodeIds: string[]) => void;
   updateNode: (nodeId: string, updates: Partial<Node>) => void;
   updateNodes: (updates: Array<{ id: string; changes: Partial<Node> }>) => void;
+
+  addNodeToPage: (pageId: string, node: Node) => void;
+  removeNodesFromPage: (pageId: string, nodeIds: string[]) => void;
+  updateNodeOnPage: (pageId: string, nodeId: string, updates: Partial<Node>) => void;
+  updateNodesOnPage: (pageId: string, updates: Array<{ id: string; changes: Partial<Node> }>) => void;
   updateBackgroundColor: (color: string) => void;
   saveDoc: () => void;
   autoSave: () => void;
@@ -133,6 +139,10 @@ function ensureActivePage(doc: Document): Page {
   }
   doc.activePageId = fallback.id;
   return fallback;
+}
+
+function findPage(doc: Document, pageId: string): Page | null {
+  return doc.pages.find((p) => p.id === pageId) ?? null;
 }
 
 function migrateToPagedDocument(raw: any, docId: string): Document {
@@ -324,6 +334,16 @@ export const useDocStore = create<DocState>()(
       });
     },
 
+    setPagesSnapshot: (pages: Page[], activePageId: string) => {
+      set((state) => {
+        if (!state.doc) return;
+        state.doc.pages = pages;
+        state.doc.activePageId = activePageId;
+        ensureActivePage(state.doc);
+        state.doc.updatedAt = Date.now();
+      });
+    },
+
     movePageToIndex: (pageId: string, toIndex: number) => {
       set((state) => {
         if (!state.doc) return;
@@ -360,6 +380,16 @@ export const useDocStore = create<DocState>()(
       });
     },
 
+    addNodeToPage: (pageId: string, node: Node) => {
+      set((state) => {
+        if (!state.doc) return;
+        const page = findPage(state.doc, pageId);
+        if (!page) return;
+        page.nodes.push(node);
+        state.doc.updatedAt = Date.now();
+      });
+    },
+
     /**
      * ลบ nodes ตาม IDs
      */
@@ -368,6 +398,17 @@ export const useDocStore = create<DocState>()(
         if (!state.doc) return;
         const idsSet = new Set(nodeIds);
         const page = ensureActivePage(state.doc);
+        page.nodes = page.nodes.filter((n) => !idsSet.has(n.id));
+        state.doc.updatedAt = Date.now();
+      });
+    },
+
+    removeNodesFromPage: (pageId: string, nodeIds: string[]) => {
+      set((state) => {
+        if (!state.doc) return;
+        const page = findPage(state.doc, pageId);
+        if (!page) return;
+        const idsSet = new Set(nodeIds);
         page.nodes = page.nodes.filter((n) => !idsSet.has(n.id));
         state.doc.updatedAt = Date.now();
       });
@@ -388,6 +429,19 @@ export const useDocStore = create<DocState>()(
       });
     },
 
+    updateNodeOnPage: (pageId: string, nodeId: string, updates: Partial<Node>) => {
+      set((state) => {
+        if (!state.doc) return;
+        const page = findPage(state.doc, pageId);
+        if (!page) return;
+        const node = page.nodes.find((n) => n.id === nodeId);
+        if (node) {
+          Object.assign(node, updates);
+          state.doc.updatedAt = Date.now();
+        }
+      });
+    },
+
     /**
      * อัพเดทหลาย nodes พร้อมกัน
      */
@@ -395,6 +449,21 @@ export const useDocStore = create<DocState>()(
       set((state) => {
         if (!state.doc) return;
         const page = ensureActivePage(state.doc);
+        for (const { id, changes } of updates) {
+          const node = page.nodes.find((n) => n.id === id);
+          if (node) {
+            Object.assign(node, changes);
+          }
+        }
+        state.doc.updatedAt = Date.now();
+      });
+    },
+
+    updateNodesOnPage: (pageId: string, updates: Array<{ id: string; changes: Partial<Node> }>) => {
+      set((state) => {
+        if (!state.doc) return;
+        const page = findPage(state.doc, pageId);
+        if (!page) return;
         for (const { id, changes } of updates) {
           const node = page.nodes.find((n) => n.id === id);
           if (node) {

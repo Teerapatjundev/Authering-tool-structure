@@ -105,23 +105,30 @@ export const useHistoryStore = create<HistoryState>()(
  * @param op - Operation ที่ต้องการ apply
  */
 function applyOperation(op: Operation): void {
-  const { doc, updateNodes, addNode, removeNodes } = useDocStore.getState();
+  const {
+    doc,
+    updateNodesOnPage,
+    addNodeToPage,
+    removeNodesFromPage,
+    setPagesSnapshot,
+  } = useDocStore.getState();
   if (!doc) return;
 
   switch (op.type) {
     case "insert":
       // เพิ่ม nodes
-      op.nodes.forEach((node) => addNode(node));
+      op.nodes.forEach((node) => addNodeToPage(op.pageId, node));
       break;
 
     case "delete":
       // ลบ nodes
-      removeNodes(op.nodeIds);
+      removeNodesFromPage(op.pageId, op.nodeIds);
       break;
 
     case "move":
       // ย้าย nodes
-      updateNodes(
+      updateNodesOnPage(
+        op.pageId,
         op.updates.map((u) => ({
           id: u.id,
           changes: { x: u.newX, y: u.newY },
@@ -131,7 +138,8 @@ function applyOperation(op: Operation): void {
 
     case "transform":
       // Transform nodes (resize, rotate)
-      updateNodes(
+      updateNodesOnPage(
+        op.pageId,
         op.updates.map((u) => ({
           id: u.id,
           changes: u.newProps,
@@ -141,12 +149,16 @@ function applyOperation(op: Operation): void {
 
     case "edit":
       // แก้ไข properties
-      updateNodes([
+      updateNodesOnPage(op.pageId, [
         {
           id: op.nodeId,
           changes: op.newProps,
         },
       ]);
+      break;
+
+    case "pages":
+      setPagesSnapshot(op.newPages, op.newActivePageId);
       break;
   }
 }

@@ -107,6 +107,7 @@ export function alignNodes(direction: AlignDirection): void {
   const moveOp: MoveOp = {
     type: "move",
     timestamp: Date.now(),
+    pageId: doc.activePageId,
     updates,
   };
 
@@ -215,6 +216,7 @@ export function toggleLock(): void {
       const op: EditOp = {
         type: "edit",
         timestamp: Date.now(),
+        pageId: doc.activePageId,
         nodeId: node.id,
         oldProps: { locked: node.locked },
         newProps: { locked: newLocked },
@@ -252,6 +254,7 @@ export function groupNodes(): void {
     const op: EditOp = {
       type: "edit",
       timestamp: Date.now(),
+      pageId: doc.activePageId,
       nodeId,
       oldProps: { groupId: node.groupId, groupRotation: node.groupRotation },
       newProps: { groupId, groupRotation: undefined },
@@ -282,6 +285,7 @@ export function ungroupNodes(): void {
     const op: EditOp = {
       type: "edit",
       timestamp: Date.now(),
+      pageId: doc.activePageId,
       nodeId: node.id,
       oldProps: { groupId: node.groupId, groupRotation: node.groupRotation },
       newProps: { groupId: undefined, groupRotation: undefined },

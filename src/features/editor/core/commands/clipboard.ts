@@ -59,6 +59,10 @@ export function cut(): void {
 export function paste(): void {
   if (clipboard.length === 0) return;
 
+  const { doc } = useDocStore.getState();
+  if (!doc) return;
+  const pageId = doc.activePageId;
+
   // Clone และ offset ตำแหน่ง
   const newNodes = clipboard.map((n) => ({
     ...n,
@@ -70,6 +74,7 @@ export function paste(): void {
   const op: InsertOp = {
     type: "insert",
     timestamp: Date.now(),
+    pageId,
     nodes: newNodes,
   };
 
@@ -88,6 +93,8 @@ export function deleteSelected(): void {
   const { getSelectedIds, clearSelection } = useSelectionStore.getState();
   if (!doc) return;
 
+  const pageId = doc.activePageId;
+
   const page = doc.pages.find((p) => p.id === doc.activePageId) ?? doc.pages[0];
   if (!page) return;
 
@@ -105,6 +112,7 @@ export function deleteSelected(): void {
   const op: DeleteOp = {
     type: "delete",
     timestamp: Date.now(),
+    pageId,
     nodeIds: deletableIds,
     deletedNodes: deletableNodes,
   };

@@ -106,9 +106,13 @@ export function TextEditOverlay() {
 
   /** ลบ text node */
   const deleteTextNode = () => {
+    const { doc } = useDocStore.getState();
+    if (!doc) return;
+
     const op: DeleteOp = {
       type: "delete",
       timestamp: Date.now(),
+      pageId: doc.activePageId,
       nodeIds: [node.id],
       deletedNodes: [node],
     };

@@ -254,6 +254,7 @@ export function beginFreehandDrawing(
   const insertOp: InsertOp = {
     type: "insert",
     timestamp: Date.now(),
+    pageId: doc.activePageId,
     nodes: [node],
   };
   useHistoryStore.getState().commit(insertOp);
@@ -382,9 +383,13 @@ export function eraseAtPoint(worldPos: Point, refs: FreehandRefs): void {
 export function commitEraseHistory(refs: FreehandRefs): void {
   if (refs.erasedNodesRef.current.length === 0) return;
 
+  const { doc } = useDocStore.getState();
+  if (!doc) return;
+
   const op: DeleteOp = {
     type: "delete",
     timestamp: Date.now(),
+    pageId: doc.activePageId,
     nodeIds: refs.erasedNodesRef.current.map((n) => n.id),
     deletedNodes: refs.erasedNodesRef.current,
   };
