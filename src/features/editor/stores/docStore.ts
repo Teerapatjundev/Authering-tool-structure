@@ -20,7 +20,77 @@ import { Document, Node, Page } from "../core/doc/types";
 import { createEmptyDocument, A4_LANDSCAPE_WIDTH, A4_LANDSCAPE_HEIGHT } from "../core/doc/migrate";
 import { docsService } from "@/services/api/docs.service";
 import { debounce } from "@/shared/utils/debounce";
-import { generateId } from "@/shared/utils/id";
+import { generateId, generateNodeId } from "@/shared/utils/id";
+
+function deepClone<T>(value: T): T {
+  const sc = (globalThis as any).structuredClone as undefined | ((v: any) => any);
+  if (typeof sc === "function") {
+    try {
+      return sc(value);
+    } catch {
+      // Fall through to JSON clone
+    }
+  }
+
+  const seen = new WeakSet<object>();
+  const json = JSON.stringify(value as any, (_key, val) => {
+    if (typeof val === "function") return undefined;
+
+    if (val && typeof val === "object") {
+      // Drop DOM / Window-like references that cannot be cloned or serialized.
+      const anyVal = val as any;
+      if (typeof anyVal.nodeType === "number") return undefined;
+      if (anyVal.window && anyVal.window === val) return undefined;
+      if (anyVal.self && anyVal.self === val) return undefined;
+
+      if (seen.has(val)) return undefined;
+      seen.add(val);
+    }
+
+    return val;
+  });
+  return JSON.parse(json) as T;
+}
+
+function remapIdsForPageNodes(sourceNodes: Node[]): Node[] {
+  // Remap node ids, and also remap groupId / practice.id / masterId within the duplicated set.
+  const nodeIdMap = new Map<string, string>();
+  const groupIdMap = new Map<string, string>();
+  const practiceIdMap = new Map<string, string>();
+
+  for (const node of sourceNodes) {
+    nodeIdMap.set(node.id, generateNodeId());
+    if (node.groupId && !groupIdMap.has(node.groupId)) {
+      groupIdMap.set(node.groupId, `group_${generateId()}`);
+    }
+    if (node.practice?.id && !practiceIdMap.has(node.practice.id)) {
+      practiceIdMap.set(node.practice.id, `practice_${generateId()}`);
+    }
+  }
+
+  return sourceNodes.map((n) => {
+    const cloned = deepClone(n);
+    cloned.id = nodeIdMap.get(n.id) ?? generateNodeId();
+
+    if (cloned.groupId) {
+      cloned.groupId = groupIdMap.get(cloned.groupId) ?? cloned.groupId;
+    }
+
+    if (cloned.masterId) {
+      // If master is within the same page, remap to the duplicated master. Otherwise, keep reference.
+      cloned.masterId = nodeIdMap.get(cloned.masterId) ?? cloned.masterId;
+    }
+
+    if (cloned.practice?.id) {
+      const newPracticeId = practiceIdMap.get(cloned.practice.id);
+      if (newPracticeId) {
+        cloned.practice.id = newPracticeId;
+      }
+    }
+
+    return cloned;
+  });
+}
 
 interface DocState {
   doc: Document | null;
@@ -31,6 +101,8 @@ interface DocState {
   setDoc: (doc: Document) => void;
   setActivePage: (pageId: string) => void;
   insertPageAt: (insertIndex: number) => void;
+  duplicatePage: (pageId: string) => void;
+  deletePage: (pageId: string) => void;
   movePageToIndex: (pageId: string, toIndex: number) => void;
   addNode: (node: Node) => void;
   removeNodes: (nodeIds: string[]) => void;
@@ -191,6 +263,63 @@ export const useDocStore = create<DocState>()(
           if (p.title?.startsWith("Page ")) p.title = `Page ${idx + 1}`;
         });
         doc.activePageId = newPageId;
+        doc.updatedAt = Date.now();
+      });
+    },
+
+    duplicatePage: (pageId: string) => {
+      set((state) => {
+        if (!state.doc) return;
+        const doc = state.doc;
+
+        const fromIndex = doc.pages.findIndex((p) => p.id === pageId);
+        if (fromIndex < 0) return;
+
+        const source = doc.pages[fromIndex];
+        const newPageId = `page_${generateId()}`;
+        const duplicated: Page = {
+          id: newPageId,
+          title: source.title,
+          width: source.width,
+          height: source.height,
+          backgroundColor: source.backgroundColor,
+          nodes: remapIdsForPageNodes(Array.isArray(source.nodes) ? source.nodes : []),
+        };
+
+        doc.pages.splice(fromIndex + 1, 0, duplicated);
+        // รีเซ็ตชื่อหน้าให้เรียงตามลำดับแบบง่ายๆ (เฉพาะ title ที่ขึ้นต้นด้วย "Page ")
+        doc.pages.forEach((p, idx) => {
+          if (p.title?.startsWith("Page ")) p.title = `Page ${idx + 1}`;
+        });
+        doc.activePageId = newPageId;
+        doc.updatedAt = Date.now();
+      });
+    },
+
+    deletePage: (pageId: string) => {
+      set((state) => {
+        if (!state.doc) return;
+        const doc = state.doc;
+        if (doc.pages.length <= 1) return;
+
+        const index = doc.pages.findIndex((p) => p.id === pageId);
+        if (index < 0) return;
+
+        const deletingActive = doc.activePageId === pageId;
+        doc.pages.splice(index, 1);
+
+        if (deletingActive) {
+          const next = doc.pages[index] ?? doc.pages[index - 1] ?? doc.pages[0] ?? null;
+          if (next) doc.activePageId = next.id;
+        }
+
+        // รีเซ็ตชื่อหน้าให้เรียงตามลำดับแบบง่ายๆ (เฉพาะ title ที่ขึ้นต้นด้วย "Page ")
+        doc.pages.forEach((p, idx) => {
+          if (p.title?.startsWith("Page ")) p.title = `Page ${idx + 1}`;
+        });
+
+        // Ensure active page remains valid
+        ensureActivePage(doc);
         doc.updatedAt = Date.now();
       });
     },

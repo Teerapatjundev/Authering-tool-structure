@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Stage, Layer, Rect, Group } from "react-konva";
+import { Button } from "@/components/ui/button";
 import { useDocStore } from "@/features/editor/stores/docStore";
 import { RenderNodes } from "@/features/editor/renderer/konva/RenderNodes";
 import type { Page } from "@/features/editor/core/doc/types";
@@ -28,14 +29,60 @@ function InsertPageButton({ insertIndex }: { insertIndex: number }) {
 function PagePreview({ page, index }: { page: Page; index: number }) {
   const doc = useDocStore((s) => s.doc);
   const setActivePage = useDocStore((s) => s.setActivePage);
+  const duplicatePage = useDocStore((s) => s.duplicatePage);
+  const deletePage = useDocStore((s) => s.deletePage);
   const isActive = !!doc && doc.activePageId === page.id;
+  const canDelete = (doc?.pages?.length ?? 0) > 1;
 
   const scale = PREVIEW_WIDTH / page.width;
   const previewHeight = Math.max(1, Math.round(page.height * scale));
 
   return (
     <div className="w-full">
-      <div className="mb-1 text-xs text-gray-600">Page {index + 1}</div>
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="text-xs text-gray-600">Page {index + 1}</div>
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            draggable={false}
+            className="px-2 h-7"
+            onPointerDown={(e) => e.stopPropagation()}
+            onDragStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              duplicatePage(page.id);
+            }}
+            aria-label={`Duplicate page ${index + 1}`}
+          >
+            Duplicate
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            draggable={false}
+            className="px-2 h-7 text-destructive hover:text-destructive"
+            disabled={!canDelete}
+            onPointerDown={(e) => e.stopPropagation()}
+            onDragStart={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              deletePage(page.id);
+            }}
+            aria-label={`Delete page ${index + 1}`}
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
       <button
         type="button"
         onClick={() => setActivePage(page.id)}
