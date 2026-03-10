@@ -43,12 +43,10 @@ import { deleteSelected, copy, paste, cut } from "./core/commands/clipboard";
 import { nudgeSelection } from "./core/commands/transform";
 import {
   insertImage,
-  insertPentagon,
   insertRect,
   insertEllipse,
   insertText,
   insertTextLink,
-  insertTriangle,
   insertPracticeCard,
   insertConnectionPair,
   insertChoiceOptions,
@@ -269,12 +267,6 @@ export function EditorClient({ docId }: EditorClientProps) {
             break;
           case "ellipse":
             insertEllipse(dropX, dropY, 120, 120);
-            break;
-          case "triangle":
-            insertTriangle(dropX, dropY, 140, 120);
-            break;
-          case "pentagon":
-            insertPentagon(dropX, dropY, 140, 140);
             break;
           case "text":
             insertText(dropX, dropY, "Enter text");
