@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { Stage, Layer, Rect, Group } from "react-konva";
 import { Button } from "@/components/ui/button";
 import { useDocStore } from "@/features/editor/stores/docStore";
+import {
+  deletePage as commitDeletePage,
+  duplicatePage as commitDuplicatePage,
+  insertPageAt as commitInsertPageAt,
+} from "@/features/editor/core/commands/pages";
 import { RenderNodes } from "@/features/editor/renderer/konva/RenderNodes";
 import type { Page } from "@/features/editor/core/doc/types";
 
@@ -43,12 +48,10 @@ function DeletePageIcon(props: { className?: string }) {
 }
 
 function InsertPageButton({ insertIndex }: { insertIndex: number }) {
-  const insertPageAt = useDocStore((s) => s.insertPageAt);
-
   return (
     <button
       type="button"
-      onClick={() => insertPageAt(insertIndex)}
+      onClick={() => commitInsertPageAt(insertIndex)}
       className="flex items-center justify-center w-full py-1"
       aria-label="Add page"
     >
@@ -63,8 +66,6 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
   const doc = useDocStore((s) => s.doc);
   const setActivePage = useDocStore((s) => s.setActivePage);
   const isActive = !!doc && doc.activePageId === page.id;
-  const duplicatePage = useDocStore((s) => s.duplicatePage);
-  const deletePage = useDocStore((s) => s.deletePage);
   const canDelete = (doc?.pages?.length ?? 0) > 1;
 
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -124,7 +125,7 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              duplicatePage(page.id);
+              commitDuplicatePage(page.id);
             }}
             aria-label={`Duplicate page ${index + 1}`}
           >
@@ -141,7 +142,7 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
-              deletePage(page.id);
+              commitDeletePage(page.id);
             }}
             aria-label={`Delete page ${index + 1}`}
           >

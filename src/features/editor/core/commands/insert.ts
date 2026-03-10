@@ -28,6 +28,7 @@ import {
 import { generateNodeId } from "@/shared/utils/id";
 import { useHistoryStore } from "../history/historyStore";
 import { InsertOp } from "../history/ops";
+import { useDocStore } from "../../stores/docStore";
 
 /**
  * เพิ่มสี่เหลี่ยมลงใน canvas
@@ -604,9 +605,12 @@ export function insertChoiceOptions(
 function commitInsert(
   nodes: Node[],
 ): void {
+  const { doc } = useDocStore.getState();
+  if (!doc) return;
   const op: InsertOp = {
     type: "insert",
     timestamp: Date.now(),
+    pageId: doc.activePageId,
     nodes,
   };
   useHistoryStore.getState().commit(op);

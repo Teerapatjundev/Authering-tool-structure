@@ -580,6 +580,9 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
     /** Alt + drag = duplicate selected nodes แล้วลาก */
     function handleAltDuplicate(selectedNodes: any[], worldPos: Point): void {
+      const { doc } = useDocStore.getState();
+      if (!doc) return;
+
       const clonedNodes = selectedNodes.map((n: any) => ({
         ...JSON.parse(JSON.stringify(n)),
         id: generateNodeId(),
@@ -588,6 +591,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const insertOp: InsertOp = {
         type: "insert",
         timestamp: Date.now(),
+        pageId: doc.activePageId,
         nodes: clonedNodes,
       };
       useHistoryStore.getState().commit(insertOp);

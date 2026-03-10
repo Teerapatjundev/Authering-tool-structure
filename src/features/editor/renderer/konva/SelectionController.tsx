@@ -529,9 +529,14 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     updates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>,
   ) => {
     if (updates.length === 0 || !hasHistoryDiff(updates)) return;
+
+    const { doc } = useDocStore.getState();
+    if (!doc) return;
+
     const op: TransformOp = {
       type: "transform",
       timestamp: Date.now(),
+      pageId: doc.activePageId,
       updates,
     };
     const { past } = useHistoryStore.getState();

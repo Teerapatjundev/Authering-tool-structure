@@ -44,6 +44,7 @@ export function editNode(nodeId: string, changes: Partial<Node>): void {
   const op: EditOp = {
     type: "edit",
     timestamp: Date.now(),
+    pageId: doc.activePageId,
     nodeId,
     oldProps,
     newProps,
@@ -102,6 +103,7 @@ export function editNodes(
     const op: EditOp = {
       type: "edit",
       timestamp: Date.now(),
+      pageId: doc.activePageId,
       nodeId: u.id,
       oldProps: u.oldProps,
       newProps: u.newProps,
@@ -111,6 +113,7 @@ export function editNodes(
     const op: TransformOp = {
       type: "transform",
       timestamp: Date.now(),
+      pageId: doc.activePageId,
       updates,
     };
     useHistoryStore.getState().commit(op);
