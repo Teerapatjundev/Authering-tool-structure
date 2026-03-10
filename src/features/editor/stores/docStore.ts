@@ -31,6 +31,7 @@ interface DocState {
   setDoc: (doc: Document) => void;
   setActivePage: (pageId: string) => void;
   insertPageAt: (insertIndex: number) => void;
+  movePageToIndex: (pageId: string, toIndex: number) => void;
   addNode: (node: Node) => void;
   removeNodes: (nodeIds: string[]) => void;
   updateNode: (nodeId: string, updates: Partial<Node>) => void;
@@ -190,6 +191,30 @@ export const useDocStore = create<DocState>()(
           if (p.title?.startsWith("Page ")) p.title = `Page ${idx + 1}`;
         });
         doc.activePageId = newPageId;
+        doc.updatedAt = Date.now();
+      });
+    },
+
+    movePageToIndex: (pageId: string, toIndex: number) => {
+      set((state) => {
+        if (!state.doc) return;
+        const doc = state.doc;
+
+        const fromIndex = doc.pages.findIndex((p) => p.id === pageId);
+        if (fromIndex < 0) return;
+
+        const safeToIndex = Math.max(0, Math.min(toIndex, doc.pages.length));
+        if (safeToIndex === fromIndex || safeToIndex === fromIndex + 1) return;
+
+        const [moved] = doc.pages.splice(fromIndex, 1);
+        const adjustedToIndex = fromIndex < safeToIndex ? safeToIndex - 1 : safeToIndex;
+        doc.pages.splice(adjustedToIndex, 0, moved);
+
+        // รีเซ็ตชื่อหน้าให้เรียงตามลำดับแบบง่ายๆ (เฉพาะ title ที่ขึ้นต้นด้วย "Page ")
+        doc.pages.forEach((p, idx) => {
+          if (p.title?.startsWith("Page ")) p.title = `Page ${idx + 1}`;
+        });
+
         doc.updatedAt = Date.now();
       });
     },

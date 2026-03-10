@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Stage, Layer, Rect, Group } from "react-konva";
 import { useDocStore } from "@/features/editor/stores/docStore";
 import { RenderNodes } from "@/features/editor/renderer/konva/RenderNodes";
@@ -76,6 +77,16 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
 
 export function PagePanel() {
   const doc = useDocStore((s) => s.doc);
+  const movePageToIndex = useDocStore((s) => s.movePageToIndex);
+
+  const [draggingPageId, setDraggingPageId] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<
+    | {
+        pageId: string;
+        placement: "above" | "below";
+      }
+    | null
+  >(null);
 
   if (!doc) {
     return (
@@ -93,12 +104,71 @@ export function PagePanel() {
     <div className="flex-1 p-3 overflow-auto">
       <div className="flex flex-col gap-3">
         <InsertPageButton insertIndex={0} />
-        {pages.map((page, i) => (
-          <div key={page.id} className="flex flex-col gap-3">
-            <PagePreview page={page} index={i} />
-            <InsertPageButton insertIndex={i + 1} />
-          </div>
-        ))}
+        {pages.map((page, i) => {
+          const isDragging = draggingPageId === page.id;
+          const isDragOver = dragOver?.pageId === page.id;
+          const overPlacement = isDragOver ? dragOver?.placement : null;
+
+          return (
+            <div key={page.id} className="flex flex-col gap-3">
+              <div
+                draggable
+                onDragStart={(e) => {
+                  setDraggingPageId(page.id);
+                  setDragOver(null);
+                  e.dataTransfer.effectAllowed = "move";
+                  e.dataTransfer.setData("application/x-editor-page-id", page.id);
+                  e.dataTransfer.setData("text/plain", page.id);
+                }}
+                onDragEnd={() => {
+                  setDraggingPageId(null);
+                  setDragOver(null);
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const placement =
+                    e.clientY - rect.top > rect.height / 2 ? "below" : "above";
+                  setDragOver({ pageId: page.id, placement });
+                }}
+                onDragLeave={() => {
+                  setDragOver((curr) => (curr?.pageId === page.id ? null : curr));
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const draggedId =
+                    e.dataTransfer.getData("application/x-editor-page-id") ||
+                    e.dataTransfer.getData("text/plain");
+                  if (!draggedId) return;
+
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const placement =
+                    e.clientY - rect.top > rect.height / 2 ? "below" : "above";
+                  const targetIndex = i + (placement === "below" ? 1 : 0);
+
+                  movePageToIndex(draggedId, targetIndex);
+                  setDraggingPageId(null);
+                  setDragOver(null);
+                }}
+                className={
+                  "relative " +
+                  (isDragging ? "opacity-60" : "")
+                }
+              >
+                {isDragOver && overPlacement === "above" && (
+                  <div className="absolute left-0 right-0 h-0.5 -top-1 bg-blue-400 rounded" />
+                )}
+                {isDragOver && overPlacement === "below" && (
+                  <div className="absolute left-0 right-0 h-0.5 -bottom-1 bg-blue-400 rounded" />
+                )}
+                <PagePreview page={page} index={i} />
+              </div>
+
+              <InsertPageButton insertIndex={i + 1} />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
