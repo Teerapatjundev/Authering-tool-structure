@@ -369,6 +369,8 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const allLocked =
     selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
   const isImage = selectedNodes[0]?.type === "image";
+  const isCornerResizeNode =
+    selectedNodes[0]?.type === "image" || selectedNodes[0]?.type === "video";
 
   // Sync group rotation on selection change (synchronous to avoid 1-frame flicker)
   const key = Array.from(selectedIds).sort().join(",");
@@ -414,8 +416,19 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       const proxy = proxyRef.current;
       if (proxy) tr.nodes([proxy]);
     } else {
-      const shape = stage.findOne(`#shape_${selectedNodes[0].id}`);
-      if (shape) tr.nodes([shape]);
+      const selected = selectedNodes[0];
+      const shape = stage.findOne(`#shape_${selected.id}`);
+      if (shape) {
+        if (
+          selected.type === "video" &&
+          shape.parent &&
+          shape.parent !== shape.getLayer()
+        ) {
+          tr.nodes([shape.parent]);
+        } else {
+          tr.nodes([shape]);
+        }
+      }
     }
     tr.getLayer()?.batchDraw();
   }, [selectedNodes, stageRef, selectedIds, isMulti, isEditingText]);
@@ -634,7 +647,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const fr = target.rotation();
 
     if (activePage && !isRotatingTransformRef.current) {
-      if (node.type === "image") {
+      if (node.type === "image" || node.type === "video") {
         const asp = fw / fh;
         if (fw > activePage.width) {
           fw = activePage.width;
@@ -932,7 +945,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const sizeSnap = snapResizeSize(worldW, worldH, selectedIds, otherNodes);
     sizeSnapResultRef.current = sizeSnap;
 
-    if (isImage) {
+    if (isCornerResizeNode) {
       const orig = origStatesRef.current[0];
       const aspect = orig
         ? orig.width / orig.height
@@ -989,7 +1002,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     if (Math.abs(nodeRot % 360) > 0.01) return newBox;
 
     const db = docScreenBounds(activePage);
-    if (!isImage) {
+    if (!isCornerResizeNode) {
       const c = clampEdges(newBox, db);
       if (c.width < 5 || c.height < 5) return oldBox;
       return { ...newBox, ...c };
@@ -1083,8 +1096,8 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       flipEnabled={false}
       rotationSnaps={ROTATION_SNAPS}
       rotationSnapTolerance={5}
-      keepRatio={isImage}
-      enabledAnchors={isImage ? [...CORNER_ANCHORS] : [...ALL_ANCHORS]}
+      keepRatio={isCornerResizeNode}
+      enabledAnchors={isCornerResizeNode ? [...CORNER_ANCHORS] : [...ALL_ANCHORS]}
       boundBoxFunc={singleBoundBoxFunc}
     />
   );
