@@ -18,6 +18,8 @@
 
 "use client";
 
+import { useEffect, useState } from "react";
+
 import {
   Rect,
   Ellipse,
@@ -48,6 +50,80 @@ import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 
 interface RenderNodesProps {
   nodes: Node[];
+}
+
+function useUploadedVideoThumbnail(src: string, enabled: boolean) {
+  const [thumbnailCanvas, setThumbnailCanvas] = useState<HTMLCanvasElement | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!enabled || !src) {
+      setThumbnailCanvas(null);
+      return;
+    }
+
+    let isCancelled = false;
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+    video.src = src;
+
+    const captureFrame = () => {
+      if (isCancelled) return;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (!vw || !vh) return;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = vw;
+      canvas.height = vh;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      ctx.drawImage(video, 0, 0, vw, vh);
+      setThumbnailCanvas(canvas);
+    };
+
+    const handleLoadedMetadata = () => {
+      const targetTime = Number.isFinite(video.duration) && video.duration > 0.2 ? 0.2 : 0;
+      if (targetTime <= 0) {
+        captureFrame();
+        return;
+      }
+      try {
+        video.currentTime = targetTime;
+      } catch {
+        captureFrame();
+      }
+    };
+
+    const handleSeeked = () => {
+      captureFrame();
+    };
+
+    const handleError = () => {
+      if (!isCancelled) setThumbnailCanvas(null);
+    };
+
+    video.addEventListener("loadedmetadata", handleLoadedMetadata);
+    video.addEventListener("seeked", handleSeeked);
+    video.addEventListener("error", handleError);
+    video.load();
+
+    return () => {
+      isCancelled = true;
+      video.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      video.removeEventListener("seeked", handleSeeked);
+      video.removeEventListener("error", handleError);
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [enabled, src]);
+
+  return thumbnailCanvas;
 }
 
 /**
@@ -279,12 +355,14 @@ function RenderVideo({
     isYouTubeSource ? `https://img.youtube.com/vi/${node.src}/hqdefault.jpg` : "",
     "anonymous",
   );
+  const uploadedThumbnail = useUploadedVideoThumbnail(node.src, !isYouTubeSource);
+  const previewImage = isYouTubeSource ? thumbnail : uploadedThumbnail;
 
   // ถ้า video นี้กำลังเล่นอยู่ → ไม่แสดง thumbnail (overlay จะแสดงแทน)
   const isPlaying = playingNodeId === node.id;
 
-  // Single-click to play video
-  const handleClick = () => {
+  // Double-click / double-tap to play video
+  const handlePlay = () => {
     if (!isPlaying) {
       // เคลียร์ selection ก่อนเล่น video เพื่อไม่ให้แสดง transform frame
       clearSelection();
@@ -300,8 +378,8 @@ function RenderVideo({
       opacity={node.opacity}
       offsetX={node.width / 2}
       offsetY={node.height / 2}
-      onClick={handleClick}
-      onTap={handleClick}
+      onDblClick={handlePlay}
+      onDblTap={handlePlay}
     >
       {/* Background */}
       <Rect
@@ -316,18 +394,18 @@ function RenderVideo({
         cornerRadius={8}
       />
 
-      {/* YouTube Thumbnail - ซ่อนถ้ากำลังเล่น */}
-      {!isPlaying && thumbnail && (
+      {/* Thumbnail - ซ่อนถ้ากำลังเล่น */}
+      {!isPlaying && previewImage && (
         <KonvaImage
           x={0}
           y={0}
-          image={thumbnail}
+          image={previewImage}
           width={node.width}
           height={node.height}
         />
       )}
 
-      {!isPlaying && !thumbnail && (
+      {!isPlaying && !previewImage && (
         <Text
           x={0}
           y={node.height / 2 - 10}

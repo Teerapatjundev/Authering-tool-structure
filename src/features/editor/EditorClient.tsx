@@ -49,6 +49,7 @@ import {
   insertText,
   insertTextLink,
   insertTriangle,
+  insertVideo,
   insertPracticeCard,
   insertConnectionPair,
   insertChoiceOptions,
@@ -305,15 +306,25 @@ export function EditorClient({ docId }: EditorClientProps) {
           loadImageFromUrl(text, dropX, dropY);
           return;
         }
+
+        // ถ้าเป็น URL วิดีโอโดยตรง
+        if (/\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(text)) {
+          insertVideo(dropX, dropY, text);
+          return;
+        }
       }
 
-      // จัดการไฟล์รูปภาพ
+      // จัดการไฟล์รูปภาพ/วิดีโอ
       if (files && files.length > 0) {
         Array.from(files).forEach((file, index) => {
           if (file.type.startsWith("image/")) {
             const offsetX = index * 20; // Offset สำหรับหลายไฟล์
             const offsetY = index * 20;
             loadImageFromFile(file, dropX + offsetX, dropY + offsetY);
+          } else if (file.type.startsWith("video/")) {
+            const offsetX = index * 20;
+            const offsetY = index * 20;
+            loadVideoFromFile(file, dropX + offsetX, dropY + offsetY);
           }
         });
         return;
@@ -328,6 +339,13 @@ export function EditorClient({ docId }: EditorClientProps) {
               const offsetX = index * 20;
               const offsetY = index * 20;
               loadImageFromFile(file, dropX + offsetX, dropY + offsetY);
+            }
+          } else if (item.kind === "file" && item.type.startsWith("video/")) {
+            const file = item.getAsFile();
+            if (file) {
+              const offsetX = index * 20;
+              const offsetY = index * 20;
+              loadVideoFromFile(file, dropX + offsetX, dropY + offsetY);
             }
           }
         });
@@ -414,6 +432,32 @@ export function EditorClient({ docId }: EditorClientProps) {
         };
         img.src = dataUrl;
       }
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const loadVideoFromFile = useCallback((file: File, x: number, y: number) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (!dataUrl) return;
+
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.onloadedmetadata = () => {
+        const rawWidth = video.videoWidth || 400;
+        const rawHeight = video.videoHeight || 300;
+        const maxWidth = 480;
+        const maxHeight = 360;
+        const scale = Math.min(maxWidth / rawWidth, maxHeight / rawHeight, 1);
+        const width = Math.max(120, Math.round(rawWidth * scale));
+        const height = Math.max(90, Math.round(rawHeight * scale));
+        insertVideo(x, y, dataUrl, width, height);
+      };
+      video.onerror = () => {
+        insertVideo(x, y, dataUrl);
+      };
+      video.src = dataUrl;
     };
     reader.readAsDataURL(file);
   }, []);
