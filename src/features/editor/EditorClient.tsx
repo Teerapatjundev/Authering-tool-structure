@@ -45,7 +45,6 @@ import {
   insertImage,
   insertRect,
   insertEllipse,
-  insertTriangle,
   insertPentagon,
   insertText,
   insertTextLink,
