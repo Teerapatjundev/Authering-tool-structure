@@ -21,6 +21,7 @@ import {
   TriangleNode,
   PentagonNode,
   TextNode,
+  TextLinkNode,
   ImageNode,
   VideoNode,
   AudioNode,
@@ -125,9 +126,9 @@ export function insertTextLink(
   y: number,
   url = "https://example.com",
 ): void {
-  const node: TextNode = {
+  const node: TextLinkNode = {
     id: generateNodeId(),
-    type: "text",
+    type: "textlink",
     x,
     y,
     width: 280,
@@ -137,11 +138,13 @@ export function insertTextLink(
     locked: false,
     visible: true,
     text: url,
+    url,
     fontSize: 20,
     fontFamily: "Arial",
     fill: "#2563eb",
     fontStyle: "normal",
     align: "left",
+    underline: true,
   };
 
   commitInsert([node]);
@@ -467,6 +470,82 @@ export function insertConnectionPair(
 }
 
 /**
+ * เพิ่มแบบฝึกหัด Fill in the blank (เติมคำลงในช่องว่าง)
+ * - การ์ดพื้นหลัง (rect)
+ * - ข้อความคำถาม (text)
+ * - กล่องคำตอบ (rect)
+ * - label placeholder (text)
+ */
+export function insertFillInTheBlank(
+  x: number,
+  y: number,
+  title: string,
+  description: string,
+): void {
+  const cardW = 360;
+  const cardH = 130;
+  const padding = 16;
+  const groupId = generateNodeId();
+  const setId = generateNodeId();
+
+  const practiceMeta = {
+    type: "fill-in-the-blank",
+    id: setId,
+    title,
+    description,
+  };
+
+  const questionY = y - cardH / 2 + padding + 12;
+  const inputW = cardW - padding * 2;
+  const inputH = 36;
+  const inputY = questionY + 24 + inputH / 2 + 10;
+
+  // กรอบ input
+  const inputBox: RectNode = {
+    id: generateNodeId(),
+    type: "rect",
+    x,
+    y: inputY,
+    width: inputW,
+    height: inputH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    groupId,
+    practice: practiceMeta,
+    fill: "#ffffff",
+    stroke: "#d1d5db",
+    strokeWidth: 1.5,
+    cornerRadius: 6,
+  };
+
+  // Placeholder text ใน input
+  const inputLabel: TextNode = {
+    id: generateNodeId(),
+    type: "text",
+    x: x + 8,
+    y: inputY,
+    width: inputW - 16,
+    height: inputH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    groupId,
+    practice: practiceMeta,
+    text: "",
+    fontSize: 13,
+    fontFamily: "Arial",
+    fill: "#9ca3af",
+    fontStyle: "normal",
+    align: "left",
+  };
+
+  commitInsert([inputBox, inputLabel]);
+}
+
+/**
  * เพิ่มแบบฝึกหัด Choice (คำถามแบบเลือก) เป็นชุดของ option nodes
  * - สร้าง nodes ตามจำนวนตัวเลือกทั้งหมด
  * - กำหนดว่า option ไหนเป็น "ตัวเลือกที่ถูก" / "ตัวเลือกหลอก" ผ่าน metadata
@@ -490,9 +569,7 @@ export function insertChoiceOptions(
 
   const n = Math.max(1, Math.floor(totalOptions));
   const c =
-    mode === "single"
-      ? 1
-      : Math.max(1, Math.min(Math.floor(correctCount), n));
+    mode === "single" ? 1 : Math.max(1, Math.min(Math.floor(correctCount), n));
 
   const setId = generateNodeId();
   const primaryId = generateNodeId();
@@ -657,9 +734,7 @@ export function insertChoiceOptions(
 // ===============================================
 
 /** Commit insert operation ไปยัง history */
-function commitInsert(
-  nodes: Node[],
-): void {
+function commitInsert(nodes: Node[]): void {
   const { doc } = useDocStore.getState();
   if (!doc) return;
   const op: InsertOp = {

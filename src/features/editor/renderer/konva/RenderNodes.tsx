@@ -38,12 +38,14 @@ import {
   TriangleNode,
   PentagonNode,
   TextNode,
+  TextLinkNode,
   ImageNode,
   VideoNode,
   AudioNode,
   PathNode,
 } from "../../core/doc/types";
 import { useTextEditStore } from "../../stores/textEditStore";
+import { useTextLinkEditStore } from "../../stores/textLinkEditStore";
 import { useVideoPlayStore } from "../../stores/videoPlayStore";
 import { useSelectionStore } from "../../stores/selectionStore";
 import { useContainerEditStore } from "../../stores/containerEditStore";
@@ -132,6 +134,7 @@ function useUploadedVideoThumbnail(src: string, enabled: boolean) {
  */
 export function RenderNodes({ nodes }: RenderNodesProps) {
   const { editingNodeId } = useTextEditStore();
+  const { editingNodeId: textLinkEditingId } = useTextLinkEditStore();
 
   return (
     <>
@@ -139,6 +142,7 @@ export function RenderNodes({ nodes }: RenderNodesProps) {
         if (!node.visible) return null;
         // ซ่อน text ที่กำลังแก้ไขใน overlay
         if (node.type === "text" && node.id === editingNodeId) return null;
+        // ไม่ซ่อน textlink เมื่อเปิด dialog (ยังคงแสดงอยู่เพื่อให้เห็นแบคกราวด์)
         return <RenderNode key={node.id} node={node} />;
       })}
     </>
@@ -150,6 +154,7 @@ export function RenderNodes({ nodes }: RenderNodesProps) {
  */
 function RenderNode({ node }: { node: Node }) {
   const { startEditing } = useTextEditStore();
+  const { openDialog } = useTextLinkEditStore();
   const { activeContainerId, setActiveContainer } = useContainerEditStore();
   const clearSelection = useSelectionStore((s) => s.clearSelection);
 
@@ -233,6 +238,15 @@ function RenderNode({ node }: { node: Node }) {
           node={node}
           commonProps={commonProps}
           onDoubleClick={() => startEditing(node.id, node.text)}
+        />
+      );
+
+    case "textlink":
+      return (
+        <RenderTextLink
+          node={node}
+          commonProps={commonProps}
+          onDoubleClick={() => openDialog(node.id)}
         />
       );
 
@@ -332,6 +346,33 @@ function RenderText({
       height={node.height}
       onDblClick={onDoubleClick}
       onDblTap={onDoubleClick} // สำหรับ touch devices
+    />
+  );
+}
+
+function RenderTextLink({
+  node,
+  commonProps,
+  onDoubleClick,
+}: {
+  node: TextLinkNode;
+  commonProps: Record<string, unknown>;
+  onDoubleClick: () => void;
+}) {
+  return (
+    <Text
+      {...commonProps}
+      text={node.text}
+      fontSize={node.fontSize}
+      fontFamily={node.fontFamily}
+      fill={node.fill}
+      fontStyle={node.fontStyle || "normal"}
+      textDecoration="underline"
+      align={node.align || "left"}
+      width={node.width}
+      height={node.height}
+      onDblClick={onDoubleClick}
+      onDblTap={onDoubleClick}
     />
   );
 }

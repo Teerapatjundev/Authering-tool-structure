@@ -20,6 +20,7 @@ export type NodeType =
   | "triangle"
   | "pentagon"
   | "text"
+  | "textlink"
   | "image"
   | "video"
   | "audio"
@@ -135,6 +136,19 @@ export interface TextNode extends BaseNode {
   align?: "left" | "center" | "right";
 }
 
+// ลิงก์ข้อความ
+export interface TextLinkNode extends BaseNode {
+  type: "textlink";
+  text: string; // ข้อความที่แสดง
+  url: string; // URL ที่ลิงก์ไป
+  fontSize: number;
+  fontFamily: string;
+  fill: string;
+  fontStyle?: "normal" | "bold" | "italic" | "bold italic";
+  underline?: boolean;
+  align?: "left" | "center" | "right";
+}
+
 // รูปภาพ
 export interface ImageNode extends BaseNode {
   type: "image";
@@ -170,6 +184,7 @@ export type Node =
   | TriangleNode
   | PentagonNode
   | TextNode
+  | TextLinkNode
   | ImageNode
   | VideoNode
   | AudioNode
