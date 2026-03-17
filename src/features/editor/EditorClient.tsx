@@ -257,7 +257,7 @@ export function EditorClient({ docId }: EditorClientProps) {
         if (practiceType === "connection") {
           insertConnectionPair(dropX, dropY, title, description);
         } else {
-          insertPracticeCard(dropX, dropY, title, description);
+          insertPracticeCard(dropX, dropY, practiceType, title, description);
         }
         return;
       }

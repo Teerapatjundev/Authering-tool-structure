@@ -72,6 +72,10 @@ function remapIdsForPageNodes(sourceNodes: Node[]): Node[] {
     const cloned = deepClone(n);
     cloned.id = nodeIdMap.get(n.id) ?? generateNodeId();
 
+    if ((cloned as any).parentId) {
+      (cloned as any).parentId = nodeIdMap.get((cloned as any).parentId) ?? (cloned as any).parentId;
+    }
+
     if (cloned.groupId) {
       cloned.groupId = groupIdMap.get(cloned.groupId) ?? cloned.groupId;
     }

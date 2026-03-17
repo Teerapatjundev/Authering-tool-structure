@@ -38,6 +38,7 @@ import { useSnapGuidesStore } from "../../stores/snapGuidesStore";
 import { useMarqueeStore } from "../../stores/marqueeStore";
 import { useVideoPlayStore } from "../../stores/videoPlayStore";
 import { useContextMenuStore } from "../../stores/contextMenuStore";
+import { useContainerEditStore } from "../../stores/containerEditStore";
 import { findTopNodeAt } from "../../core/geometry/hitTest";
 import {
   boundsIntersect,
@@ -131,6 +132,67 @@ function expandAllGroupIds(
     }
   }
   return Array.from(result);
+}
+
+function expandDescendants(
+  ids: string[],
+  allNodes: { id: string; parentId?: string }[],
+): string[] {
+  const result = new Set(ids);
+  let changed = true;
+  let safety = 0;
+
+  while (changed && safety++ < 50) {
+    changed = false;
+    for (const n of allNodes) {
+      if (n.parentId && result.has(n.parentId) && !result.has(n.id)) {
+        result.add(n.id);
+        changed = true;
+      }
+    }
+  }
+
+  return Array.from(result);
+}
+
+function findChoicePrimaryAncestor(
+  node: any,
+  allNodes: Array<any>,
+): any {
+  let current = node;
+  for (let i = 0; i < 50 && current; i++) {
+    if (
+      current.practice?.type === "choice" &&
+      current.practice?.containerRole === "primary"
+    ) {
+      return current;
+    }
+    if (!current.parentId) return null;
+    const parent = allNodes.find((n) => n.id === current.parentId);
+    if (!parent) return null;
+    current = parent;
+  }
+  return null;
+}
+
+function resolveHitNodeForChoiceContainer(
+  rawHitNode: any,
+  allNodes: any[],
+  activeContainerId: string | null,
+): any {
+  if (!rawHitNode) return null;
+  const primary = findChoicePrimaryAncestor(rawHitNode, allNodes);
+  if (!primary) return rawHitNode;
+  if (activeContainerId && primary.id === activeContainerId) return rawHitNode;
+  return primary;
+}
+
+function isChoicePrimaryNode(node: any): boolean {
+  return (
+    !!node &&
+    node.practice?.type === "choice" &&
+    node.practice?.containerRole === "primary"
+  );
 }
 
 /** ตรวจสอบว่าเป็น macOS หรือไม่ */
@@ -273,6 +335,7 @@ function snapAndUpdateNodes(
   dx: number,
   dy: number,
   withSpacingGuides: boolean,
+  constraintBounds?: { x: number; y: number; width: number; height: number },
 ): void {
   const clampedVirtual = buildVirtualNodes(
     selectedIds,
@@ -294,6 +357,32 @@ function snapAndUpdateNodes(
   const finalDx = dx + snapResult.dx;
   const finalDy = dy + snapResult.dy;
 
+  let constrainedDx = finalDx;
+  let constrainedDy = finalDy;
+
+  if (constraintBounds) {
+    const virtualAfter = buildVirtualNodes(
+      selectedIds,
+      originalPositions,
+      doc.nodes,
+      constrainedDx,
+      constrainedDy,
+    );
+    const b = getMultiSelectionBounds(virtualAfter);
+    if (b) {
+      if (b.x < constraintBounds.x) constrainedDx += constraintBounds.x - b.x;
+      if (b.y < constraintBounds.y) constrainedDy += constraintBounds.y - b.y;
+      if (b.x + b.width > constraintBounds.x + constraintBounds.width) {
+        constrainedDx -=
+          b.x + b.width - (constraintBounds.x + constraintBounds.width);
+      }
+      if (b.y + b.height > constraintBounds.y + constraintBounds.height) {
+        constrainedDy -=
+          b.y + b.height - (constraintBounds.y + constraintBounds.height);
+      }
+    }
+  }
+
   useSnapGuidesStore.getState().setGuides(snapResult.guides);
   if (withSpacingGuides) {
     useSnapGuidesStore.getState().setSpacingGuides(snapResult.spacingGuides);
@@ -302,7 +391,10 @@ function snapAndUpdateNodes(
   const updates = selectedIds.map((id) => {
     const orig = originalPositions.get(id);
     if (!orig) return { id, changes: {} };
-    return { id, changes: { x: orig.x + finalDx, y: orig.y + finalDy } };
+    return {
+      id,
+      changes: { x: orig.x + constrainedDx, y: orig.y + constrainedDy },
+    };
   });
 
   useDocStore.getState().updateNodes(updates);
@@ -371,7 +463,8 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       accDeltaRef.current = { x: 0, y: 0 };
       originalPositionsRef.current.clear();
 
-      const allIds = expandAllGroupIds(nodeIds, nodes);
+      const groupExpanded = expandAllGroupIds(nodeIds, nodes);
+      const allIds = expandDescendants(groupExpanded, nodes);
       nodes
         .filter((n: any) => allIds.includes(n.id))
         .forEach((n: any) => {
@@ -397,8 +490,8 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const dx = accDeltaRef.current.x;
       const dy = accDeltaRef.current.y;
 
-      const selectedIds = useSelectionStore.getState().getSelectedIds();
-      if (selectedIds.length === 0) return;
+      const draggingIds = Array.from(originalPositionsRef.current.keys());
+      if (draggingIds.length === 0) return;
 
       const { doc } = useDocStore.getState();
       if (!doc) return;
@@ -407,9 +500,36 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
       if (!page) return;
 
+      // If dragging a set of children under a single parent, constrain them within parent bounds.
+      let constraintBounds:
+        | { x: number; y: number; width: number; height: number }
+        | undefined;
+      {
+        const draggingNodes = draggingIds
+          .map((id) => page.nodes.find((n: any) => n.id === id))
+          .filter(Boolean);
+        const parentIds = new Set(
+          draggingNodes.map((n: any) => n.parentId).filter(Boolean),
+        );
+        if (parentIds.size === 1) {
+          const parentId = Array.from(parentIds)[0] as string;
+          if (parentId && !draggingIds.includes(parentId)) {
+            const parent = page.nodes.find((n: any) => n.id === parentId);
+            if (parent) {
+              constraintBounds = {
+                x: parent.x - parent.width / 2,
+                y: parent.y - parent.height / 2,
+                width: parent.width,
+                height: parent.height,
+              };
+            }
+          }
+        }
+      }
+
       // สร้าง virtual nodes เพื่อคำนวณ bounds
       const virtualNodes = buildVirtualNodes(
-        selectedIds,
+        draggingIds,
         originalPositionsRef.current,
         page.nodes,
         dx,
@@ -429,12 +549,13 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         dy,
       );
       snapAndUpdateNodes(
-        selectedIds,
+        draggingIds,
         originalPositionsRef.current,
         { nodes: page.nodes, width: page.width, height: page.height },
         clamped.x,
         clamped.y,
         withSpacingGuides,
+        constraintBounds,
       );
     }
 
@@ -520,9 +641,10 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
     /** บันทึก history หลังจบ drag */
     function commitDragHistory(): void {
-      const selectedIds = useSelectionStore.getState().getSelectedIds();
-      if (selectedIds.length === 0 || originalPositionsRef.current.size === 0)
-        return;
+      if (originalPositionsRef.current.size === 0) return;
+
+      const movedIds = Array.from(originalPositionsRef.current.keys());
+      if (movedIds.length === 0) return;
 
       const { doc } = useDocStore.getState();
       if (!doc) return;
@@ -532,7 +654,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       if (!page) return;
 
       const newPositions = new Map<string, Point>();
-      selectedIds.forEach((id: string) => {
+      movedIds.forEach((id: string) => {
         const node = page.nodes.find((n: any) => n.id === id);
         if (node) newPositions.set(id, { x: node.x, y: node.y });
       });
@@ -566,7 +688,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         doc.pages.find((p: any) => p.id === doc.activePageId) ?? doc.pages[0];
       if (!page) return;
 
-      const hitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
+      const rawHitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
+      const hitNode = resolveHitNodeForChoiceContainer(
+        rawHitNode,
+        page.nodes,
+        useContainerEditStore.getState().activeContainerId,
+      );
       if (hitNode) {
         const { selectedIds, selectMultiple } = useSelectionStore.getState();
         if (!selectedIds.has(hitNode.id)) {
@@ -583,10 +710,43 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       const { doc } = useDocStore.getState();
       if (!doc) return;
 
-      const clonedNodes = selectedNodes.map((n: any) => ({
-        ...JSON.parse(JSON.stringify(n)),
-        id: generateNodeId(),
-      }));
+      const nodeIdMap = new Map<string, string>();
+      const groupIdMap = new Map<string, string>();
+      const practiceIdMap = new Map<string, string>();
+
+      for (const node of selectedNodes) {
+        nodeIdMap.set(node.id, generateNodeId());
+        if (node.groupId && !groupIdMap.has(node.groupId)) {
+          groupIdMap.set(node.groupId, generateNodeId());
+        }
+        if (node.practice?.id && !practiceIdMap.has(node.practice.id)) {
+          practiceIdMap.set(node.practice.id, generateNodeId());
+        }
+      }
+
+      const clonedNodes = selectedNodes.map((n: any) => {
+        const cloned = JSON.parse(JSON.stringify(n));
+        cloned.id = nodeIdMap.get(n.id) ?? generateNodeId();
+
+        if (cloned.parentId) {
+          cloned.parentId = nodeIdMap.get(cloned.parentId) ?? cloned.parentId;
+        }
+
+        if (cloned.groupId) {
+          cloned.groupId = groupIdMap.get(cloned.groupId) ?? cloned.groupId;
+        }
+
+        if (cloned.masterId) {
+          cloned.masterId = nodeIdMap.get(cloned.masterId) ?? cloned.masterId;
+        }
+
+        if (cloned.practice?.id) {
+          cloned.practice.id =
+            practiceIdMap.get(cloned.practice.id) ?? cloned.practice.id;
+        }
+
+        return cloned;
+      });
 
       const insertOp: InsertOp = {
         type: "insert",
@@ -624,6 +784,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       altKey: boolean,
     ): boolean {
       if (selectedNodes.length === 0) return false;
+
+      // While editing children in a Choice container, do not allow dragging the primary container.
+      const activeContainerId = useContainerEditStore.getState().activeContainerId;
+      if (activeContainerId && currentSelectedIds.includes(activeContainerId)) {
+        return true;
+      }
 
       const selectionBounds = getMultiSelectionBounds(selectedNodes);
       if (!selectionBounds) return false;
@@ -812,7 +978,18 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       );
 
       // หา node ที่คลิกโดนก่อน เพื่อให้คลิกเลือก node ใหม่ได้แม้อยู่ใน selection bounds เดิม
-      const hitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
+      const rawHitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
+      const activeContainerId = useContainerEditStore.getState().activeContainerId;
+      const rawPrimary = findChoicePrimaryAncestor(rawHitNode, page.nodes);
+      if (activeContainerId && (!rawPrimary || rawPrimary.id !== activeContainerId)) {
+        useContainerEditStore.getState().setActiveContainer(null);
+      }
+
+      const hitNode = resolveHitNodeForChoiceContainer(
+        rawHitNode,
+        page.nodes,
+        useContainerEditStore.getState().activeContainerId,
+      );
       const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, page.nodes) : [];
       const hitOnUnselectedNode =
         !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
@@ -860,6 +1037,14 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         // node ถูกล็อค → เลือกได้แต่ไม่ให้ลาก
         if (hitNode.locked) return;
 
+        // In edit-children mode, primary container is selectable but not draggable.
+        if (
+          isChoicePrimaryNode(hitNode) &&
+          useContainerEditStore.getState().activeContainerId === hitNode.id
+        ) {
+          return;
+        }
+
         // เริ่มลาก
         initDrag(
           worldPos,
@@ -867,6 +1052,9 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
           page.nodes,
         );
       } else {
+        if (useContainerEditStore.getState().activeContainerId) {
+          useContainerEditStore.getState().setActiveContainer(null);
+        }
         // คลิกที่ว่าง → marquee selection
         if (!shiftKey) {
           useSelectionStore.getState().clearSelection();
@@ -1005,7 +1193,18 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       );
 
       // หา node ที่ touch โดนก่อน เพื่อให้เปลี่ยน selection ได้แม้อยู่ใน bounds เดิม
-      const hitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
+      const rawHitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
+      const activeContainerId = useContainerEditStore.getState().activeContainerId;
+      const rawPrimary = findChoicePrimaryAncestor(rawHitNode, page.nodes);
+      if (activeContainerId && (!rawPrimary || rawPrimary.id !== activeContainerId)) {
+        useContainerEditStore.getState().setActiveContainer(null);
+      }
+
+      const hitNode = resolveHitNodeForChoiceContainer(
+        rawHitNode,
+        page.nodes,
+        useContainerEditStore.getState().activeContainerId,
+      );
       const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, page.nodes) : [];
       const hitOnUnselectedNode =
         !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
@@ -1034,12 +1233,22 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
         if (hitNode.locked) return;
 
+        if (
+          isChoicePrimaryNode(hitNode) &&
+          useContainerEditStore.getState().activeContainerId === hitNode.id
+        ) {
+          return;
+        }
+
         initDrag(
           worldPos,
           useSelectionStore.getState().getSelectedIds(),
           page.nodes,
         );
       } else {
+        if (useContainerEditStore.getState().activeContainerId) {
+          useContainerEditStore.getState().setActiveContainer(null);
+        }
         useSelectionStore.getState().clearSelection();
       }
     }

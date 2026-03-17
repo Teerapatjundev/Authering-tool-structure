@@ -299,6 +299,7 @@ export function insertPentagon(
 export function insertPracticeCard(
   x: number,
   y: number,
+  practiceType: string,
   title: string,
   description: string,
 ): void {
@@ -313,6 +314,14 @@ export function insertPracticeCard(
   const descY = titleY + 22;
 
   const groupId = generateNodeId();
+  const practiceId = generateNodeId();
+
+  const practiceMeta = {
+    type: practiceType,
+    id: practiceId,
+    title,
+    description,
+  };
 
   const card: RectNode = {
     id: generateNodeId(),
@@ -326,6 +335,7 @@ export function insertPracticeCard(
     locked: false,
     visible: true,
     groupId,
+    practice: practiceMeta,
     fill: "#ffffff",
     stroke: "#e5e7eb",
     strokeWidth: 2,
@@ -344,6 +354,7 @@ export function insertPracticeCard(
     locked: false,
     visible: true,
     groupId,
+    practice: practiceMeta,
     fill: "#e5e7eb",
     stroke: "#d1d5db",
     strokeWidth: 1,
@@ -362,6 +373,7 @@ export function insertPracticeCard(
     locked: false,
     visible: true,
     groupId,
+    practice: practiceMeta,
     text: title,
     fontSize: 16,
     fontFamily: "Arial",
@@ -382,6 +394,7 @@ export function insertPracticeCard(
     locked: false,
     visible: true,
     groupId,
+    practice: practiceMeta,
     text: description,
     fontSize: 12,
     fontFamily: "Arial",
@@ -467,13 +480,13 @@ export function insertChoiceOptions(
   title?: string,
   description?: string,
 ): void {
-  // Half-size compared to practice card (per requirement)
+  // Option cards are half-size compared to practice card (per requirement)
   const cardW = 110;
   const cardH = 120;
   const gapX = 12;
 
-  const padding = 7;
-  const squareW = cardW - padding * 2;
+  const optionPadding = 7;
+  const squareW = cardW - optionPadding * 2;
 
   const n = Math.max(1, Math.floor(totalOptions));
   const c =
@@ -482,17 +495,54 @@ export function insertChoiceOptions(
       : Math.max(1, Math.min(Math.floor(correctCount), n));
 
   const setId = generateNodeId();
-  // NOTE: Editor uses center-based coordinates.
-  // Requirement: top-left of the first choice card must align with drop point (x,y).
-  const startX = x + cardW / 2;
-  const baseY = y + cardH / 2;
+  const primaryId = generateNodeId();
 
-  const nodes: (RectNode | TextNode)[] = [];
+  // Primary container uses drop point as top-left.
+  const containerPadding = 14;
+  const optionsWidth = n * cardW + Math.max(0, n - 1) * gapX;
+  const containerW = optionsWidth + containerPadding * 2;
+  const containerH = cardH + containerPadding * 2;
+  const containerCx = x + containerW / 2;
+  const containerCy = y + containerH / 2;
+
+  const practiceMetaPrimary = {
+    type: "choice" as const,
+    id: setId,
+    mode,
+    totalOptions: n,
+    correctCount: c,
+    title,
+    description,
+    containerRole: "primary" as const,
+  };
+
+  const primary: RectNode = {
+    id: primaryId,
+    type: "rect",
+    x: containerCx,
+    y: containerCy,
+    width: containerW,
+    height: containerH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    practice: practiceMetaPrimary,
+    fill: "#ffffff",
+    stroke: "#e5e7eb",
+    strokeWidth: 2,
+    cornerRadius: 12,
+  };
+
+  const startX = x + containerPadding + cardW / 2;
+  const baseY = y + containerPadding + cardH / 2;
+
+  const nodes: (RectNode | TextNode)[] = [primary];
 
   for (let i = 0; i < n; i++) {
     const cardX = startX + i * (cardW + gapX);
     const cardY = baseY;
-    const squareY = cardY - cardH / 2 + padding + squareW / 2;
+    const squareY = cardY - cardH / 2 + optionPadding + squareW / 2;
     const titleY = squareY + squareW / 2 + 8;
     const descY = titleY + 16;
 
@@ -509,6 +559,7 @@ export function insertChoiceOptions(
       isCorrect,
       title,
       description,
+      containerRole: "sub" as const,
     };
 
     const card: RectNode = {
@@ -522,6 +573,7 @@ export function insertChoiceOptions(
       opacity: 1,
       locked: false,
       visible: true,
+      parentId: primaryId,
       groupId: optionGroupId,
       practice: practiceMeta,
       fill: "#ffffff",
@@ -541,6 +593,7 @@ export function insertChoiceOptions(
       opacity: 1,
       locked: false,
       visible: true,
+      parentId: primaryId,
       groupId: optionGroupId,
       practice: practiceMeta,
       fill: "#e5e7eb",
@@ -554,12 +607,13 @@ export function insertChoiceOptions(
       type: "text",
       x: cardX,
       y: titleY,
-      width: cardW - padding * 2,
+      width: cardW - optionPadding * 2,
       height: 24,
       rotation: 0,
       opacity: 1,
       locked: false,
       visible: true,
+      parentId: primaryId,
       groupId: optionGroupId,
       practice: practiceMeta,
       text: `ตัวเลือก ${i + 1}`,
@@ -575,12 +629,13 @@ export function insertChoiceOptions(
       type: "text",
       x: cardX,
       y: descY,
-      width: cardW - padding * 2,
+      width: cardW - optionPadding * 2,
       height: 24,
       rotation: 0,
       opacity: 1,
       locked: false,
       visible: true,
+      parentId: primaryId,
       groupId: optionGroupId,
       practice: practiceMeta,
       text: isCorrect ? "ตัวเลือกที่ถูก" : "ตัวเลือกหลอก",

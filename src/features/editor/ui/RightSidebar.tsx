@@ -28,6 +28,8 @@ import { useSelectionStore } from "../stores/selectionStore";
 import { useDocStore } from "../stores/docStore";
 import { editNode, editNodes } from "../core/commands/edit";
 import { Node, TextNode } from "../core/doc/types";
+import { useHistoryStore } from "../core/history/historyStore";
+import type { TransformOp } from "../core/history/ops";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -146,6 +148,15 @@ function buildFontStyle(
 export function RightSidebar() {
   const { selectedIds } = useSelectionStore();
   const { doc } = useDocStore();
+  const [choiceTab, setChoiceTab] = React.useState<"properties" | "answers">(
+    "properties",
+  );
+
+  const selectionKey = Array.from(selectedIds).sort().join(",");
+  React.useEffect(() => {
+    // Reset tab whenever selection changes (prevents stale tab state).
+    setChoiceTab("properties");
+  }, [selectionKey]);
 
   const activePage =
     doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
@@ -178,6 +189,12 @@ export function RightSidebar() {
   const isSingle = selectedNodes.length === 1;
   const node = selectedNodes[0];
   const isMulti = selectedNodes.length > 1;
+  const isPracticeSelection = selectedNodes.some((n) => !!n.practice);
+
+  const isChoicePrimarySelected =
+    isSingle &&
+    node.practice?.type === "choice" &&
+    node.practice?.containerRole === "primary";
 
   // ========== Helper: apply change ==========
   const apply = (changes: Partial<Node>, typeFilter?: string[]) => {
@@ -266,11 +283,205 @@ export function RightSidebar() {
     ? `${selectedNodes.length} elements selected`
     : node.type;
 
+  const choiceSetId = isChoicePrimarySelected ? node.practice?.id : undefined;
+
+  const commitTransformUpdates = (
+    updates: Array<{ id: string; newProps: Partial<Node> }>,
+  ) => {
+    const currentDoc = useDocStore.getState().doc;
+    if (!currentDoc) return;
+    const page =
+      currentDoc.pages.find((p) => p.id === currentDoc.activePageId) ??
+      currentDoc.pages[0];
+    if (!page) return;
+
+    const opUpdates: TransformOp["updates"] = [];
+    for (const u of updates) {
+      const current = page.nodes.find((n) => n.id === u.id);
+      if (!current) continue;
+      const oldProps: Partial<Node> = {};
+      const newProps: Partial<Node> = {};
+      for (const key of Object.keys(u.newProps)) {
+        const k = key as keyof Node;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (oldProps as any)[k] = (current as any)[k];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (newProps as any)[k] = (u.newProps as any)[k];
+      }
+      opUpdates.push({ id: u.id, oldProps, newProps });
+    }
+    if (opUpdates.length === 0) return;
+
+    const op: TransformOp = {
+      type: "transform",
+      timestamp: Date.now(),
+      pageId: currentDoc.activePageId,
+      updates: opUpdates,
+    };
+    useHistoryStore.getState().commit(op);
+  };
+
   return (
     <aside className={SIDEBAR_DESIGN.asideScrollable}>
       <SidebarHeader title="Properties" subtitle={typeLabel} />
 
       <div className={SIDEBAR_DESIGN.contentCompact}>
+        {isChoicePrimarySelected && (
+          <>
+            <div className="pb-2">
+              <ToggleGroup
+                type="single"
+                value={choiceTab}
+                onValueChange={(v) => {
+                  if (v === "properties" || v === "answers") setChoiceTab(v);
+                }}
+                className="justify-start"
+              >
+                <ToggleGroupItem value="properties" size="sm">
+                  Properties
+                </ToggleGroupItem>
+                <ToggleGroupItem value="answers" size="sm">
+                  ตั้งค่าเฉลย
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+            <SidebarDivider />
+          </>
+        )}
+
+        {isChoicePrimarySelected && choiceTab === "answers" && choiceSetId ? (
+          <>
+            <PropertySection title="ตั้งค่าเฉลย">
+              {(() => {
+                const page = activePage;
+                if (!page) return null;
+
+                const allChoiceNodes = page.nodes.filter(
+                  (n: any) => n.practice?.type === "choice" && n.practice?.id === choiceSetId,
+                );
+                const subNodes = allChoiceNodes.filter(
+                  (n: any) => n.practice?.containerRole === "sub" && typeof n.practice?.optionIndex === "number",
+                );
+
+                const mode = node.practice?.mode ?? "multiple";
+
+                const optionIndexSet = new Set<number>();
+                for (const n of subNodes) optionIndexSet.add(n.practice.optionIndex);
+                const optionIndices = Array.from(optionIndexSet).sort((a, b) => a - b);
+
+                const currentCorrect = optionIndices.filter((i) =>
+                  subNodes.some(
+                    (n: any) => n.practice.optionIndex === i && !!n.practice.isCorrect,
+                  ),
+                );
+
+                const value = mode === "single" ? currentCorrect.slice(0, 1).map(String) : currentCorrect.map(String);
+
+                const setCorrect = (selectedOptionStrings: string[]) => {
+                  const selectedOptionIndices = selectedOptionStrings
+                    .map((s) => Number(s))
+                    .filter((v) => Number.isFinite(v));
+
+                  const normalized =
+                    mode === "single"
+                      ? selectedOptionIndices.slice(0, 1)
+                      : selectedOptionIndices;
+
+                  const correctCount = normalized.length;
+
+                  const updates: Array<{ id: string; newProps: Partial<Node> }> = [];
+
+                  // Update primary
+                  updates.push({
+                    id: node.id,
+                    newProps: {
+                      practice: {
+                        ...(node.practice as any),
+                        correctCount,
+                      },
+                    },
+                  });
+
+                  // Update all sub nodes
+                  for (const n of subNodes as any[]) {
+                    const idx = n.practice.optionIndex as number;
+                    const isCorrect = normalized.includes(idx);
+                    updates.push({
+                      id: n.id,
+                      newProps: {
+                        practice: {
+                          ...(n.practice as any),
+                          isCorrect,
+                          correctCount,
+                        },
+                      },
+                    });
+                  }
+
+                  commitTransformUpdates(updates);
+                };
+
+                return (
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      โหมด: {mode === "single" ? "เลือกได้ข้อเดียว" : "เลือกได้หลายข้อ"}
+                    </div>
+
+                    <ToggleGroup
+                      type={mode === "single" ? "single" : "multiple"}
+                      value={value}
+                      onValueChange={(vals) => {
+                        const next = Array.isArray(vals) ? vals : [vals];
+                        setCorrect(next.filter(Boolean) as string[]);
+                      }}
+                      className="justify-start flex-wrap"
+                    >
+                      {optionIndices.map((i) => (
+                        <ToggleGroupItem key={i} value={String(i)} size="sm">
+                          ตัวเลือก {i + 1}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </div>
+                );
+              })()}
+            </PropertySection>
+
+            <SidebarDivider />
+
+            <PropertySection title="วิธีการแสดงเฉลย">
+              <div className="space-y-2">
+                <div className="text-[11px] text-muted-foreground">รูปแบบ</div>
+                <Select
+                  value={node.practice?.revealMode ?? "after-item"}
+                  onValueChange={(v) => {
+                    if (v !== "after-item" && v !== "other") return;
+                    commitTransformUpdates([
+                      {
+                        id: node.id,
+                        newProps: {
+                          practice: {
+                            ...(node.practice as any),
+                            revealMode: v,
+                          },
+                        },
+                      },
+                    ]);
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="เลือกวิธีการแสดงเฉลย" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="after-item">แสดงเฉลยหลังตอบข้อนั้นๆ</SelectItem>
+                    <SelectItem value="other">อื่นๆ</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </PropertySection>
+          </>
+        ) : (
+          <>
         {/* Position */}
         <PropertySection icon={Move} title="Position">
           <div className="grid grid-cols-2 gap-2">
@@ -313,21 +524,26 @@ export function RightSidebar() {
 
         <SidebarDivider />
 
-        {/* Rotation */}
-        <PropertySection icon={RotateCw} title="Rotation">
-          <NumberField
-            label="°"
-            value={
-              isMixed(commonRotation) ? undefined : (commonRotation as number)
-            }
-            placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
-            onChange={(v) => apply({ rotation: v })}
-            min={-180}
-            max={180}
-          />
-        </PropertySection>
-
-        <SidebarDivider />
+        {/* Rotation (disabled for practice nodes) */}
+        {!isPracticeSelection && (
+          <>
+            <PropertySection icon={RotateCw} title="Rotation">
+              <NumberField
+                label="°"
+                value={
+                  isMixed(commonRotation)
+                    ? undefined
+                    : (commonRotation as number)
+                }
+                placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
+                onChange={(v) => apply({ rotation: v })}
+                min={-180}
+                max={180}
+              />
+            </PropertySection>
+            <SidebarDivider />
+          </>
+        )}
 
         {/* Opacity */}
         <PropertySection icon={Eye} title="Opacity">
@@ -425,6 +641,8 @@ export function RightSidebar() {
             allIds={ids}
             isSingle={isSingle}
           />
+        )}
+        </>
         )}
       </div>
     </aside>
