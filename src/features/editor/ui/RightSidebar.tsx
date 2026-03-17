@@ -63,6 +63,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "../../../components/ui/button";
 
 // =============================================
 // Helpers สำหรับ Multi-selection
@@ -77,7 +78,7 @@ const SIDEBAR_DESIGN = {
     "flex flex-col h-full overflow-y-auto bg-background border-l w-72",
   contentCompact: "flex-1 p-4 space-y-1",
   contentDefault: "flex-1 p-4 space-y-4",
-  header: "px-4 py-3 border-b",
+  header: "px-5 py-3 ",
   headerTitle: "text-sm font-semibold tracking-tight",
   headerSubtitle: "mt-0.5 text-xs text-muted-foreground capitalize",
   section: "py-2",
@@ -141,6 +142,9 @@ function buildFontStyle(
 // =============================================
 
 export function RightSidebar() {
+  const [activeTab, setActiveTab] = React.useState<"properties" | "answer">(
+    "properties",
+  );
   const { selectedIds } = useSelectionStore();
   const { doc } = useDocStore();
 
@@ -156,18 +160,34 @@ export function RightSidebar() {
   if (selectedNodes.length === 0) {
     return (
       <aside className={SIDEBAR_DESIGN.aside}>
-        <SidebarHeader title="Properties" />
-        <div className={SIDEBAR_DESIGN.contentDefault}>
-          <PropertySection icon={Palette} title="Background">
-            <ColorInput
-              value={activePage?.backgroundColor || "#ffffff"}
-              onChange={(v) => {
-                useDocStore.getState().updateBackgroundColor(v);
-                useDocStore.getState().autoSave();
-              }}
-            />
-          </PropertySection>
-        </div>
+        <SidebarTabHeader activeTab={activeTab} onTabChange={setActiveTab} />
+        {activeTab === "properties" ? (
+          <div className={SIDEBAR_DESIGN.contentDefault}>
+            <PropertySection icon={Palette} title="Colors">
+              <ColorInput
+                value={activePage?.backgroundColor || "#ffffff"}
+                onChange={(v) => {
+                  useDocStore.getState().updateBackgroundColor(v);
+                  useDocStore.getState().autoSave();
+                }}
+              />
+            </PropertySection>
+            <PropertySection title="คะแนนรวม">
+              <div className="flex items-center gap-2">
+                <Input className="h-8 text-xs" type="number" min={0} defaultValue={0} disabled />
+                <span className="text-xs text-muted-foreground shrink-0">
+                  คะแนน
+                </span>
+              </div>
+            </PropertySection>
+          </div>
+        ) : (
+          <div className={SIDEBAR_DESIGN.contentDefault}>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              ยังไม่ได้เลือก element
+            </p>
+          </div>
+        )}
       </aside>
     );
   }
@@ -265,165 +285,192 @@ export function RightSidebar() {
 
   return (
     <aside className={SIDEBAR_DESIGN.asideScrollable}>
-      <SidebarHeader title="Properties" subtitle={typeLabel} />
+      <SidebarTabHeader activeTab={activeTab} onTabChange={setActiveTab} />
 
-      <div className={SIDEBAR_DESIGN.contentCompact}>
-        {/* Position */}
-        <PropertySection icon={Move} title="Position">
-          <div className="grid grid-cols-2 gap-2">
-            <NumberField
-              label="X"
-              value={isMixed(commonX) ? undefined : (commonX as number)}
-              placeholder={isMixed(commonX) ? "Mixed" : undefined}
-              onChange={(v) => apply({ x: v })}
-            />
-            <NumberField
-              label="Y"
-              value={isMixed(commonY) ? undefined : (commonY as number)}
-              placeholder={isMixed(commonY) ? "Mixed" : undefined}
-              onChange={(v) => apply({ y: v })}
-            />
-          </div>
-        </PropertySection>
-
-        <SidebarDivider />
-
-        {/* Size */}
-        <PropertySection icon={Maximize2} title="Size">
-          <div className="grid grid-cols-2 gap-2">
-            <NumberField
-              label="W"
-              value={isMixed(commonW) ? undefined : (commonW as number)}
-              placeholder={isMixed(commonW) ? "Mixed" : undefined}
-              onChange={(v) => apply({ width: v })}
-              min={1}
-            />
-            <NumberField
-              label="H"
-              value={isMixed(commonH) ? undefined : (commonH as number)}
-              placeholder={isMixed(commonH) ? "Mixed" : undefined}
-              onChange={(v) => apply({ height: v })}
-              min={1}
-            />
-          </div>
-        </PropertySection>
-
-        <SidebarDivider />
-
-        {/* Rotation */}
-        <PropertySection icon={RotateCw} title="Rotation">
-          <NumberField
-            label="°"
-            value={
-              isMixed(commonRotation) ? undefined : (commonRotation as number)
-            }
-            placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
-            onChange={(v) => apply({ rotation: v })}
-            min={-180}
-            max={180}
-          />
-        </PropertySection>
-
-        <SidebarDivider />
-
-        {/* Opacity */}
-        <PropertySection icon={Eye} title="Opacity">
-          <div className="space-y-2">
-            <Slider
-              min={0}
-              max={100}
-              step={1}
-              value={[isMixed(commonOpacity) ? 50 : (commonOpacity as number)]}
-              onValueChange={([v]) => apply({ opacity: v / 100 })}
-            />
-            <p className="text-xs text-center text-muted-foreground">
-              {isMixed(commonOpacity) ? "Mixed" : `${commonOpacity as number}%`}
-            </p>
-          </div>
-        </PropertySection>
-
-        <SidebarDivider />
-
-        {/* Fill Color — rect, ellipse, text */}
-        {hasFillNodes && (
-          <>
-            <PropertySection icon={Palette} title="Fill Color">
-              <ColorInput
-                value={mixedToStr(commonFill, "#000000")}
-                mixed={isMixed(commonFill)}
-                onChange={(v) =>
-                  apply({ fill: v }, ["rect", "ellipse", "triangle", "pentagon", "text"])
-                }
-              />
-            </PropertySection>
-            <SidebarDivider />
-          </>
-        )}
-
-        {/* Stroke — rect, ellipse */}
-        {hasStrokeNodes && (
-          <>
-            <PropertySection icon={PenLine} title="Stroke">
-              <ColorInput
-                value={mixedToStr(commonStroke, "#000000")}
-                mixed={isMixed(commonStroke)}
-                onChange={(v) => apply({ stroke: v }, ["rect", "ellipse", "triangle", "pentagon"])}
-              />
-              <div className="space-y-2">
-                <Slider
-                  min={0}
-                  max={50}
-                  step={1}
-                  value={[
-                    isMixed(commonStrokeWidth)
-                      ? 0
-                      : (commonStrokeWidth as number),
-                  ]}
-                  onValueChange={([v]) =>
-                    apply({ strokeWidth: v }, ["rect", "ellipse"])
-                  }
-                />
-                <p className="text-xs text-center text-muted-foreground">
-                  {isMixed(commonStrokeWidth)
-                    ? "Mixed"
-                    : `${commonStrokeWidth as number}px`}
-                </p>
-              </div>
-            </PropertySection>
-            <SidebarDivider />
-          </>
-        )}
-
-        {/* Corner Radius — rect */}
-        {hasRectNodes && (
-          <>
-            <PropertySection icon={RectangleHorizontal} title="Corner Radius">
+      {activeTab === "answer" ? (
+        <div className={SIDEBAR_DESIGN.contentDefault}>
+          <p className="text-sm text-muted-foreground text-center py-8">
+            ตั้งค่าเฉลยสำหรับ element นี้
+          </p>
+        </div>
+      ) : (
+        <div className={SIDEBAR_DESIGN.contentCompact}>
+          {/* Position */}
+          <PropertySection icon={Move} title="Position">
+            <div className="grid grid-cols-2 gap-2">
               <NumberField
-                label="Radius"
-                value={
-                  isMixed(commonCornerRadius)
-                    ? undefined
-                    : (commonCornerRadius as number)
-                }
-                placeholder={isMixed(commonCornerRadius) ? "Mixed" : undefined}
-                onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
+                label="X"
+                value={isMixed(commonX) ? undefined : (commonX as number)}
+                placeholder={isMixed(commonX) ? "Mixed" : undefined}
+                onChange={(v) => apply({ x: v })}
+              />
+              <NumberField
+                label="Y"
+                value={isMixed(commonY) ? undefined : (commonY as number)}
+                placeholder={isMixed(commonY) ? "Mixed" : undefined}
+                onChange={(v) => apply({ y: v })}
+              />
+            </div>
+          </PropertySection>
+
+          <SidebarDivider />
+
+          {/* Size */}
+          <PropertySection icon={Maximize2} title="Size">
+            <div className="grid grid-cols-2 gap-2">
+              <NumberField
+                label="W"
+                value={isMixed(commonW) ? undefined : (commonW as number)}
+                placeholder={isMixed(commonW) ? "Mixed" : undefined}
+                onChange={(v) => apply({ width: v })}
+                min={1}
+              />
+              <NumberField
+                label="H"
+                value={isMixed(commonH) ? undefined : (commonH as number)}
+                placeholder={isMixed(commonH) ? "Mixed" : undefined}
+                onChange={(v) => apply({ height: v })}
+                min={1}
+              />
+            </div>
+          </PropertySection>
+
+          <SidebarDivider />
+
+          {/* Rotation */}
+          <PropertySection icon={RotateCw} title="Rotation">
+            <NumberField
+              label="°"
+              value={
+                isMixed(commonRotation) ? undefined : (commonRotation as number)
+              }
+              placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
+              onChange={(v) => apply({ rotation: v })}
+              min={-180}
+              max={180}
+            />
+          </PropertySection>
+
+          <SidebarDivider />
+
+          {/* Opacity */}
+          <PropertySection icon={Eye} title="Opacity">
+            <div className="space-y-2">
+              <Slider
                 min={0}
                 max={100}
+                step={1}
+                value={[
+                  isMixed(commonOpacity) ? 50 : (commonOpacity as number),
+                ]}
+                onValueChange={([v]) => apply({ opacity: v / 100 })}
               />
-            </PropertySection>
-            <SidebarDivider />
-          </>
-        )}
+              <p className="text-xs text-center text-muted-foreground">
+                {isMixed(commonOpacity)
+                  ? "Mixed"
+                  : `${commonOpacity as number}%`}
+              </p>
+            </div>
+          </PropertySection>
 
-        {/* Text Properties */}
-        {hasTextNodes && (
-          <MultiTextProperties
-            textNodes={textNodes}
-            allIds={ids}
-            isSingle={isSingle}
-          />
-        )}
-      </div>
+          <SidebarDivider />
+
+          {/* Fill Color — rect, ellipse, text */}
+          {hasFillNodes && (
+            <>
+              <PropertySection icon={Palette} title="Fill Color">
+                <ColorInput
+                  value={mixedToStr(commonFill, "#000000")}
+                  mixed={isMixed(commonFill)}
+                  onChange={(v) =>
+                    apply({ fill: v }, [
+                      "rect",
+                      "ellipse",
+                      "triangle",
+                      "pentagon",
+                      "text",
+                    ])
+                  }
+                />
+              </PropertySection>
+              <SidebarDivider />
+            </>
+          )}
+
+          {/* Stroke — rect, ellipse */}
+          {hasStrokeNodes && (
+            <>
+              <PropertySection icon={PenLine} title="Stroke">
+                <ColorInput
+                  value={mixedToStr(commonStroke, "#000000")}
+                  mixed={isMixed(commonStroke)}
+                  onChange={(v) =>
+                    apply({ stroke: v }, [
+                      "rect",
+                      "ellipse",
+                      "triangle",
+                      "pentagon",
+                    ])
+                  }
+                />
+                <div className="space-y-2">
+                  <Slider
+                    min={0}
+                    max={50}
+                    step={1}
+                    value={[
+                      isMixed(commonStrokeWidth)
+                        ? 0
+                        : (commonStrokeWidth as number),
+                    ]}
+                    onValueChange={([v]) =>
+                      apply({ strokeWidth: v }, ["rect", "ellipse"])
+                    }
+                  />
+                  <p className="text-xs text-center text-muted-foreground">
+                    {isMixed(commonStrokeWidth)
+                      ? "Mixed"
+                      : `${commonStrokeWidth as number}px`}
+                  </p>
+                </div>
+              </PropertySection>
+              <SidebarDivider />
+            </>
+          )}
+
+          {/* Corner Radius — rect */}
+          {hasRectNodes && (
+            <>
+              <PropertySection icon={RectangleHorizontal} title="Corner Radius">
+                <NumberField
+                  label="Radius"
+                  value={
+                    isMixed(commonCornerRadius)
+                      ? undefined
+                      : (commonCornerRadius as number)
+                  }
+                  placeholder={
+                    isMixed(commonCornerRadius) ? "Mixed" : undefined
+                  }
+                  onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
+                  min={0}
+                  max={100}
+                />
+              </PropertySection>
+              <SidebarDivider />
+            </>
+          )}
+
+          {/* Text Properties */}
+          {hasTextNodes && (
+            <MultiTextProperties
+              textNodes={textNodes}
+              allIds={ids}
+              isSingle={isSingle}
+            />
+          )}
+        </div>
+      )}
     </aside>
   );
 }
@@ -432,17 +479,42 @@ export function RightSidebar() {
 // SUB COMPONENTS
 // ===============================================
 
-/** Sidebar header with title + optional subtitle */
-function SidebarHeader({
-  title,
+/** Tab header with Properties and ตั้งค่าเฉลย buttons */
+function SidebarTabHeader({
+  activeTab,
+  onTabChange,
   subtitle,
 }: {
-  title: string;
+  activeTab: "properties" | "answer";
+  onTabChange: (tab: "properties" | "answer") => void;
   subtitle?: string;
 }) {
   return (
     <div className={SIDEBAR_DESIGN.header}>
-      <h2 className={SIDEBAR_DESIGN.headerTitle}>{title}</h2>
+      <div className="flex gap-1 mt-2">
+        <Button
+          onClick={() => onTabChange("properties")}
+          className={cn(
+            "shadow-none flex-1 text-sm font-semibold tracking-tight py-1.5 px-2 rounded-md transition-colors bg-white border-none",
+            activeTab === "properties"
+              ? "bg-[#FFE5E6] text-[#ED1C24] hover:bg-[#FFE5E6] hover:text-[#ED1C24]"
+              : "text-muted-foreground hover:bg-white hover:text-muted-foreground",
+          )}
+        >
+          Properties
+        </Button>
+        <Button
+          onClick={() => onTabChange("answer")}
+          className={cn(
+            "shadow-none flex-1 text-sm font-semibold tracking-tight py-1.5 px-2 rounded-md transition-colors bg-white border-none",
+            activeTab === "answer"
+              ? "bg-[#FFE5E6] text-[#ED1C24] hover:bg-[#FFE5E6] hover:text-[#ED1C24]"
+              : "text-muted-foreground hover:bg-white hover:text-muted-foreground",
+          )}
+        >
+          ตั้งค่าเฉลย
+        </Button>
+      </div>
       {subtitle && <p className={SIDEBAR_DESIGN.headerSubtitle}>{subtitle}</p>}
     </div>
   );
@@ -551,7 +623,7 @@ function ColorInput({
         value={mixed ? "" : value}
         placeholder={mixed ? "Mixed" : undefined}
         onChange={(e) => onChange(e.target.value)}
-        className="h-8 text-xs font-mono placeholder:italic placeholder:font-sans"
+        className="h-8 text-xs placeholder:italic placeholder:font-sans"
       />
     </div>
   );

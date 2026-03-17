@@ -21,6 +21,7 @@ import {
   TriangleNode,
   PentagonNode,
   TextNode,
+  TextLinkNode,
   ImageNode,
   VideoNode,
   AudioNode,
@@ -125,9 +126,9 @@ export function insertTextLink(
   y: number,
   url = "https://example.com",
 ): void {
-  const node: TextNode = {
+  const node: TextLinkNode = {
     id: generateNodeId(),
-    type: "text",
+    type: "textlink",
     x,
     y,
     width: 280,
@@ -137,11 +138,13 @@ export function insertTextLink(
     locked: false,
     visible: true,
     text: url,
+    url,
     fontSize: 20,
     fontFamily: "Arial",
     fill: "#2563eb",
     fontStyle: "normal",
     align: "left",
+    underline: true,
   };
 
   commitInsert([node]);

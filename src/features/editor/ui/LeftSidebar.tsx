@@ -142,7 +142,7 @@ export function LeftSidebar() {
           title: "Layout",
           subtitle: "Layout panel",
           icon: Layers2,
-          render: () => <ToolPanel />,
+          render: () => <></>,
         },
         {
           id: "tool" as const,
