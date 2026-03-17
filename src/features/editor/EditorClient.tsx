@@ -53,6 +53,7 @@ import {
   insertPracticeCard,
   insertConnectionPair,
   insertChoiceOptions,
+  insertFillInTheBlank,
 } from "./core/commands/insert";
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
@@ -256,6 +257,8 @@ export function EditorClient({ docId }: EditorClientProps) {
 
         if (practiceType === "connection") {
           insertConnectionPair(dropX, dropY, title, description);
+        } else if (practiceType === "fill-in-the-blank") {
+          insertFillInTheBlank(dropX, dropY, title, description);
         } else {
           insertPracticeCard(dropX, dropY, title, description);
         }
