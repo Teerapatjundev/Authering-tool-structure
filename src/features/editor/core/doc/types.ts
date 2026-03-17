@@ -42,6 +42,12 @@ export interface PracticeMeta {
   title?: string;
   description?: string;
 
+  // === Answer reveal behavior ===
+  revealMode?: "after-item" | "other";
+
+  // === Container semantics (Parent/Child) ===
+  containerRole?: "primary" | "sub";
+
   // === Choice (คำถามแบบเลือก) ===
   mode?: "single" | "multiple";
   totalOptions?: number;
@@ -71,6 +77,9 @@ export interface BaseNode {
   // === Grouping ===
   groupId?: string; // รหัสกลุ่ม (ถ้าอยู่ในกลุ่ม)
   groupRotation?: number; // มุมหมุนสะสมของกลุ่ม (Canva-style: กรอบเอียงตาม)
+
+  // === Parent / Child ===
+  parentId?: string; // ถ้าเป็น child จะชี้ไปยัง parent node
 
   // === Master / Instance ===
   masterId?: string; // ชี้ไปยัง master node (ถ้าเป็น instance)

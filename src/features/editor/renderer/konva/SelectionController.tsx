@@ -368,6 +368,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const isEditingText = editingNodeId !== null;
   const allLocked =
     selectedNodes.length > 0 && selectedNodes.every((n) => n.locked);
+  const isPracticeSelection = selectedNodes.some((n) => !!n.practice);
   const isImage = selectedNodes[0]?.type === "image";
   const isCornerResizeNode =
     selectedNodes[0]?.type === "image" || selectedNodes[0]?.type === "video";
@@ -728,6 +729,57 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       },
       newProps: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
     });
+
+    // Choice parent/child rotation sync:
+    // If the selected node is a Choice primary, rotate all children around the parent center.
+    if (
+      activePage &&
+      node.practice?.type === "choice" &&
+      node.practice?.containerRole === "primary"
+    ) {
+      const deltaDeg = fr - (orig.rotation || 0);
+      if (Math.abs(deltaDeg) > 0.001) {
+        const rad = (deltaDeg * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+
+        const oldCx = orig.x;
+        const oldCy = orig.y;
+        const newCx = fx;
+        const newCy = fy;
+
+        const children = activePage.nodes.filter(
+          (n: any) => n.visible && n.parentId === node.id,
+        );
+
+        if (children.length > 0) {
+          const childUpdates: Array<{ id: string; changes: Partial<Node> }> = [];
+
+          for (const child of children) {
+            const relX = child.x - oldCx;
+            const relY = child.y - oldCy;
+            const rotX = relX * cos - relY * sin;
+            const rotY = relX * sin + relY * cos;
+            const nextX = newCx + rotX;
+            const nextY = newCy + rotY;
+            const nextRot = (child.rotation || 0) + deltaDeg;
+
+            childUpdates.push({
+              id: child.id,
+              changes: { x: nextX, y: nextY, rotation: nextRot },
+            });
+
+            historyUpdates.push({
+              id: child.id,
+              oldProps: { x: child.x, y: child.y, rotation: child.rotation },
+              newProps: { x: nextX, y: nextY, rotation: nextRot },
+            });
+          }
+
+          if (childUpdates.length > 0) updateNodes(childUpdates);
+        }
+      }
+    }
   };
 
   const finalizeMultiTransform = (
@@ -998,8 +1050,64 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       }
     }
 
-    const nodeRot = selectedNodes[0]?.rotation ?? 0;
-    if (Math.abs(nodeRot % 360) > 0.01) return newBox;
+    const selected = selectedNodes[0];
+    const isChoicePrimary =
+      selected?.practice?.type === "choice" &&
+      selected?.practice?.containerRole === "primary";
+
+    const nodeRot = selected?.rotation ?? 0;
+    // For most nodes, skip edge clamping when rotated.
+    // For Choice primary, we still enforce parent/child boundary even when rotated.
+    if (!isChoicePrimary && Math.abs(nodeRot % 360) > 0.01) return newBox;
+
+    // Choice parent/child boundary:
+    // Parent (primary) must always contain children. When shrinking, it stops exactly at
+    // children's edges (left/right/top/bottom) in screen space. Works even if children are rotated.
+    if (isChoicePrimary && activePage) {
+      const children = activePage.nodes.filter(
+        (n: any) => n.visible && n.parentId === selected.id,
+      );
+
+      if (children.length > 0) {
+        const z = viewport.zoom;
+        const vx = viewport.x;
+        const vy = viewport.y;
+
+        let childMinL = Number.POSITIVE_INFINITY;
+        let childMinT = Number.POSITIVE_INFINITY;
+        let childMaxR = Number.NEGATIVE_INFINITY;
+        let childMaxB = Number.NEGATIVE_INFINITY;
+
+        for (const c of children) {
+          const rot = c.rotation ?? 0;
+          const { halfX, halfY } = rotatedHalfExtents(c.width, c.height, rot);
+          const l = (c.x - halfX) * z + vx;
+          const t = (c.y - halfY) * z + vy;
+          const r = (c.x + halfX) * z + vx;
+          const b = (c.y + halfY) * z + vy;
+          if (l < childMinL) childMinL = l;
+          if (t < childMinT) childMinT = t;
+          if (r > childMaxR) childMaxR = r;
+          if (b > childMaxB) childMaxB = b;
+        }
+
+        let left = newBox.x;
+        let top = newBox.y;
+        let right = newBox.x + newBox.width;
+        let bottom = newBox.y + newBox.height;
+
+        // Prevent parent from crossing children's bounds.
+        if (left > childMinL) left = childMinL;
+        if (top > childMinT) top = childMinT;
+        if (right < childMaxR) right = childMaxR;
+        if (bottom < childMaxB) bottom = childMaxB;
+
+        newBox.x = left;
+        newBox.y = top;
+        newBox.width = right - left;
+        newBox.height = bottom - top;
+      }
+    }
 
     const db = docScreenBounds(activePage);
     if (!isCornerResizeNode) {
@@ -1078,6 +1186,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
           flipEnabled={false}
           rotationSnaps={ROTATION_SNAPS}
           rotationSnapTolerance={5}
+          rotateEnabled={!isPracticeSelection}
           keepRatio={false}
           enabledAnchors={[...ALL_ANCHORS]}
           boundBoxFunc={multiBoundBoxFunc}
@@ -1096,6 +1205,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       flipEnabled={false}
       rotationSnaps={ROTATION_SNAPS}
       rotationSnapTolerance={5}
+      rotateEnabled={!isPracticeSelection}
       keepRatio={isCornerResizeNode}
       enabledAnchors={isCornerResizeNode ? [...CORNER_ANCHORS] : [...ALL_ANCHORS]}
       boundBoxFunc={singleBoundBoxFunc}

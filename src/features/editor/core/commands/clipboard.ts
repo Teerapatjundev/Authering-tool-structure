@@ -40,8 +40,8 @@ export function copy(): void {
 
   if (selectedNodes.length === 0) return;
 
-  // Deep copy nodes
-  clipboard = selectedNodes.map((n) => ({ ...n }));
+  // Deep copy nodes (preserve nested objects like practice)
+  clipboard = selectedNodes.map((n) => JSON.parse(JSON.stringify(n)) as Node);
 }
 
 /**
@@ -63,13 +63,46 @@ export function paste(): void {
   if (!doc) return;
   const pageId = doc.activePageId;
 
+  const nodeIdMap = new Map<string, string>();
+  const groupIdMap = new Map<string, string>();
+  const practiceIdMap = new Map<string, string>();
+
+  for (const node of clipboard) {
+    nodeIdMap.set(node.id, generateNodeId());
+    if (node.groupId && !groupIdMap.has(node.groupId)) {
+      groupIdMap.set(node.groupId, generateNodeId());
+    }
+    if (node.practice?.id && !practiceIdMap.has(node.practice.id)) {
+      practiceIdMap.set(node.practice.id, generateNodeId());
+    }
+  }
+
   // Clone และ offset ตำแหน่ง
-  const newNodes = clipboard.map((n) => ({
-    ...n,
-    id: generateNodeId(),
-    x: n.x + 20,
-    y: n.y + 20,
-  }));
+  const newNodes = clipboard.map((n) => {
+    const cloned = JSON.parse(JSON.stringify(n)) as Node;
+    cloned.id = nodeIdMap.get(n.id) ?? generateNodeId();
+    cloned.x = n.x + 20;
+    cloned.y = n.y + 20;
+
+    if ((cloned as any).parentId) {
+      (cloned as any).parentId =
+        nodeIdMap.get((cloned as any).parentId) ?? (cloned as any).parentId;
+    }
+
+    if (cloned.groupId) {
+      cloned.groupId = groupIdMap.get(cloned.groupId) ?? cloned.groupId;
+    }
+
+    if (cloned.masterId) {
+      cloned.masterId = nodeIdMap.get(cloned.masterId) ?? cloned.masterId;
+    }
+
+    if (cloned.practice?.id) {
+      cloned.practice.id = practiceIdMap.get(cloned.practice.id) ?? cloned.practice.id;
+    }
+
+    return cloned;
+  });
 
   const op: InsertOp = {
     type: "insert",
