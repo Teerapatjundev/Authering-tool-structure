@@ -22,6 +22,61 @@ import { docsService } from "@/services/api/docs.service";
 import { debounce } from "@/shared/utils/debounce";
 import { generateId, generateNodeId } from "@/shared/utils/id";
 
+const PRACTICE_STROKE = "#C7C8D1";
+
+function normalizePracticeNodeStrokes(doc: Document): void {
+  for (const page of doc.pages) {
+    for (const n of page.nodes) {
+      // Practice nodes are currently represented primarily by rect nodes.
+      if (!n.practice) continue;
+      if (n.type !== "rect") continue;
+      (n as any).stroke = PRACTICE_STROKE;
+    }
+  }
+}
+
+function normalizeConnectionAnswerModel(doc: Document): void {
+  for (const page of doc.pages) {
+    const nodes = page.nodes as any[];
+    const byId = new Map<string, any>();
+    for (const n of nodes) byId.set(n.id, n);
+
+    const connectionPrimaries = nodes.filter(
+      (n) => n.practice?.type === "connection" && n.practice?.containerRole === "primary",
+    );
+
+    for (const primary of connectionPrimaries) {
+      const children = nodes.filter(
+        (n) => n.visible && n.parentId === primary.id && n.practice?.type === "connection",
+      );
+      const left = children.filter((n) => n.practice?.side === "left");
+      const right = children.filter((n) => n.practice?.side === "right");
+
+      for (const c of children) {
+        if (!c.practice) continue;
+        if (!c.practice.itemId) c.practice.itemId = generateNodeId();
+      }
+
+      const pairs = primary.practice?.connectionPairs;
+      const hasValidPairs =
+        Array.isArray(pairs) &&
+        pairs.every((p: any) => p?.leftItemId && p?.rightItemId);
+
+      if (!hasValidPairs && left.length > 0 && right.length > 0) {
+        primary.practice = {
+          ...(primary.practice as any),
+          connectionPairs: [
+            {
+              leftItemId: String(left[0].practice.itemId),
+              rightItemId: String(right[0].practice.itemId),
+            },
+          ],
+        };
+      }
+    }
+  }
+}
+
 function deepClone<T>(value: T): T {
   const sc = (globalThis as any).structuredClone as undefined | ((v: any) => any);
   if (typeof sc === "function") {
@@ -232,6 +287,12 @@ export const useDocStore = create<DocState>()(
       const migrated = migrateToPagedDocument(doc as any, docId);
       // Ensure active page is valid
       ensureActivePage(migrated);
+
+      // Keep practice stroke color consistent across existing documents.
+      normalizePracticeNodeStrokes(migrated);
+
+      // Ensure connection practice has stable itemIds + default pairs.
+      normalizeConnectionAnswerModel(migrated);
 
       // Requirement: when opening a document (e.g. from dashboard), always show the first page.
       // This overrides any previously-saved activePageId.

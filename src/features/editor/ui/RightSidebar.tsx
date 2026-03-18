@@ -196,6 +196,11 @@ export function RightSidebar() {
     node.practice?.type === "choice" &&
     node.practice?.containerRole === "primary";
 
+  const isConnectionPrimarySelected =
+    isSingle &&
+    node.practice?.type === "connection" &&
+    node.practice?.containerRole === "primary";
+
   // ========== Helper: apply change ==========
   const apply = (changes: Partial<Node>, typeFilter?: string[]) => {
     if (isSingle) {
@@ -326,7 +331,7 @@ export function RightSidebar() {
       <SidebarHeader title="Properties" subtitle={typeLabel} />
 
       <div className={SIDEBAR_DESIGN.contentCompact}>
-        {isChoicePrimarySelected && (
+        {(isChoicePrimarySelected || isConnectionPrimarySelected) && (
           <>
             <div className="pb-2">
               <ToggleGroup
@@ -360,13 +365,15 @@ export function RightSidebar() {
                   (n: any) => n.practice?.type === "choice" && n.practice?.id === choiceSetId,
                 );
                 const subNodes = allChoiceNodes.filter(
-                  (n: any) => n.practice?.containerRole === "sub" && typeof n.practice?.optionIndex === "number",
+                  (n: any): n is any =>
+                    n.practice?.containerRole === "sub" &&
+                    typeof n.practice?.optionIndex === "number",
                 );
 
                 const mode = node.practice?.mode ?? "multiple";
 
                 const optionIndexSet = new Set<number>();
-                for (const n of subNodes) optionIndexSet.add(n.practice.optionIndex);
+                for (const n of subNodes) optionIndexSet.add(n.practice.optionIndex as number);
                 const optionIndices = Array.from(optionIndexSet).sort((a, b) => a - b);
 
                 const currentCorrect = optionIndices.filter((i) =>
@@ -427,21 +434,164 @@ export function RightSidebar() {
                       โหมด: {mode === "single" ? "เลือกได้ข้อเดียว" : "เลือกได้หลายข้อ"}
                     </div>
 
-                    <ToggleGroup
-                      type={mode === "single" ? "single" : "multiple"}
-                      value={value}
-                      onValueChange={(vals) => {
-                        const next = Array.isArray(vals) ? vals : [vals];
-                        setCorrect(next.filter(Boolean) as string[]);
-                      }}
-                      className="justify-start flex-wrap"
-                    >
-                      {optionIndices.map((i) => (
-                        <ToggleGroupItem key={i} value={String(i)} size="sm">
-                          ตัวเลือก {i + 1}
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
+                    {mode === "single" ? (
+                      <ToggleGroup
+                        type="single"
+                        value={value[0] ?? ""}
+                        onValueChange={(v: string) => {
+                          setCorrect(v ? [v] : []);
+                        }}
+                        className="justify-start flex-wrap"
+                      >
+                        {optionIndices.map((i) => (
+                          <ToggleGroupItem key={i} value={String(i)} size="sm">
+                            ตัวเลือก {i + 1}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                    ) : (
+                      <ToggleGroup
+                        type="multiple"
+                        value={value}
+                        onValueChange={(vals: string[]) => {
+                          setCorrect(vals);
+                        }}
+                        className="justify-start flex-wrap"
+                      >
+                        {optionIndices.map((i) => (
+                          <ToggleGroupItem key={i} value={String(i)} size="sm">
+                            ตัวเลือก {i + 1}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                    )}
+                  </div>
+                );
+              })()}
+            </PropertySection>
+
+            <SidebarDivider />
+
+            <PropertySection title="วิธีการแสดงเฉลย">
+              <div className="space-y-2">
+                <div className="text-[11px] text-muted-foreground">รูปแบบ</div>
+                <Select
+                  value={node.practice?.revealMode ?? "after-item"}
+                  onValueChange={(v) => {
+                    if (v !== "after-item" && v !== "other") return;
+                    commitTransformUpdates([
+                      {
+                        id: node.id,
+                        newProps: {
+                          practice: {
+                            ...(node.practice as any),
+                            revealMode: v,
+                          },
+                        },
+                      },
+                    ]);
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="เลือกวิธีการแสดงเฉลย" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="after-item">แสดงเฉลยหลังตอบข้อนั้นๆ</SelectItem>
+                    <SelectItem value="other">อื่นๆ</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </PropertySection>
+          </>
+        ) : isConnectionPrimarySelected && choiceTab === "answers" ? (
+          <>
+            <PropertySection title="ตั้งค่าเฉลย">
+              {(() => {
+                const page = activePage;
+                if (!page) return null;
+
+                const children = page.nodes.filter(
+                  (n: any) => n.visible && n.parentId === node.id && n.practice?.type === "connection",
+                );
+                const leftItems = children.filter((n: any) => n.practice?.side === "left");
+                const rightItems = children.filter((n: any) => n.practice?.side === "right");
+
+                const leftKeys = leftItems.map((n: any) => String(n.practice?.itemId ?? n.id));
+                const rightOptions = rightItems.map((n: any, idx: number) => ({
+                  key: String(n.practice?.itemId ?? n.id),
+                  label: `ขวา ${idx + 1}`,
+                }));
+
+                const currentPairs =
+                  ((node.practice as any)?.connectionPairs as Array<any> | undefined) ?? [];
+
+                const pairMap = new Map<string, string>();
+                for (const p of currentPairs) {
+                  if (p?.leftItemId && p?.rightItemId) {
+                    pairMap.set(String(p.leftItemId), String(p.rightItemId));
+                  }
+                }
+
+                const setPair = (leftItemId: string, rightItemId: string) => {
+                  const pairs = Array.isArray(currentPairs) ? [...currentPairs] : [];
+
+                  // Enforce 1-1: remove any existing mapping for this left, and also remove any mapping using this right.
+                  const next = pairs.filter(
+                    (p: any) =>
+                      String(p?.leftItemId) !== String(leftItemId) &&
+                      String(p?.rightItemId) !== String(rightItemId),
+                  );
+                  next.push({ leftItemId, rightItemId });
+
+                  commitTransformUpdates([
+                    {
+                      id: node.id,
+                      newProps: {
+                        practice: {
+                          ...(node.practice as any),
+                          connectionPairs: next,
+                        },
+                      },
+                    },
+                  ]);
+                };
+
+                if (leftItems.length === 0 || rightItems.length === 0) {
+                  return (
+                    <div className="text-xs text-muted-foreground">
+                      ต้องมีรายการฝั่งซ้ายและขวาก่อน ถึงจะตั้งค่าเฉลยได้
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {leftKeys.map((leftId, idx) => {
+                      const value = pairMap.get(leftId);
+                      return (
+                        <div key={leftId} className="space-y-1">
+                          <div className="text-[11px] text-muted-foreground">ซ้าย {idx + 1}</div>
+                          <Select
+                            value={value}
+                            onValueChange={(v) => {
+                              if (!v) return;
+                              setPair(leftId, v);
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="เลือกคำตอบฝั่งขวา" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {rightOptions.map((opt) => (
+                                <SelectItem key={opt.key} value={opt.key}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })()}

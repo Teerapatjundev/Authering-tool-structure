@@ -162,7 +162,8 @@ function findChoicePrimaryAncestor(
   let current = node;
   for (let i = 0; i < 50 && current; i++) {
     if (
-      current.practice?.type === "choice" &&
+      (current.practice?.type === "choice" ||
+        current.practice?.type === "connection") &&
       current.practice?.containerRole === "primary"
     ) {
       return current;
@@ -190,7 +191,7 @@ function resolveHitNodeForChoiceContainer(
 function isChoicePrimaryNode(node: any): boolean {
   return (
     !!node &&
-    node.practice?.type === "choice" &&
+    (node.practice?.type === "choice" || node.practice?.type === "connection") &&
     node.practice?.containerRole === "primary"
   );
 }
