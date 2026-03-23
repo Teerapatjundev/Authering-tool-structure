@@ -213,6 +213,11 @@ export function RightSidebar() {
     node.practice?.type === "choice" &&
     node.practice?.containerRole === "primary";
 
+  const isConnectionPrimarySelected =
+    isSingle &&
+    node.practice?.type === "connection" &&
+    node.practice?.containerRole === "primary";
+
   // ========== Helper: apply change ==========
   const apply = (changes: Partial<Node>, typeFilter?: string[]) => {
     if (isSingle) {

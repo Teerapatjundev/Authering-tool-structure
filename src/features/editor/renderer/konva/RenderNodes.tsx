@@ -29,6 +29,7 @@ import {
   Circle,
   RegularPolygon,
   Line,
+  Path as KonvaPath,
 } from "react-konva";
 import useImage from "use-image";
 import {
@@ -176,15 +177,20 @@ function RenderNode({ node }: { node: Node }) {
         const isChoicePrimary =
           node.practice?.type === "choice" &&
           node.practice?.containerRole === "primary";
-        const isActiveChoicePrimary = isChoicePrimary && activeContainerId === node.id;
+        const isConnectionPrimary =
+          node.practice?.type === "connection" &&
+          node.practice?.containerRole === "primary";
+
+        const isContainerPrimary = isChoicePrimary || isConnectionPrimary;
+        const isActiveContainerPrimary = isContainerPrimary && activeContainerId === node.id;
 
         return (
           <RenderRect
             node={node}
             commonProps={commonProps}
-            isActiveChoicePrimary={isActiveChoicePrimary}
+            isActiveChoicePrimary={isActiveContainerPrimary}
             onClick={
-              isChoicePrimary
+              isContainerPrimary
                 ? () => {
                     // Click-to-toggle, but only after the parent is already selected.
                     // This keeps normal selection + resize predictable.
@@ -202,7 +208,7 @@ function RenderNode({ node }: { node: Node }) {
                 : undefined
             }
             onDoubleClick={
-              node.practice?.type === "choice"
+              node.practice?.type === "choice" || node.practice?.type === "connection"
                 ? node.practice?.containerRole === "primary"
                   ? () => {
                       const next = activeContainerId === node.id ? null : node.id;
@@ -284,21 +290,120 @@ function RenderRect({
   onClick?: () => void;
   onDoubleClick?: () => void;
 }) {
+  const isConnection = node.practice?.type === "connection";
+  const connectionSide = node.practice?.side as "left" | "right" | undefined;
+  const isConnectionSub = isConnection && (connectionSide === "left" || connectionSide === "right");
+
+  // Connection decorator: small inward-facing circle per node.
+  const showConnectionDot = isConnectionSub;
+  const r = 5;
+  const halfW = node.width / 2;
+  const outsideGap = 20; // distance from rect edge to circle edge
+
+  // Dot sits on the inward-facing edge.
+  const localDx = showConnectionDot
+    ? (connectionSide === "left"
+        ? halfW + (r + outsideGap)
+        : -(halfW + (r + outsideGap)))
+    : 0;
+
+  // Rotate offset vector by node.rotation so dot follows rotation.
+  const rad = ((node.rotation || 0) * Math.PI) / 180;
+  const dx = localDx * Math.cos(rad);
+  const dy = localDx * Math.sin(rad);
+  const dotX = node.x + dx;
+  const dotY = node.y + dy;
+
+  const PRACTICE_STROKE = "#C7C8D1";
+  const strokeColor = isActiveChoicePrimary
+    ? "#0066ff"
+    : node.practice
+      ? PRACTICE_STROKE
+      : node.stroke;
+
+  const showConnectionAddMedia = isConnectionSub;
+  const addMediaFill = "#656565";
+  const addMediaLabel = "เพิ่มสื่อ";
+
   return (
-    <Rect
-      {...commonProps}
-      width={node.width}
-      height={node.height}
-      fill={node.fill}
-      stroke={isActiveChoicePrimary ? "#0066ff" : node.stroke}
-      strokeWidth={node.strokeWidth || 0}
-      cornerRadius={node.cornerRadius || 0}
-      dash={isActiveChoicePrimary ? [10, 6] : undefined}
-      onClick={onClick}
-      onTap={onClick}
-      onDblClick={onDoubleClick}
-      onDblTap={onDoubleClick}
-    />
+    <>
+      <Rect
+        {...commonProps}
+        width={node.width}
+        height={node.height}
+        fill={node.fill}
+        stroke={strokeColor}
+        strokeWidth={node.strokeWidth || 0}
+        cornerRadius={node.cornerRadius || 0}
+        dash={isActiveChoicePrimary ? [10, 6] : undefined}
+        onClick={onClick}
+        onTap={onClick}
+        onDblClick={onDoubleClick}
+        onDblTap={onDoubleClick}
+      />
+      {showConnectionDot && (
+        <Circle
+          x={dotX}
+          y={dotY}
+          radius={r}
+          fill="#ffffff"
+          stroke={strokeColor}
+          strokeWidth={2}
+          opacity={node.opacity}
+          listening={false}
+        />
+      )}
+
+      {showConnectionAddMedia && (
+        <Group
+          x={node.x}
+          y={node.y}
+          rotation={node.rotation}
+          opacity={node.opacity}
+          listening={false}
+        >
+          {(() => {
+            const iconToTextGap = 6;
+            const labelFontSize = 14;
+            const labelW = 76;
+
+            const iconSize = 20;
+            const scale = iconSize / 24;
+            const contentW = iconSize + iconToTextGap + labelW;
+            const startX = -contentW / 2;
+            const iconX = startX;
+            const iconY = -iconSize / 2;
+            const textX = startX + iconSize + iconToTextGap;
+            const textY = -labelFontSize / 2;
+
+            return (
+              <>
+                <KonvaPath
+                  x={iconX}
+                  y={iconY}
+                  data="M4.929 4.929A10 10 0 1 1 19.07 19.07A10 10 0 0 1 4.93 4.93m8.071 4.071a1 1 0 1 0-2 0v2h-2a1 1 0 1 0 0 2h2v2a1 1 0 1 0 2 0v-2h2a1 1 0 1 0 0-2h-2z"
+                  fill={addMediaFill}
+                  scaleX={scale}
+                  scaleY={scale}
+                />
+                <Text
+                  x={textX}
+                  y={textY}
+                  width={labelW}
+                  height={labelFontSize + 2}
+                  text={addMediaLabel}
+                  fontSize={labelFontSize}
+                  fontFamily="Arial"
+                  fill={addMediaFill}
+                  align="left"
+                  verticalAlign="middle"
+                />
+              </>
+            );
+          })()}
+        </Group>
+      )}
+    </>
   );
 }
 

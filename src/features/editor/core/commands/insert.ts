@@ -340,7 +340,7 @@ export function insertPracticeCard(
     groupId,
     practice: practiceMeta,
     fill: "#ffffff",
-    stroke: "#e5e7eb",
+    stroke: "#C7C8D1",
     strokeWidth: 2,
     cornerRadius: 10,
   };
@@ -359,7 +359,7 @@ export function insertPracticeCard(
     groupId,
     practice: practiceMeta,
     fill: "#e5e7eb",
-    stroke: "#d1d5db",
+    stroke: "#C7C8D1",
     strokeWidth: 1,
     cornerRadius: 4,
   };
@@ -421,14 +421,52 @@ export function insertConnectionPair(
   title: string,
   description: string,
 ): void {
-  const cardW = 220;
-  const cardH = 240;
-  const gap = 40;
+  // Default size for Connection practice nodes
+  const cardW = 150;
+  const cardH = 48;
+  const gap = 200;
+
+  // Parent boundary (similar to Choice primary container)
+  const containerPaddingX = 24;
+  const containerPaddingY = 24;
+  const containerW = cardW * 2 + gap + containerPaddingX * 2;
+  const containerH = cardH + containerPaddingY * 2;
 
   const setId = generateNodeId();
+  const primaryId = generateNodeId();
+
+  const leftItemId = generateNodeId();
+  const rightItemId = generateNodeId();
 
   const leftX = x - (cardW / 2 + gap / 2);
   const rightX = x + (cardW / 2 + gap / 2);
+
+  const practicePrimary = {
+    type: "connection" as const,
+    id: setId,
+    title,
+    description,
+    containerRole: "primary" as const,
+    connectionPairs: [{ leftItemId, rightItemId }],
+  };
+
+  const primary: RectNode = {
+    id: primaryId,
+    type: "rect",
+    x,
+    y,
+    width: containerW,
+    height: containerH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    practice: practicePrimary,
+    fill: "rgba(0,0,0,0)",
+    stroke: "#C7C8D1",
+    strokeWidth: 2,
+    cornerRadius: 12,
+  };
 
   const baseProps = {
     type: "rect" as const,
@@ -438,8 +476,9 @@ export function insertConnectionPair(
     opacity: 1,
     locked: false,
     visible: true,
+    parentId: primaryId,
     fill: "#ffffff",
-    stroke: "#e5e7eb",
+    stroke: "#C7C8D1",
     strokeWidth: 2,
     cornerRadius: 10,
     practice: {
@@ -447,6 +486,8 @@ export function insertConnectionPair(
       id: setId,
       title,
       description,
+      containerRole: "sub" as const,
+      itemId: leftItemId,
     },
   };
 
@@ -455,7 +496,7 @@ export function insertConnectionPair(
     x: leftX,
     y,
     ...baseProps,
-    practice: { ...baseProps.practice, side: "left" },
+    practice: { ...baseProps.practice, side: "left", itemId: leftItemId },
   };
 
   const right: RectNode = {
@@ -463,10 +504,10 @@ export function insertConnectionPair(
     x: rightX,
     y,
     ...baseProps,
-    practice: { ...baseProps.practice, side: "right" },
+    practice: { ...baseProps.practice, side: "right", itemId: rightItemId },
   };
 
-  commitInsert([left, right]);
+  commitInsert([primary, left, right]);
 }
 
 /**
@@ -606,7 +647,7 @@ export function insertChoiceOptions(
     visible: true,
     practice: practiceMetaPrimary,
     fill: "#ffffff",
-    stroke: "#e5e7eb",
+    stroke: "#C7C8D1",
     strokeWidth: 2,
     cornerRadius: 12,
   };
@@ -654,7 +695,7 @@ export function insertChoiceOptions(
       groupId: optionGroupId,
       practice: practiceMeta,
       fill: "#ffffff",
-      stroke: "#e5e7eb",
+      stroke: "#C7C8D1",
       strokeWidth: 2,
       cornerRadius: 10,
     };
@@ -674,7 +715,7 @@ export function insertChoiceOptions(
       groupId: optionGroupId,
       practice: practiceMeta,
       fill: "#e5e7eb",
-      stroke: "#d1d5db",
+      stroke: "#C7C8D1",
       strokeWidth: 1,
       cornerRadius: 4,
     };

@@ -1051,19 +1051,31 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     }
 
     const selected = selectedNodes[0];
-    const isChoicePrimary =
-      selected?.practice?.type === "choice" &&
+    const isContainerPrimary =
+      (selected?.practice?.type === "choice" ||
+        selected?.practice?.type === "connection") &&
       selected?.practice?.containerRole === "primary";
+
+    const containerParent =
+      activePage && (selected as any)?.parentId
+        ? activePage.nodes.find((n: any) => n.id === (selected as any).parentId)
+        : null;
+    const isContainerChild =
+      !!containerParent &&
+      (containerParent.practice?.type === "choice" ||
+        containerParent.practice?.type === "connection") &&
+      containerParent.practice?.containerRole === "primary";
 
     const nodeRot = selected?.rotation ?? 0;
     // For most nodes, skip edge clamping when rotated.
-    // For Choice primary, we still enforce parent/child boundary even when rotated.
-    if (!isChoicePrimary && Math.abs(nodeRot % 360) > 0.01) return newBox;
+    // For container primary (Choice/Connection), we still enforce parent/child boundary even when rotated.
+    if (!isContainerPrimary && !isContainerChild && Math.abs(nodeRot % 360) > 0.01)
+      return newBox;
 
-    // Choice parent/child boundary:
+    // Container parent/child boundary:
     // Parent (primary) must always contain children. When shrinking, it stops exactly at
     // children's edges (left/right/top/bottom) in screen space. Works even if children are rotated.
-    if (isChoicePrimary && activePage) {
+    if (isContainerPrimary && activePage) {
       const children = activePage.nodes.filter(
         (n: any) => n.visible && n.parentId === selected.id,
       );
@@ -1107,6 +1119,49 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         newBox.width = right - left;
         newBox.height = bottom - top;
       }
+    }
+
+    // Container child boundary:
+    // Child (sub) must stay within parent (primary). When expanding, it stops exactly at
+    // parent's edges (left/right/top/bottom) in screen space.
+    if (isContainerChild && activePage && containerParent) {
+      const z = viewport.zoom;
+      const vx = viewport.x;
+      const vy = viewport.y;
+
+      const parentRot = containerParent.rotation ?? 0;
+      const { halfX: pHalfX, halfY: pHalfY } = rotatedHalfExtents(
+        containerParent.width,
+        containerParent.height,
+        parentRot,
+      );
+
+      const parentL = (containerParent.x - pHalfX) * z + vx;
+      const parentT = (containerParent.y - pHalfY) * z + vy;
+      const parentR = (containerParent.x + pHalfX) * z + vx;
+      const parentB = (containerParent.y + pHalfY) * z + vy;
+
+      const signW = Math.sign(newBox.width) || 1;
+      const signH = Math.sign(newBox.height) || 1;
+
+      let left = signW > 0 ? newBox.x : newBox.x + newBox.width;
+      let right = signW > 0 ? newBox.x + newBox.width : newBox.x;
+      let top = signH > 0 ? newBox.y : newBox.y + newBox.height;
+      let bottom = signH > 0 ? newBox.y + newBox.height : newBox.y;
+
+      if (left < parentL) left = parentL;
+      if (top < parentT) top = parentT;
+      if (right > parentR) right = parentR;
+      if (bottom > parentB) bottom = parentB;
+
+      const absW = Math.max(0, right - left);
+      const absH = Math.max(0, bottom - top);
+      if (absW < 5 || absH < 5) return oldBox;
+
+      newBox.x = signW > 0 ? left : right;
+      newBox.y = signH > 0 ? top : bottom;
+      newBox.width = signW * absW;
+      newBox.height = signH * absH;
     }
 
     const db = docScreenBounds(activePage);

@@ -40,6 +40,7 @@ export interface PracticeMeta {
   type: string; // เช่น "connection"
   id: string; // id อ้างอิงของชุดแบบฝึกหัด
   side?: ConnectionSide; // ใช้กับ connection (left/right)
+  itemId?: string; // ใช้กับ connection/choice ในกรณีที่ต้องอ้างอิง item แบบ stable
   title?: string;
   description?: string;
 
@@ -55,6 +56,9 @@ export interface PracticeMeta {
   correctCount?: number;
   optionIndex?: number; // 0-based
   isCorrect?: boolean;
+
+  // === Connection (โยงเส้นจับคู่) ===
+  connectionPairs?: Array<{ leftItemId: string; rightItemId: string }>;
 }
 
 // ===============================================
