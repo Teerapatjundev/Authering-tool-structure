@@ -46,7 +46,7 @@ import {
   getMultiSelectionBoundsWithRotation,
   getGroupBoundsInRotatedFrame,
 } from "../../core/geometry/bounds";
-import { snapResizeSize, SizeSnapResult } from "../../core/geometry/snap";
+import { snapResizeSize, SizeSnapResult, snapResizeEdges, ResizeEdgeSnapResult } from "../../core/geometry/snap";
 import { useSnapGuidesStore } from "../../stores/snapGuidesStore";
 import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 
@@ -356,6 +356,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const groupRotRef = useRef(0);
   const prevKeyRef = useRef("");
   const sizeSnapResultRef = useRef<SizeSnapResult | null>(null);
+  const resizeEdgeSnapRef = useRef<ResizeEdgeSnapResult | null>(null);
   const isRotatingTransformRef = useRef(false);
 
   const selectedNodes =
@@ -490,6 +491,17 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       useSnapGuidesStore.getState().setSizeGuides(snapResult.sizeGuides);
     } else {
       useSnapGuidesStore.getState().setSizeGuides([]);
+    }
+
+    // --- Edge snap guides (single resize only) ---
+    const edgeSnap = resizeEdgeSnapRef.current;
+    if (
+      edgeSnap &&
+      (edgeSnap.snappedLeft || edgeSnap.snappedRight || edgeSnap.snappedTop || edgeSnap.snappedBottom)
+    ) {
+      useSnapGuidesStore.getState().setGuides(edgeSnap.guides);
+    } else {
+      useSnapGuidesStore.getState().setGuides([]);
     }
 
     if (!isMulti) return; // Single: Konva Transformer handles visual
@@ -971,6 +983,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const activeAnchor = trRef.current?.getActiveAnchor();
     if (activeAnchor === "rotater") {
       sizeSnapResultRef.current = null;
+      resizeEdgeSnapRef.current = null;
       return newBox;
     }
     if (oldBox.width * newBox.width < 0 || oldBox.height * newBox.height < 0)
@@ -984,6 +997,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       Math.abs(oldBox.height - newBox.height) < 1;
     if (isRot) {
       sizeSnapResultRef.current = null;
+      resizeEdgeSnapRef.current = null;
       return newBox;
     }
 
@@ -1048,6 +1062,62 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         if (!topFixed) newBox.y = newBox.y + newBox.height - targetH;
         newBox.height = targetH;
       }
+    }
+
+    // --- Edge snap during resize (Canva-style position alignment) ---
+    // Only for non-rotated, non-corner-resize nodes
+    const resizingNode = selectedNodes[0];
+    const resizingNodeRot = resizingNode?.rotation ?? 0;
+    if (!isCornerResizeNode && Math.abs(resizingNodeRot % 360) < 0.01) {
+      const vx = viewport.x;
+      const vy = viewport.y;
+      // Convert newBox (screen space) to world space
+      const worldLeft = (newBox.x - vx) / z;
+      const worldTop = (newBox.y - vy) / z;
+      const worldRight = worldLeft + Math.abs(newBox.width) / z;
+      const worldBottom = worldTop + Math.abs(newBox.height) / z;
+      const anchor = activeAnchor ?? "";
+      // Determine which edges are moving based on the active anchor
+      const movingLeft: number | null = anchor.includes("left") ? worldLeft : null;
+      const movingRight: number | null = anchor.includes("right") ? worldRight : null;
+      const movingTop: number | null = anchor.includes("top") ? worldTop : null;
+      const movingBottom: number | null = anchor.includes("bottom") ? worldBottom : null;
+
+      if (movingLeft !== null || movingRight !== null || movingTop !== null || movingBottom !== null) {
+        const otherNodes = activePage.nodes.filter((n) => !selectedIds.has(n.id) && n.visible);
+        const edgeSnap = snapResizeEdges(
+          movingLeft,
+          movingRight,
+          movingTop,
+          movingBottom,
+          { left: worldLeft, top: worldTop, right: worldRight, bottom: worldBottom },
+          otherNodes,
+          selectedIds,
+          activePage.width,
+          activePage.height,
+        );
+        resizeEdgeSnapRef.current = edgeSnap;
+        if (edgeSnap.snappedLeft) {
+          const snappedScreenLeft = edgeSnap.left * z + vx;
+          newBox.width += newBox.x - snappedScreenLeft;
+          newBox.x = snappedScreenLeft;
+        }
+        if (edgeSnap.snappedRight) {
+          newBox.width = edgeSnap.right * z + vx - newBox.x;
+        }
+        if (edgeSnap.snappedTop) {
+          const snappedScreenTop = edgeSnap.top * z + vy;
+          newBox.height += newBox.y - snappedScreenTop;
+          newBox.y = snappedScreenTop;
+        }
+        if (edgeSnap.snappedBottom) {
+          newBox.height = edgeSnap.bottom * z + vy - newBox.y;
+        }
+      } else {
+        resizeEdgeSnapRef.current = null;
+      }
+    } else {
+      resizeEdgeSnapRef.current = null;
     }
 
     const selected = selectedNodes[0];
@@ -1121,7 +1191,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const handleTransformEnd = () => {
     const lastSizeSnap = sizeSnapResultRef.current;
     useSnapGuidesStore.getState().setSizeGuides([]);
+    useSnapGuidesStore.getState().setGuides([]);
     sizeSnapResultRef.current = null;
+    resizeEdgeSnapRef.current = null;
 
     const stage = stageRef.current;
     if (!stage) return;

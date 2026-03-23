@@ -237,7 +237,11 @@ function RenderNode({ node }: { node: Node }) {
         <RenderText
           node={node}
           commonProps={commonProps}
-          onDoubleClick={() => startEditing(node.id, node.text)}
+          onDoubleClick={
+            node.practice?.type === "fill-in-the-blank"
+              ? undefined
+              : () => startEditing(node.id, node.text)
+          }
         />
       );
 
@@ -330,7 +334,7 @@ function RenderText({
 }: {
   node: TextNode;
   commonProps: Record<string, unknown>;
-  onDoubleClick: () => void;
+  onDoubleClick?: () => void;
 }) {
   return (
     <Text

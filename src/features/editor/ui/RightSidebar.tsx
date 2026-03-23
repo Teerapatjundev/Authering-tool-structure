@@ -254,6 +254,65 @@ export function RightSidebar() {
     (n) => (n as { fill?: string }).fill || "#000000",
   );
 
+  // === Fill-in-the-blank (แยกสีพื้นหลัง vs สีตัวอักษร placeholder) ===
+  const isFillInTheBlankSelection = selectedNodes.some(
+    (n) => n.practice?.type === "fill-in-the-blank",
+  );
+  const fillInTheBlankPracticeIds = new Set(
+    selectedNodes
+      .filter((n) => n.practice?.type === "fill-in-the-blank")
+      .map((n) => n.practice?.id)
+      .filter((id): id is string => typeof id === "string"),
+  );
+
+  const fillInTheBlankPracticeNodes = isFillInTheBlankSelection
+    ? (activePage?.nodes.filter(
+        (n) =>
+          n.practice?.type === "fill-in-the-blank" &&
+          typeof n.practice?.id === "string" &&
+          fillInTheBlankPracticeIds.has(n.practice.id),
+      ) ?? [])
+    : [];
+
+  const fillInTheBlankRectNodes = fillInTheBlankPracticeNodes.filter(
+    (n) => n.type === "rect",
+  );
+  const fillInTheBlankTextNodes = fillInTheBlankPracticeNodes.filter(
+    (n) => n.type === "text",
+  );
+
+  const commonFillInTheBlankBg = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    (n) => n.type === "rect",
+    (n) => (n as { fill?: string }).fill || "#ffffff",
+  );
+
+  const commonFillInTheBlankText = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    (n) => n.type === "text",
+    (n) => (n as { fill?: string }).fill || "#9ca3af",
+  );
+
+  const commonFillInTheBlankAnswer = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    () => true,
+    (n) =>
+      typeof (n.practice as { fillInTheBlankAnswer?: unknown })?.fillInTheBlankAnswer ===
+      "string"
+        ? (n.practice as { fillInTheBlankAnswer: string }).fillInTheBlankAnswer
+        : "",
+  );
+
+  const commonFillInTheBlankScore = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    () => true,
+    (n) => {
+      const v = (n.practice as { fillInTheBlankScore?: unknown })
+        ?.fillInTheBlankScore;
+      return typeof v === "number" ? v : 0;
+    },
+  );
+
   // Stroke — rect, ellipse
   const hasStrokeNodes = selectedNodes.some(
     (n) =>
@@ -343,11 +402,82 @@ export function RightSidebar() {
       <SidebarTabHeader activeTab={activeTab} onTabChange={setActiveTab} />
 
       {activeTab === "answer" ? (
-        <div className={SIDEBAR_DESIGN.contentDefault}>
-          <p className="text-sm text-muted-foreground text-center py-8">
-            ตั้งค่าเฉลยสำหรับ element นี้
-          </p>
-        </div>
+        isFillInTheBlankSelection ? (
+          <div className={SIDEBAR_DESIGN.contentDefault}>
+            <PropertySection title="ตั้งค่าเฉลย">
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    คำตอบที่ถูกต้อง
+                  </Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={
+                      commonFillInTheBlankAnswer === undefined ||
+                      isMixed(commonFillInTheBlankAnswer)
+                        ? ""
+                        : (commonFillInTheBlankAnswer as string)
+                    }
+                    placeholder={
+                      commonFillInTheBlankAnswer === undefined ||
+                      isMixed(commonFillInTheBlankAnswer)
+                        ? "Mixed"
+                        : undefined
+                    }
+                    onChange={(e) => {
+                      const answer = e.target.value;
+                      if (fillInTheBlankPracticeNodes.length === 0) return;
+                      const basePractice = fillInTheBlankPracticeNodes[0]
+                        ?.practice;
+                      editNodes(
+                        fillInTheBlankPracticeNodes.map((n) => n.id),
+                        {
+                          practice: {
+                            ...(basePractice as any),
+                            fillInTheBlankAnswer: answer,
+                          },
+                        } as Partial<Node>,
+                      );
+                    }}
+                  />
+                </div>
+
+                <NumberField
+                  label="คะแนน"
+                  value={
+                    isMixed(commonFillInTheBlankScore)
+                      ? undefined
+                      : (commonFillInTheBlankScore as number)
+                  }
+                  placeholder={
+                    isMixed(commonFillInTheBlankScore) ? "Mixed" : undefined
+                  }
+                  onChange={(v) => {
+                    if (fillInTheBlankPracticeNodes.length === 0) return;
+                    const basePractice = fillInTheBlankPracticeNodes[0]
+                      ?.practice;
+                    editNodes(
+                      fillInTheBlankPracticeNodes.map((n) => n.id),
+                      {
+                        practice: {
+                          ...(basePractice as any),
+                          fillInTheBlankScore: v,
+                        },
+                      } as Partial<Node>,
+                    );
+                  }}
+                  min={0}
+                />
+              </div>
+            </PropertySection>
+          </div>
+        ) : (
+          <div className={SIDEBAR_DESIGN.contentDefault}>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              ตั้งค่าเฉลยสำหรับ element นี้
+            </p>
+          </div>
+        )
       ) : (
         <div className={SIDEBAR_DESIGN.contentCompact}>
           {isChoicePrimarySelected && (
@@ -606,16 +736,51 @@ export function RightSidebar() {
               {/* Fill Color — rect, ellipse, text */}
               {hasFillNodes && (
                 <>
-                  <PropertySection icon={Palette} title="Fill Color">
-                    <ColorInput
-                      value={mixedToStr(commonFill, "#000000")}
-                      mixed={isMixed(commonFill)}
-                      onChange={(v) =>
-                        apply({ fill: v }, ["rect", "ellipse", "triangle", "pentagon", "text"])
-                      }
-                    />
-                  </PropertySection>
-                  <SidebarDivider />
+                  {isFillInTheBlankSelection ? (
+                    <>
+                      <PropertySection icon={Palette} title="Background Color">
+                        <ColorInput
+                          value={mixedToStr(commonFillInTheBlankBg, "#ffffff")}
+                          mixed={isMixed(commonFillInTheBlankBg)}
+                          onChange={(v) => {
+                            const ids = fillInTheBlankRectNodes.map((n) => n.id);
+                            if (ids.length === 0) return;
+                            editNodes(ids, { fill: v } as Partial<Node>);
+                          }}
+                        />
+                      </PropertySection>
+                      <SidebarDivider />
+
+                      <PropertySection icon={Type} title="Text Color">
+                        <ColorInput
+                          value={mixedToStr(commonFillInTheBlankText, "#9ca3af")}
+                          mixed={isMixed(commonFillInTheBlankText)}
+                          onChange={(v) => {
+                            const ids = fillInTheBlankTextNodes.map((n) => n.id);
+                            if (ids.length === 0) return;
+                            editNodes(ids, { fill: v } as Partial<Node>);
+                          }}
+                        />
+                      </PropertySection>
+                      <SidebarDivider />
+                    </>
+                  ) : (
+                    <>
+                      <PropertySection icon={Palette} title="Fill Color">
+                        <ColorInput
+                          value={mixedToStr(commonFill, "#000000")}
+                          mixed={isMixed(commonFill)}
+                          onChange={(v) =>
+                            apply(
+                              { fill: v },
+                              ["rect", "ellipse", "triangle", "pentagon", "text"],
+                            )
+                          }
+                        />
+                      </PropertySection>
+                      <SidebarDivider />
+                    </>
+                  )}
                 </>
               )}
 

@@ -482,7 +482,7 @@ export function insertFillInTheBlank(
   title: string,
   description: string,
 ): void {
-  const cardW = 360;
+  const cardW = 240;
   const cardH = 130;
   const padding = 16;
   const groupId = generateNodeId();
@@ -493,6 +493,8 @@ export function insertFillInTheBlank(
     id: setId,
     title,
     description,
+    fillInTheBlankAnswer: "",
+    fillInTheBlankScore: 1,
   };
 
   const questionY = y - cardH / 2 + padding + 12;
@@ -524,22 +526,22 @@ export function insertFillInTheBlank(
   const inputLabel: TextNode = {
     id: generateNodeId(),
     type: "text",
-    x: x + 8,
+    x,
     y: inputY,
-    width: inputW - 16,
-    height: inputH,
+    width: inputW,
+    height: inputH - 20,
     rotation: 0,
     opacity: 1,
     locked: false,
     visible: true,
     groupId,
     practice: practiceMeta,
-    text: "",
-    fontSize: 13,
+    text: "คำตอบ",
+    fontSize: 16,
     fontFamily: "Arial",
     fill: "#9ca3af",
     fontStyle: "normal",
-    align: "left",
+    align: "center",
   };
 
   commitInsert([inputBox, inputLabel]);
