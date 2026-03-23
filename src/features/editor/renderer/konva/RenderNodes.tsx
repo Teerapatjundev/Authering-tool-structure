@@ -237,11 +237,7 @@ function RenderNode({ node }: { node: Node }) {
         <RenderText
           node={node}
           commonProps={commonProps}
-          onDoubleClick={
-            node.practice?.type === "fill-in-the-blank"
-              ? undefined
-              : () => startEditing(node.id, node.text)
-          }
+          onDoubleClick={() => startEditing(node.id, node.text)}
         />
       );
 
@@ -336,6 +332,7 @@ function RenderText({
   commonProps: Record<string, unknown>;
   onDoubleClick?: () => void;
 }) {
+  const isFillInBlank = node.practice?.type === "fill-in-the-blank";
   return (
     <Text
       {...commonProps}
@@ -348,6 +345,8 @@ function RenderText({
       align={node.align || "left"}
       width={node.width}
       height={node.height}
+      padding={isFillInBlank ? 8 : undefined}
+      verticalAlign={isFillInBlank ? "middle" : undefined}
       onDblClick={onDoubleClick}
       onDblTap={onDoubleClick} // สำหรับ touch devices
     />
@@ -375,6 +374,7 @@ function RenderTextLink({
       align={node.align || "left"}
       width={node.width}
       height={node.height}
+      wrap="word"
       onDblClick={onDoubleClick}
       onDblTap={onDoubleClick}
     />
@@ -449,7 +449,6 @@ function RenderImage({
 
 function RenderVideo({
   node,
-  commonProps,
 }: {
   node: VideoNode;
   commonProps: Record<string, unknown>;

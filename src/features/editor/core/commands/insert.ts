@@ -529,7 +529,7 @@ export function insertFillInTheBlank(
     x,
     y: inputY,
     width: inputW,
-    height: inputH - 20,
+    height: inputH,
     rotation: 0,
     opacity: 1,
     locked: false,
@@ -537,11 +537,11 @@ export function insertFillInTheBlank(
     groupId,
     practice: practiceMeta,
     text: "คำตอบ",
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: "Arial",
     fill: "#9ca3af",
     fontStyle: "normal",
-    align: "center",
+    align: "left",
   };
 
   commitInsert([inputBox, inputLabel]);

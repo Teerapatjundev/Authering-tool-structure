@@ -201,6 +201,49 @@ function samePoints(a?: number[], b?: number[]) {
   return true;
 }
 
+/**
+ * วัดความสูงของข้อความเมื่อ word-wrap ที่ความกว้างที่กำหนด
+ * ใช้สำหรับคำนวณ height ของ text node เมื่อ resize ให้แคบลง
+ */
+function measureWrappedTextHeight(
+  text: string,
+  fontSize: number,
+  fontFamily: string,
+  fontStyle: string | undefined,
+  availableWidth: number,
+  padding: number = 0,
+): number {
+  if (typeof document === "undefined") return Math.max(fontSize * 1.4, 24);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return Math.max(fontSize * 1.4, 24);
+  const weight = fontStyle?.includes("bold") ? "bold" : "normal";
+  const italic = fontStyle?.includes("italic") ? "italic" : "normal";
+  ctx.font = `${italic} ${weight} ${fontSize}px ${fontFamily}`.trim();
+  const innerWidth = Math.max(1, availableWidth - 2 * padding);
+  const lineHeight = fontSize * 1.2;
+  let totalLines = 0;
+  for (const paragraph of text.split("\n")) {
+    if (!paragraph) { totalLines++; continue; }
+    const words = paragraph.split(" ");
+    let currentLine = "";
+    for (const word of words) {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (ctx.measureText(candidate).width > innerWidth && currentLine) {
+        totalLines++;
+        currentLine = word;
+      } else {
+        currentLine = candidate;
+      }
+    }
+    totalLines++;
+  }
+  return Math.max(
+    totalLines * lineHeight + 2 * padding + 10,
+    fontSize * 1.5 + 2 * padding,
+  );
+}
+
 /** Apply position/size to a Konva shape. finalize=true resets scale to 1. */
 function setKonvaShape(
   stage: Konva.Stage,
@@ -679,6 +722,15 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       fy = Math.max(halfY, Math.min(activePage.height - halfY, fy));
     }
 
+    // For text/textlink nodes: recompute height from word-wrapped content at new width
+    if (!isRotatingTransformRef.current && (node.type === "text" || node.type === "textlink")) {
+      const tn = node as { text: string; fontSize: number; fontFamily: string; fontStyle?: string; practice?: { type?: string } };
+      if (tn.text) {
+        const pad = tn.practice?.type === "fill-in-the-blank" ? 8 : 0;
+        fh = measureWrappedTextHeight(tn.text, tn.fontSize, tn.fontFamily, tn.fontStyle, fw, pad);
+      }
+    }
+
     if (node.type === "video") {
       const parent = shape.parent;
       if (parent && parent !== shape.getLayer()) {
@@ -741,6 +793,28 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       },
       newProps: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
     });
+
+    // Fill-in-the-blank: sync sibling (rect <-> text) to the same bounds
+    if (activePage && node.practice?.type === "fill-in-the-blank" && node.practice?.id) {
+      const practiceId = node.practice.id;
+      const siblingNodes = activePage.nodes.filter(
+        (n) => n.id !== node.id && n.practice?.id === practiceId,
+      );
+      if (siblingNodes.length > 0) {
+        const sibUpdates = siblingNodes.map((sib) => ({
+          id: sib.id,
+          changes: { x: fx, y: fy, width: fw, height: fh } as Partial<Node>,
+        }));
+        updateNodes(sibUpdates);
+        for (const sib of siblingNodes) {
+          historyUpdates.push({
+            id: sib.id,
+            oldProps: { x: sib.x, y: sib.y, width: sib.width, height: sib.height },
+            newProps: { x: fx, y: fy, width: fw, height: fh },
+          });
+        }
+      }
+    }
 
     // Choice parent/child rotation sync:
     // If the selected node is a Choice primary, rotate all children around the parent center.

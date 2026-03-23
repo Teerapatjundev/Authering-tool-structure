@@ -72,6 +72,48 @@ export function TextEditOverlay() {
     [],
   );
 
+  /** คำนวณความสูงของข้อความเมื่อ word-wrap ที่ความกว้างคงที่ */
+  const calculateWrappedHeight = useCallback(
+    (
+      text: string,
+      fontSize: number,
+      fontFamily: string,
+      fontStyle: string | undefined,
+      maxWidth: number,
+      padding: number = 0,
+    ) => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return Math.max(fontSize * 1.5, 24);
+      const weight = fontStyle?.includes("bold") ? "bold" : "normal";
+      const italic = fontStyle?.includes("italic") ? "italic" : "normal";
+      ctx.font = `${italic} ${weight} ${fontSize}px ${fontFamily}`.trim();
+      const innerWidth = Math.max(1, maxWidth - 2 * padding);
+      const lineHeight = fontSize * 1.2;
+      let totalLines = 0;
+      for (const paragraph of text.split("\n")) {
+        if (!paragraph) { totalLines++; continue; }
+        const words = paragraph.split(" ");
+        let currentLine = "";
+        for (const word of words) {
+          const candidate = currentLine ? `${currentLine} ${word}` : word;
+          if (ctx.measureText(candidate).width > innerWidth && currentLine) {
+            totalLines++;
+            currentLine = word;
+          } else {
+            currentLine = candidate;
+          }
+        }
+        totalLines++;
+      }
+      return Math.max(
+        totalLines * lineHeight + 2 * padding + 10,
+        fontSize * 1.5 + 2 * padding,
+      );
+    },
+    [],
+  );
+
   // ตั้งค่าเริ่มต้นเมื่อเริ่มแก้ไข
   useEffect(() => {
     if (editingNodeId && inputRef.current && !isInitialized) {
@@ -124,6 +166,32 @@ export function TextEditOverlay() {
   const handleSave = () => {
     const text = getCurrentText().trim();
 
+    // Fill-in-the-blank: บันทึก text เป็น placeholder ได้ (ไม่ลบ node เมื่อว่าง)
+    if (node.practice?.type === "fill-in-the-blank") {
+      const finalText = text || "คำตอบ";
+      const newHeight = calculateWrappedHeight(
+        finalText,
+        node.fontSize,
+        node.fontFamily,
+        node.fontStyle,
+        node.width,
+        8,
+      );
+      editNode(node.id, { text: finalText, height: newHeight });
+      // Sync sibling rect/text to same height
+      const pg =
+        doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
+      if (pg && node.practice.id) {
+        const practiceId = node.practice.id;
+        const sibling = pg.nodes.find(
+          (n) => n.id !== node.id && n.practice?.id === practiceId,
+        );
+        if (sibling) editNode(sibling.id, { height: newHeight });
+      }
+      stopEditing();
+      return;
+    }
+
     // ถ้าไม่มี text → ลบ node
     if (!text) {
       stopEditing();
@@ -153,6 +221,34 @@ export function TextEditOverlay() {
 
   /** Handle input change - อัพเดท width/height real-time */
   const handleInput = () => {
+    // Fill-in-the-blank: width คงที่ แต่ height ขยายตามข้อความที่ wrap
+    if (node.practice?.type === "fill-in-the-blank") {
+      const text = getCurrentText();
+      const newHeight = calculateWrappedHeight(
+        text,
+        node.fontSize,
+        node.fontFamily,
+        node.fontStyle,
+        node.width,
+        8,
+      );
+      updateNode(editingNodeId, { text, height: newHeight });
+      // Sync sibling rect/text to same height (no history)
+      const { doc: currentDoc } = useDocStore.getState();
+      const pg =
+        currentDoc?.pages.find((p) => p.id === currentDoc.activePageId) ??
+        currentDoc?.pages[0] ??
+        null;
+      if (pg && node.practice.id) {
+        const practiceId = node.practice.id;
+        const sibling = pg.nodes.find(
+          (n) => n.id !== node.id && n.practice?.id === practiceId,
+        );
+        if (sibling) updateNode(sibling.id, { height: newHeight });
+      }
+      return;
+    }
+
     const text = getCurrentText();
     const { width, height } = calculateTextSize(
       text,
@@ -198,7 +294,11 @@ export function TextEditOverlay() {
           position: "absolute",
           left: screenPos.x - screenWidth / 2,
           top: screenPos.y - screenHeight / 2,
-          minWidth: screenWidth,
+          // fill-in-blank: width คงที่ (เพื่อให้ wrap ภายในกล่อง)
+          // regular text: minWidth เพื่อให้ขยายได้ตามที่พิมพ์
+          ...(node.practice?.type === "fill-in-the-blank"
+            ? { width: screenWidth }
+            : { minWidth: screenWidth }),
           minHeight: screenHeight,
           fontSize: fontSize,
           fontFamily: node.fontFamily,
@@ -208,13 +308,13 @@ export function TextEditOverlay() {
           color: node.fill,
           textAlign: node.align as "left" | "center" | "right" | undefined,
           lineHeight: 1.2,
-          padding: "0",
+          padding: node.practice?.type === "fill-in-the-blank" ? "8px" : "0",
           margin: 0,
           border: "none",
           outline: "none",
           backgroundColor: "transparent",
           whiteSpace: "pre-wrap",
-          wordBreak: "keep-all",
+          wordBreak: node.practice?.type === "fill-in-the-blank" ? "break-word" : "keep-all",
           overflow: "visible",
           transform: `rotate(${node.rotation}deg)`,
           transformOrigin: "top left",
