@@ -55,8 +55,20 @@ function InsertPageButton({ insertIndex }: { insertIndex: number }) {
       className="flex items-center justify-center w-full py-1"
       aria-label="Add page"
     >
-      <div className="flex items-center justify-center text-gray-700 bg-white border border-gray-300 rounded-full w-7 h-7 hover:bg-gray-50">
-        +
+      <div className="group flex items-center w-60 rounded-lg border-dashed justify-center bg-white border border-[#5C5E70] h-6 hover:bg-[#FFE5E6] hover:border-[#ED1C24]">
+        <svg
+          className="text-[#5C5E70] group-hover:text-[#ED1C24]"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M8 1.58805e-07C6.41775 1.58805e-07 4.87103 0.469192 3.55544 1.34824C2.23985 2.22729 1.21447 3.47672 0.608967 4.93853C0.00346602 6.40034 -0.15496 8.00887 0.153721 9.56072C0.462403 11.1126 1.22433 12.538 2.34315 13.6569C3.46197 14.7757 4.88743 15.5376 6.43928 15.8463C7.99113 16.155 9.59966 15.9965 11.0615 15.391C12.5233 14.7855 13.7727 13.7602 14.6518 12.4446C15.5308 11.129 16 9.58225 16 8C16.0002 6.94936 15.7934 5.90898 15.3915 4.93828C14.9895 3.96758 14.4002 3.08559 13.6573 2.34268C12.9144 1.59977 12.0324 1.0105 11.0617 0.608537C10.091 0.206574 9.05064 -0.000209193 8 1.58805e-07ZM11.2669 8.79681H8.79681V11.2669C8.79681 11.4783 8.71287 11.6809 8.56343 11.8304C8.414 11.9798 8.21133 12.0637 8 12.0637C7.78867 12.0637 7.586 11.9798 7.43657 11.8304C7.28714 11.6809 7.20319 11.4783 7.20319 11.2669V8.79681H4.73307C4.52174 8.79681 4.31907 8.71286 4.16964 8.56343C4.02021 8.414 3.93626 8.21133 3.93626 8C3.93626 7.78867 4.02021 7.586 4.16964 7.43657C4.31907 7.28713 4.52174 7.20319 4.73307 7.20319H7.20319V4.73307C7.20319 4.52174 7.28714 4.31907 7.43657 4.16963C7.586 4.0202 7.78867 3.93625 8 3.93625C8.21133 3.93625 8.414 4.0202 8.56343 4.16963C8.71287 4.31907 8.79681 4.52174 8.79681 4.73307V7.20319H11.2669C11.4783 7.20319 11.6809 7.28713 11.8304 7.43657C11.9798 7.586 12.0637 7.78867 12.0637 8C12.0637 8.21133 11.9798 8.414 11.8304 8.56343C11.6809 8.71286 11.4783 8.79681 11.2669 8.79681Z"
+            fill="currentColor"
+          />
+        </svg>
       </div>
     </button>
   );
@@ -93,9 +105,7 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
   const previewHeight = Math.max(1, Math.round(safePageHeight * scale));
 
   return (
-    <div className="w-full">
-      <div className="mb-1 text-xs text-gray-600">Page {index + 1}</div>
-
+    <div className="mx-auto w-60 rounded-lg border border-gray-200 bg-white justify-center flex flex-col items-center">
       <div
         ref={previewRef}
         role="button"
@@ -109,13 +119,14 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
         }}
         className={
           "relative group w-full overflow-hidden rounded-md border text-left outline-none " +
-          (isActive ? "border-blue-300" : "border-gray-200")
+          (isActive ? "border-2 border-[#ED1C24] " : "border-gray-200")
         }
       >
         <div
           data-page-action="true"
           className="absolute z-10 flex items-center gap-1 transition-opacity opacity-0 top-1 right-1 group-hover:opacity-100"
         >
+          {/* Duplicate page button */}
           <Button
             type="button"
             variant="ghost"
@@ -132,6 +143,7 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
             <DuplicatePageIcon className="w-6 h-6" />
           </Button>
 
+          {/* Delete page button */}
           <Button
             type="button"
             variant="ghost"
@@ -149,7 +161,7 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
             <DeletePageIcon className="w-5 h-5" />
           </Button>
         </div>
-
+        {/* Page */}
         <Stage
           width={previewWidth}
           height={previewHeight}
@@ -186,13 +198,10 @@ export function PagePanel() {
   const movePageToIndex = useDocStore((s) => s.movePageToIndex);
 
   const [draggingPageId, setDraggingPageId] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState<
-    | {
-        pageId: string;
-        placement: "above" | "below";
-      }
-    | null
-  >(null);
+  const [dragOver, setDragOver] = useState<{
+    pageId: string;
+    placement: "above" | "below";
+  } | null>(null);
 
   if (!doc) {
     return (
@@ -228,7 +237,10 @@ export function PagePanel() {
                   setDraggingPageId(page.id);
                   setDragOver(null);
                   e.dataTransfer.effectAllowed = "move";
-                  e.dataTransfer.setData("application/x-editor-page-id", page.id);
+                  e.dataTransfer.setData(
+                    "application/x-editor-page-id",
+                    page.id,
+                  );
                   e.dataTransfer.setData("text/plain", page.id);
                 }}
                 onDragEnd={() => {
@@ -244,7 +256,9 @@ export function PagePanel() {
                   setDragOver({ pageId: page.id, placement });
                 }}
                 onDragLeave={() => {
-                  setDragOver((curr) => (curr?.pageId === page.id ? null : curr));
+                  setDragOver((curr) =>
+                    curr?.pageId === page.id ? null : curr,
+                  );
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -262,10 +276,7 @@ export function PagePanel() {
                   setDraggingPageId(null);
                   setDragOver(null);
                 }}
-                className={
-                  "relative " +
-                  (isDragging ? "opacity-60" : "")
-                }
+                className={"relative " + (isDragging ? "opacity-60" : "")}
               >
                 {isDragOver && overPlacement === "above" && (
                   <div className="absolute left-0 right-0 h-0.5 -top-1 bg-blue-400 rounded" />

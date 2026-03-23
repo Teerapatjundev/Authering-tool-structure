@@ -12,12 +12,14 @@
 
 import { TextEditOverlay } from "./TextEditOverlay";
 import { VideoOverlay } from "./VideoOverlay";
+import { TextLinkEditDialog } from "./TextLinkEditDialog";
 
 export function OverlayRoot() {
   return (
     <>
       <VideoOverlay />
       <TextEditOverlay />
+      <TextLinkEditDialog />
     </>
   );
 }

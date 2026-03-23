@@ -53,21 +53,19 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
-  Bold,
   ChevronDown,
-  Italic,
   Palette,
   Move,
   Maximize2,
   RotateCw,
   Eye,
   Type,
-  Underline,
   PenLine,
   RectangleHorizontal,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "../../../components/ui/button";
 
 // =============================================
 // Helpers สำหรับ Multi-selection
@@ -82,7 +80,7 @@ const SIDEBAR_DESIGN = {
     "flex flex-col h-full overflow-y-auto bg-background border-l w-72",
   contentCompact: "flex-1 p-4 space-y-1",
   contentDefault: "flex-1 p-4 space-y-4",
-  header: "px-4 py-3 border-b",
+  header: "px-5 py-3 ",
   headerTitle: "text-sm font-semibold tracking-tight",
   headerSubtitle: "mt-0.5 text-xs text-muted-foreground capitalize",
   section: "py-2",
@@ -146,6 +144,9 @@ function buildFontStyle(
 // =============================================
 
 export function RightSidebar() {
+  const [activeTab, setActiveTab] = React.useState<"properties" | "answer">(
+    "properties",
+  );
   const { selectedIds } = useSelectionStore();
   const { doc } = useDocStore();
   const [choiceTab, setChoiceTab] = React.useState<"properties" | "answers">(
@@ -170,18 +171,34 @@ export function RightSidebar() {
   if (selectedNodes.length === 0) {
     return (
       <aside className={SIDEBAR_DESIGN.aside}>
-        <SidebarHeader title="Properties" />
-        <div className={SIDEBAR_DESIGN.contentDefault}>
-          <PropertySection icon={Palette} title="Background">
-            <ColorInput
-              value={activePage?.backgroundColor || "#ffffff"}
-              onChange={(v) => {
-                useDocStore.getState().updateBackgroundColor(v);
-                useDocStore.getState().autoSave();
-              }}
-            />
-          </PropertySection>
-        </div>
+        <SidebarTabHeader activeTab={activeTab} onTabChange={setActiveTab} />
+        {activeTab === "properties" ? (
+          <div className={SIDEBAR_DESIGN.contentDefault}>
+            <PropertySection icon={Palette} title="Colors">
+              <ColorInput
+                value={activePage?.backgroundColor || "#ffffff"}
+                onChange={(v) => {
+                  useDocStore.getState().updateBackgroundColor(v);
+                  useDocStore.getState().autoSave();
+                }}
+              />
+            </PropertySection>
+            <PropertySection title="คะแนนรวม">
+              <div className="flex items-center gap-2">
+                <Input className="h-8 text-xs" type="number" min={0} defaultValue={0} disabled />
+                <span className="text-xs text-muted-foreground shrink-0">
+                  คะแนน
+                </span>
+              </div>
+            </PropertySection>
+          </div>
+        ) : (
+          <div className={SIDEBAR_DESIGN.contentDefault}>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              ยังไม่ได้เลือก element
+            </p>
+          </div>
+        )}
       </aside>
     );
   }
@@ -328,473 +345,354 @@ export function RightSidebar() {
 
   return (
     <aside className={SIDEBAR_DESIGN.asideScrollable}>
-      <SidebarHeader title="Properties" subtitle={typeLabel} />
+      <SidebarTabHeader activeTab={activeTab} onTabChange={setActiveTab} />
 
-      <div className={SIDEBAR_DESIGN.contentCompact}>
-        {(isChoicePrimarySelected || isConnectionPrimarySelected) && (
-          <>
-            <div className="pb-2">
-              <ToggleGroup
-                type="single"
-                value={choiceTab}
-                onValueChange={(v) => {
-                  if (v === "properties" || v === "answers") setChoiceTab(v);
-                }}
-                className="justify-start"
-              >
-                <ToggleGroupItem value="properties" size="sm">
-                  Properties
-                </ToggleGroupItem>
-                <ToggleGroupItem value="answers" size="sm">
-                  ตั้งค่าเฉลย
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </div>
-            <SidebarDivider />
-          </>
-        )}
-
-        {isChoicePrimarySelected && choiceTab === "answers" && choiceSetId ? (
-          <>
-            <PropertySection title="ตั้งค่าเฉลย">
-              {(() => {
-                const page = activePage;
-                if (!page) return null;
-
-                const allChoiceNodes = page.nodes.filter(
-                  (n: any) => n.practice?.type === "choice" && n.practice?.id === choiceSetId,
-                );
-                const subNodes = allChoiceNodes.filter(
-                  (n: any): n is any =>
-                    n.practice?.containerRole === "sub" &&
-                    typeof n.practice?.optionIndex === "number",
-                );
-
-                const mode = node.practice?.mode ?? "multiple";
-
-                const optionIndexSet = new Set<number>();
-                for (const n of subNodes) optionIndexSet.add(n.practice.optionIndex as number);
-                const optionIndices = Array.from(optionIndexSet).sort((a, b) => a - b);
-
-                const currentCorrect = optionIndices.filter((i) =>
-                  subNodes.some(
-                    (n: any) => n.practice.optionIndex === i && !!n.practice.isCorrect,
-                  ),
-                );
-
-                const value = mode === "single" ? currentCorrect.slice(0, 1).map(String) : currentCorrect.map(String);
-
-                const setCorrect = (selectedOptionStrings: string[]) => {
-                  const selectedOptionIndices = selectedOptionStrings
-                    .map((s) => Number(s))
-                    .filter((v) => Number.isFinite(v));
-
-                  const normalized =
-                    mode === "single"
-                      ? selectedOptionIndices.slice(0, 1)
-                      : selectedOptionIndices;
-
-                  const correctCount = normalized.length;
-
-                  const updates: Array<{ id: string; newProps: Partial<Node> }> = [];
-
-                  // Update primary
-                  updates.push({
-                    id: node.id,
-                    newProps: {
-                      practice: {
-                        ...(node.practice as any),
-                        correctCount,
-                      },
-                    },
-                  });
-
-                  // Update all sub nodes
-                  for (const n of subNodes as any[]) {
-                    const idx = n.practice.optionIndex as number;
-                    const isCorrect = normalized.includes(idx);
-                    updates.push({
-                      id: n.id,
-                      newProps: {
-                        practice: {
-                          ...(n.practice as any),
-                          isCorrect,
-                          correctCount,
-                        },
-                      },
-                    });
-                  }
-
-                  commitTransformUpdates(updates);
-                };
-
-                return (
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      โหมด: {mode === "single" ? "เลือกได้ข้อเดียว" : "เลือกได้หลายข้อ"}
-                    </div>
-
-                    {mode === "single" ? (
-                      <ToggleGroup
-                        type="single"
-                        value={value[0] ?? ""}
-                        onValueChange={(v: string) => {
-                          setCorrect(v ? [v] : []);
-                        }}
-                        className="justify-start flex-wrap"
-                      >
-                        {optionIndices.map((i) => (
-                          <ToggleGroupItem key={i} value={String(i)} size="sm">
-                            ตัวเลือก {i + 1}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
-                    ) : (
-                      <ToggleGroup
-                        type="multiple"
-                        value={value}
-                        onValueChange={(vals: string[]) => {
-                          setCorrect(vals);
-                        }}
-                        className="justify-start flex-wrap"
-                      >
-                        {optionIndices.map((i) => (
-                          <ToggleGroupItem key={i} value={String(i)} size="sm">
-                            ตัวเลือก {i + 1}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
-                    )}
-                  </div>
-                );
-              })()}
-            </PropertySection>
-
-            <SidebarDivider />
-
-            <PropertySection title="วิธีการแสดงเฉลย">
-              <div className="space-y-2">
-                <div className="text-[11px] text-muted-foreground">รูปแบบ</div>
-                <Select
-                  value={node.practice?.revealMode ?? "after-item"}
+      {activeTab === "answer" ? (
+        <div className={SIDEBAR_DESIGN.contentDefault}>
+          <p className="text-sm text-muted-foreground text-center py-8">
+            ตั้งค่าเฉลยสำหรับ element นี้
+          </p>
+        </div>
+      ) : (
+        <div className={SIDEBAR_DESIGN.contentCompact}>
+          {isChoicePrimarySelected && (
+            <>
+              <div className="pb-2">
+                <ToggleGroup
+                  type="single"
+                  value={choiceTab}
                   onValueChange={(v) => {
-                    if (v !== "after-item" && v !== "other") return;
-                    commitTransformUpdates([
-                      {
-                        id: node.id,
-                        newProps: {
-                          practice: {
-                            ...(node.practice as any),
-                            revealMode: v,
-                          },
-                        },
-                      },
-                    ]);
+                    if (v === "properties" || v === "answers") setChoiceTab(v);
                   }}
+                  className="justify-start"
                 >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="เลือกวิธีการแสดงเฉลย" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="after-item">แสดงเฉลยหลังตอบข้อนั้นๆ</SelectItem>
-                    <SelectItem value="other">อื่นๆ</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <ToggleGroupItem value="properties" size="sm">
+                    Properties
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="answers" size="sm">
+                    ตั้งค่าเฉลย
+                  </ToggleGroupItem>
+                </ToggleGroup>
               </div>
-            </PropertySection>
-          </>
-        ) : isConnectionPrimarySelected && choiceTab === "answers" ? (
-          <>
-            <PropertySection title="ตั้งค่าเฉลย">
-              {(() => {
-                const page = activePage;
-                if (!page) return null;
+              <SidebarDivider />
+            </>
+          )}
 
-                const children = page.nodes.filter(
-                  (n: any) => n.visible && n.parentId === node.id && n.practice?.type === "connection",
-                );
-                const leftItems = children.filter((n: any) => n.practice?.side === "left");
-                const rightItems = children.filter((n: any) => n.practice?.side === "right");
+          {isChoicePrimarySelected && choiceTab === "answers" && choiceSetId ? (
+            <>
+              <PropertySection title="ตั้งค่าเฉลย">
+                {(() => {
+                  const page = activePage;
+                  if (!page) return null;
 
-                const leftKeys = leftItems.map((n: any) => String(n.practice?.itemId ?? n.id));
-                const rightOptions = rightItems.map((n: any, idx: number) => ({
-                  key: String(n.practice?.itemId ?? n.id),
-                  label: `ขวา ${idx + 1}`,
-                }));
-
-                const currentPairs =
-                  ((node.practice as any)?.connectionPairs as Array<any> | undefined) ?? [];
-
-                const pairMap = new Map<string, string>();
-                for (const p of currentPairs) {
-                  if (p?.leftItemId && p?.rightItemId) {
-                    pairMap.set(String(p.leftItemId), String(p.rightItemId));
-                  }
-                }
-
-                const setPair = (leftItemId: string, rightItemId: string) => {
-                  const pairs = Array.isArray(currentPairs) ? [...currentPairs] : [];
-
-                  // Enforce 1-1: remove any existing mapping for this left, and also remove any mapping using this right.
-                  const next = pairs.filter(
-                    (p: any) =>
-                      String(p?.leftItemId) !== String(leftItemId) &&
-                      String(p?.rightItemId) !== String(rightItemId),
+                  const allChoiceNodes = page.nodes.filter(
+                    (n: any) => n.practice?.type === "choice" && n.practice?.id === choiceSetId,
                   );
-                  next.push({ leftItemId, rightItemId });
+                  const subNodes = allChoiceNodes.filter(
+                    (n: any) => n.practice?.containerRole === "sub" && typeof n.practice?.optionIndex === "number",
+                  );
 
-                  commitTransformUpdates([
-                    {
+                  const mode = node.practice?.mode ?? "multiple";
+
+                  const optionIndexSet = new Set<number>();
+                  for (const n of subNodes as any[]) optionIndexSet.add(n.practice.optionIndex);
+                  const optionIndices = Array.from(optionIndexSet).sort((a, b) => a - b);
+
+                  const currentCorrect = optionIndices.filter((i) =>
+                    subNodes.some(
+                      (n: any) => n.practice.optionIndex === i && !!n.practice.isCorrect,
+                    ),
+                  );
+
+                  const value = mode === "single" ? currentCorrect.slice(0, 1).map(String) : currentCorrect.map(String);
+
+                  const setCorrect = (selectedOptionStrings: string[]) => {
+                    const selectedOptionIndices = selectedOptionStrings
+                      .map((s) => Number(s))
+                      .filter((v) => Number.isFinite(v));
+
+                    const normalized =
+                      mode === "single"
+                        ? selectedOptionIndices.slice(0, 1)
+                        : selectedOptionIndices;
+
+                    const correctCount = normalized.length;
+
+                    const updates: Array<{ id: string; newProps: Partial<Node> }> = [];
+
+                    // Update primary
+                    updates.push({
                       id: node.id,
                       newProps: {
                         practice: {
                           ...(node.practice as any),
-                          connectionPairs: next,
+                          correctCount,
                         },
                       },
-                    },
-                  ]);
-                };
+                    });
 
-                if (leftItems.length === 0 || rightItems.length === 0) {
-                  return (
-                    <div className="text-xs text-muted-foreground">
-                      ต้องมีรายการฝั่งซ้ายและขวาก่อน ถึงจะตั้งค่าเฉลยได้
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="space-y-3">
-                    {leftKeys.map((leftId, idx) => {
-                      const value = pairMap.get(leftId);
-                      return (
-                        <div key={leftId} className="space-y-1">
-                          <div className="text-[11px] text-muted-foreground">ซ้าย {idx + 1}</div>
-                          <Select
-                            value={value}
-                            onValueChange={(v) => {
-                              if (!v) return;
-                              setPair(leftId, v);
-                            }}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="เลือกคำตอบฝั่งขวา" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {rightOptions.map((opt) => (
-                                <SelectItem key={opt.key} value={opt.key}>
-                                  {opt.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-            </PropertySection>
-
-            <SidebarDivider />
-
-            <PropertySection title="วิธีการแสดงเฉลย">
-              <div className="space-y-2">
-                <div className="text-[11px] text-muted-foreground">รูปแบบ</div>
-                <Select
-                  value={node.practice?.revealMode ?? "after-item"}
-                  onValueChange={(v) => {
-                    if (v !== "after-item" && v !== "other") return;
-                    commitTransformUpdates([
-                      {
-                        id: node.id,
+                    // Update all sub nodes
+                    for (const n of subNodes as any[]) {
+                      const idx = n.practice.optionIndex as number;
+                      const isCorrect = normalized.includes(idx);
+                      updates.push({
+                        id: n.id,
                         newProps: {
                           practice: {
-                            ...(node.practice as any),
-                            revealMode: v,
+                            ...(n.practice as any),
+                            isCorrect,
+                            correctCount,
                           },
                         },
-                      },
-                    ]);
-                  }}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="เลือกวิธีการแสดงเฉลย" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="after-item">แสดงเฉลยหลังตอบข้อนั้นๆ</SelectItem>
-                    <SelectItem value="other">อื่นๆ</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </PropertySection>
-          </>
-        ) : (
-          <>
-        {/* Position */}
-        <PropertySection icon={Move} title="Position">
-          <div className="grid grid-cols-2 gap-2">
-            <NumberField
-              label="X"
-              value={isMixed(commonX) ? undefined : (commonX as number)}
-              placeholder={isMixed(commonX) ? "Mixed" : undefined}
-              onChange={(v) => apply({ x: v })}
-            />
-            <NumberField
-              label="Y"
-              value={isMixed(commonY) ? undefined : (commonY as number)}
-              placeholder={isMixed(commonY) ? "Mixed" : undefined}
-              onChange={(v) => apply({ y: v })}
-            />
-          </div>
-        </PropertySection>
+                      });
+                    }
 
-        <SidebarDivider />
+                    commitTransformUpdates(updates);
+                  };
 
-        {/* Size */}
-        <PropertySection icon={Maximize2} title="Size">
-          <div className="grid grid-cols-2 gap-2">
-            <NumberField
-              label="W"
-              value={isMixed(commonW) ? undefined : (commonW as number)}
-              placeholder={isMixed(commonW) ? "Mixed" : undefined}
-              onChange={(v) => apply({ width: v })}
-              min={1}
-            />
-            <NumberField
-              label="H"
-              value={isMixed(commonH) ? undefined : (commonH as number)}
-              placeholder={isMixed(commonH) ? "Mixed" : undefined}
-              onChange={(v) => apply({ height: v })}
-              min={1}
-            />
-          </div>
-        </PropertySection>
+                  return (
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground">
+                        โหมด: {mode === "single" ? "เลือกได้ข้อเดียว" : "เลือกได้หลายข้อ"}
+                      </div>
 
-        <SidebarDivider />
+                      {mode === "single" ? (
+                        <ToggleGroup
+                          type="single"
+                          value={value[0] ?? ""}
+                          onValueChange={(val: string) => {
+                            setCorrect(val ? [val] : []);
+                          }}
+                          className="justify-start flex-wrap"
+                        >
+                          {optionIndices.map((i) => (
+                            <ToggleGroupItem key={i} value={String(i)} size="sm">
+                              ตัวเลือก {i + 1}
+                            </ToggleGroupItem>
+                          ))}
+                        </ToggleGroup>
+                      ) : (
+                        <ToggleGroup
+                          type="multiple"
+                          value={value}
+                          onValueChange={(vals: string[]) => {
+                            setCorrect(vals.filter(Boolean));
+                          }}
+                          className="justify-start flex-wrap"
+                        >
+                          {optionIndices.map((i) => (
+                            <ToggleGroupItem key={i} value={String(i)} size="sm">
+                              ตัวเลือก {i + 1}
+                            </ToggleGroupItem>
+                          ))}
+                        </ToggleGroup>
+                      )}
+                    </div>
+                  );
+                })()}
+              </PropertySection>
 
-        {/* Rotation (disabled for practice nodes) */}
-        {!isPracticeSelection && (
-          <>
-            <PropertySection icon={RotateCw} title="Rotation">
-              <NumberField
-                label="°"
-                value={
-                  isMixed(commonRotation)
-                    ? undefined
-                    : (commonRotation as number)
-                }
-                placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
-                onChange={(v) => apply({ rotation: v })}
-                min={-180}
-                max={180}
-              />
-            </PropertySection>
-            <SidebarDivider />
-          </>
-        )}
+              <SidebarDivider />
 
-        {/* Opacity */}
-        <PropertySection icon={Eye} title="Opacity">
-          <div className="space-y-2">
-            <Slider
-              min={0}
-              max={100}
-              step={1}
-              value={[isMixed(commonOpacity) ? 50 : (commonOpacity as number)]}
-              onValueChange={([v]) => apply({ opacity: v / 100 })}
-            />
-            <p className="text-xs text-center text-muted-foreground">
-              {isMixed(commonOpacity) ? "Mixed" : `${commonOpacity as number}%`}
-            </p>
-          </div>
-        </PropertySection>
+              <PropertySection title="วิธีการแสดงเฉลย">
+                <div className="space-y-2">
+                  <div className="text-[11px] text-muted-foreground">รูปแบบ</div>
+                  <Select
+                    value={node.practice?.revealMode ?? "after-item"}
+                    onValueChange={(v) => {
+                      if (v !== "after-item" && v !== "other") return;
+                      commitTransformUpdates([
+                        {
+                          id: node.id,
+                          newProps: {
+                            practice: {
+                              ...(node.practice as any),
+                              revealMode: v,
+                            },
+                          },
+                        },
+                      ]);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="เลือกวิธีการแสดงเฉลย" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="after-item">แสดงเฉลยหลังตอบข้อนั้นๆ</SelectItem>
+                      <SelectItem value="other">อื่นๆ</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </PropertySection>
+            </>
+          ) : (
+            <>
+              {/* Position */}
+              <PropertySection icon={Move} title="Position">
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField
+                    label="X"
+                    value={isMixed(commonX) ? undefined : (commonX as number)}
+                    placeholder={isMixed(commonX) ? "Mixed" : undefined}
+                    onChange={(v) => apply({ x: v })}
+                  />
+                  <NumberField
+                    label="Y"
+                    value={isMixed(commonY) ? undefined : (commonY as number)}
+                    placeholder={isMixed(commonY) ? "Mixed" : undefined}
+                    onChange={(v) => apply({ y: v })}
+                  />
+                </div>
+              </PropertySection>
 
-        <SidebarDivider />
+              <SidebarDivider />
 
-        {/* Fill Color — rect, ellipse, text */}
-        {hasFillNodes && (
-          <>
-            <PropertySection icon={Palette} title="Fill Color">
-              <ColorInput
-                value={mixedToStr(commonFill, "#000000")}
-                mixed={isMixed(commonFill)}
-                onChange={(v) =>
-                  apply({ fill: v }, ["rect", "ellipse", "triangle", "pentagon", "text"])
-                }
-              />
-            </PropertySection>
-            <SidebarDivider />
-          </>
-        )}
+              {/* Size */}
+              <PropertySection icon={Maximize2} title="Size">
+                <div className="grid grid-cols-2 gap-2">
+                  <NumberField
+                    label="W"
+                    value={isMixed(commonW) ? undefined : (commonW as number)}
+                    placeholder={isMixed(commonW) ? "Mixed" : undefined}
+                    onChange={(v) => apply({ width: v })}
+                    min={1}
+                  />
+                  <NumberField
+                    label="H"
+                    value={isMixed(commonH) ? undefined : (commonH as number)}
+                    placeholder={isMixed(commonH) ? "Mixed" : undefined}
+                    onChange={(v) => apply({ height: v })}
+                    min={1}
+                  />
+                </div>
+              </PropertySection>
 
-        {/* Stroke — rect, ellipse */}
-        {hasStrokeNodes && (
-          <>
-            <PropertySection icon={PenLine} title="Stroke">
-              <ColorInput
-                value={mixedToStr(commonStroke, "#000000")}
-                mixed={isMixed(commonStroke)}
-                onChange={(v) => apply({ stroke: v }, ["rect", "ellipse", "triangle", "pentagon"])}
-              />
-              <div className="space-y-2">
-                <Slider
-                  min={0}
-                  max={50}
-                  step={1}
-                  value={[
-                    isMixed(commonStrokeWidth)
-                      ? 0
-                      : (commonStrokeWidth as number),
-                  ]}
-                  onValueChange={([v]) =>
-                    apply({ strokeWidth: v }, ["rect", "ellipse"])
-                  }
+              <SidebarDivider />
+
+              {/* Rotation (disabled for practice nodes) */}
+              {!isPracticeSelection && (
+                <>
+                  <PropertySection icon={RotateCw} title="Rotation">
+                    <NumberField
+                      label="°"
+                      value={
+                        isMixed(commonRotation)
+                          ? undefined
+                          : (commonRotation as number)
+                      }
+                      placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
+                      onChange={(v) => apply({ rotation: v })}
+                      min={-180}
+                      max={180}
+                    />
+                  </PropertySection>
+                  <SidebarDivider />
+                </>
+              )}
+
+              {/* Opacity */}
+              <PropertySection icon={Eye} title="Opacity">
+                <div className="space-y-2">
+                  <Slider
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={[isMixed(commonOpacity) ? 50 : (commonOpacity as number)]}
+                    onValueChange={([v]) => apply({ opacity: v / 100 })}
+                  />
+                  <p className="text-xs text-center text-muted-foreground">
+                    {isMixed(commonOpacity) ? "Mixed" : `${commonOpacity as number}%`}
+                  </p>
+                </div>
+              </PropertySection>
+
+              <SidebarDivider />
+
+              {/* Fill Color — rect, ellipse, text */}
+              {hasFillNodes && (
+                <>
+                  <PropertySection icon={Palette} title="Fill Color">
+                    <ColorInput
+                      value={mixedToStr(commonFill, "#000000")}
+                      mixed={isMixed(commonFill)}
+                      onChange={(v) =>
+                        apply({ fill: v }, ["rect", "ellipse", "triangle", "pentagon", "text"])
+                      }
+                    />
+                  </PropertySection>
+                  <SidebarDivider />
+                </>
+              )}
+
+              {/* Stroke — rect, ellipse */}
+              {hasStrokeNodes && (
+                <>
+                  <PropertySection icon={PenLine} title="Stroke">
+                    <ColorInput
+                      value={mixedToStr(commonStroke, "#000000")}
+                      mixed={isMixed(commonStroke)}
+                      onChange={(v) => apply({ stroke: v }, ["rect", "ellipse", "triangle", "pentagon"])}
+                    />
+                    <div className="space-y-2">
+                      <Slider
+                        min={0}
+                        max={50}
+                        step={1}
+                        value={[
+                          isMixed(commonStrokeWidth)
+                            ? 0
+                            : (commonStrokeWidth as number),
+                        ]}
+                        onValueChange={([v]) =>
+                          apply({ strokeWidth: v }, ["rect", "ellipse"])
+                        }
+                      />
+                      <p className="text-xs text-center text-muted-foreground">
+                        {isMixed(commonStrokeWidth)
+                          ? "Mixed"
+                          : `${commonStrokeWidth as number}px`}
+                      </p>
+                    </div>
+                  </PropertySection>
+                  <SidebarDivider />
+                </>
+              )}
+
+              {/* Corner Radius — rect */}
+              {hasRectNodes && (
+                <>
+                  <PropertySection icon={RectangleHorizontal} title="Corner Radius">
+                    <NumberField
+                      label="Radius"
+                      value={
+                        isMixed(commonCornerRadius)
+                          ? undefined
+                          : (commonCornerRadius as number)
+                      }
+                      placeholder={
+                        isMixed(commonCornerRadius) ? "Mixed" : undefined
+                      }
+                      onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
+                      min={0}
+                      max={100}
+                    />
+                  </PropertySection>
+                  <SidebarDivider />
+                </>
+              )}
+
+              {/* Text Properties */}
+              {hasTextNodes && (
+                <MultiTextProperties
+                  textNodes={textNodes}
+                  allIds={ids}
+                  isSingle={isSingle}
                 />
-                <p className="text-xs text-center text-muted-foreground">
-                  {isMixed(commonStrokeWidth)
-                    ? "Mixed"
-                    : `${commonStrokeWidth as number}px`}
-                </p>
-              </div>
-            </PropertySection>
-            <SidebarDivider />
-          </>
-        )}
-
-        {/* Corner Radius — rect */}
-        {hasRectNodes && (
-          <>
-            <PropertySection icon={RectangleHorizontal} title="Corner Radius">
-              <NumberField
-                label="Radius"
-                value={
-                  isMixed(commonCornerRadius)
-                    ? undefined
-                    : (commonCornerRadius as number)
-                }
-                placeholder={isMixed(commonCornerRadius) ? "Mixed" : undefined}
-                onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
-                min={0}
-                max={100}
-              />
-            </PropertySection>
-            <SidebarDivider />
-          </>
-        )}
-
-        {/* Text Properties */}
-        {hasTextNodes && (
-          <MultiTextProperties
-            textNodes={textNodes}
-            allIds={ids}
-            isSingle={isSingle}
-          />
-        )}
-        </>
-        )}
-      </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
     </aside>
   );
 }
@@ -803,17 +701,42 @@ export function RightSidebar() {
 // SUB COMPONENTS
 // ===============================================
 
-/** Sidebar header with title + optional subtitle */
-function SidebarHeader({
-  title,
+/** Tab header with Properties and ตั้งค่าเฉลย buttons */
+function SidebarTabHeader({
+  activeTab,
+  onTabChange,
   subtitle,
 }: {
-  title: string;
+  activeTab: "properties" | "answer";
+  onTabChange: (tab: "properties" | "answer") => void;
   subtitle?: string;
 }) {
   return (
     <div className={SIDEBAR_DESIGN.header}>
-      <h2 className={SIDEBAR_DESIGN.headerTitle}>{title}</h2>
+      <div className="flex gap-1 mt-2">
+        <Button
+          onClick={() => onTabChange("properties")}
+          className={cn(
+            "shadow-none flex-1 text-sm font-semibold tracking-tight py-1.5 px-2 rounded-md transition-colors bg-white border-none",
+            activeTab === "properties"
+              ? "bg-[#FFE5E6] text-[#ED1C24] hover:bg-[#FFE5E6] hover:text-[#ED1C24]"
+              : "text-muted-foreground hover:bg-white hover:text-muted-foreground",
+          )}
+        >
+          Properties
+        </Button>
+        <Button
+          onClick={() => onTabChange("answer")}
+          className={cn(
+            "shadow-none flex-1 text-sm font-semibold tracking-tight py-1.5 px-2 rounded-md transition-colors bg-white border-none",
+            activeTab === "answer"
+              ? "bg-[#FFE5E6] text-[#ED1C24] hover:bg-[#FFE5E6] hover:text-[#ED1C24]"
+              : "text-muted-foreground hover:bg-white hover:text-muted-foreground",
+          )}
+        >
+          ตั้งค่าเฉลย
+        </Button>
+      </div>
       {subtitle && <p className={SIDEBAR_DESIGN.headerSubtitle}>{subtitle}</p>}
     </div>
   );
@@ -922,7 +845,7 @@ function ColorInput({
         value={mixed ? "" : value}
         placeholder={mixed ? "Mixed" : undefined}
         onChange={(e) => onChange(e.target.value)}
-        className="h-8 text-xs font-mono placeholder:italic placeholder:font-sans"
+        className="h-8 text-xs placeholder:italic placeholder:font-sans"
       />
     </div>
   );
