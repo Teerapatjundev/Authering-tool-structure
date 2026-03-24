@@ -292,6 +292,11 @@ export function insertPentagon(
   commitInsert([node]);
 }
 
+/**  */
+export function insertAccordion(x: number, y: number): void {
+  
+}
+
 /**
  * เพิ่มการ์ดแบบฝึกหัดลงใน canvas (เป็นกลุ่ม)
  * - พื้นหลังการ์ด (rect)

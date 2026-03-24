@@ -8,6 +8,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import {
+  insertAccordion,
   insertAudio,
   insertEllipse,
   insertPentagon,
@@ -40,6 +41,12 @@ const elements: ElementType[] = [
     description: "Add URL text",
   },
   { id: "audio", icon: "🔊", label: "Audio", description: "Upload audio file" },
+  {
+    id: "accordion",
+    icon: "📂",
+    label: "Accordion",
+    description: "Add accordion",
+  },
 ];
 
 export function ElementsPanel() {
@@ -88,6 +95,9 @@ export function ElementsPanel() {
         break;
       case "audio":
         setShowAudioUpload(true);
+        break;
+      case "accordion":
+        insertAccordion(x, y);
         break;
     }
   };

@@ -34,6 +34,7 @@ import type { TransformOp } from "../core/history/ops";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -313,6 +314,15 @@ export function RightSidebar() {
     },
   );
 
+  const commonNumbersOnly = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    () => true,
+    (n) => {
+      const v = (n.practice as { numbersOnly?: unknown })?.numbersOnly;
+      return typeof v === "boolean" ? v : false;
+    },
+  );
+
   // Stroke — rect, ellipse
   const hasStrokeNodes = selectedNodes.some(
     (n) =>
@@ -406,12 +416,56 @@ export function RightSidebar() {
           <div className={SIDEBAR_DESIGN.contentDefault}>
             <PropertySection title="ตั้งค่าเฉลย">
               <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="numbersOnly"
+                    checked={
+                      isMixed(commonNumbersOnly)
+                        ? false
+                        : (commonNumbersOnly as boolean)
+                    }
+                    onCheckedChange={(checked: boolean) => {
+                      if (fillInTheBlankPracticeNodes.length === 0) return;
+                      const basePractice = fillInTheBlankPracticeNodes[0]
+                        ?.practice;
+                      const isNumbersOnly = checked === true;
+                      editNodes(
+                        fillInTheBlankPracticeNodes.map((n) => n.id),
+                        {
+                          practice: {
+                            ...(basePractice as any),
+                            numbersOnly: isNumbersOnly,
+                            fillInTheBlankAnswer: isNumbersOnly
+                              ? (commonFillInTheBlankAnswer as string)?.replace(
+                                  /[^0-9.]/g,
+                                  "",
+                                )
+                              : (commonFillInTheBlankAnswer as string),
+                          },
+                        } as Partial<Node>,
+                      );
+                    }}
+                  />
+                  <Label
+                    htmlFor="numbersOnly"
+                    className="text-xs text-muted-foreground cursor-pointer"
+                  >
+                    ตำตอบเฉพาะตัวเลข
+                  </Label>
+                </div>
+
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">
                     คำตอบที่ถูกต้อง
                   </Label>
                   <Input
                     className="h-8 text-xs"
+                    type={
+                      !isMixed(commonNumbersOnly) &&
+                      (commonNumbersOnly as boolean)
+                        ? "number"
+                        : "text"
+                    }
                     value={
                       commonFillInTheBlankAnswer === undefined ||
                       isMixed(commonFillInTheBlankAnswer)
@@ -425,7 +479,13 @@ export function RightSidebar() {
                         : undefined
                     }
                     onChange={(e) => {
-                      const answer = e.target.value;
+                      let answer = e.target.value;
+                      const isNumbersOnly =
+                        !isMixed(commonNumbersOnly) &&
+                        (commonNumbersOnly as boolean);
+                      if (isNumbersOnly) {
+                        answer = answer.replace(/[^0-9.]/g, "");
+                      }
                       if (fillInTheBlankPracticeNodes.length === 0) return;
                       const basePractice = fillInTheBlankPracticeNodes[0]
                         ?.practice;
