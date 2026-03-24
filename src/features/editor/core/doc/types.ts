@@ -57,6 +57,11 @@ export interface PracticeMeta {
   optionIndex?: number; // 0-based
   isCorrect?: boolean;
 
+  // === Fill-in-the-blank ===
+  // คำตอบที่ถูกต้อง (รองรับคำตอบเดี่ยวในรอบนี้)
+  fillInTheBlankAnswer?: string;
+  // คะแนนเมื่อผู้เรียนตอบถูก (1 ค่าต่อชุดแบบฝึกหัด)
+  fillInTheBlankScore?: number;
   // === Connection (โยงเส้นจับคู่) ===
   connectionPairs?: Array<{ leftItemId: string; rightItemId: string }>;
 }

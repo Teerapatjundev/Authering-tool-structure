@@ -32,6 +32,7 @@ import { Node, TextNode } from "../core/doc/types";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -239,6 +240,74 @@ export function RightSidebar() {
     (n) => (n as { fill?: string }).fill || "#000000",
   );
 
+  // === Fill-in-the-blank (แยกสีพื้นหลัง vs สีตัวอักษร placeholder) ===
+  const isFillInTheBlankSelection = selectedNodes.some(
+    (n) => n.practice?.type === "fill-in-the-blank",
+  );
+  const fillInTheBlankPracticeIds = new Set(
+    selectedNodes
+      .filter((n) => n.practice?.type === "fill-in-the-blank")
+      .map((n) => n.practice?.id)
+      .filter((id): id is string => typeof id === "string"),
+  );
+
+  const fillInTheBlankPracticeNodes = isFillInTheBlankSelection
+    ? (activePage?.nodes.filter(
+        (n) =>
+          n.practice?.type === "fill-in-the-blank" &&
+          typeof n.practice?.id === "string" &&
+          fillInTheBlankPracticeIds.has(n.practice.id),
+      ) ?? [])
+    : [];
+
+  const fillInTheBlankRectNodes = fillInTheBlankPracticeNodes.filter(
+    (n) => n.type === "rect",
+  );
+  const fillInTheBlankTextNodes = fillInTheBlankPracticeNodes.filter(
+    (n) => n.type === "text",
+  );
+
+  const commonFillInTheBlankBg = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    (n) => n.type === "rect",
+    (n) => (n as { fill?: string }).fill || "#ffffff",
+  );
+
+  const commonFillInTheBlankText = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    (n) => n.type === "text",
+    (n) => (n as { fill?: string }).fill || "#9ca3af",
+  );
+
+  const commonFillInTheBlankAnswer = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    () => true,
+    (n) =>
+      typeof (n.practice as { fillInTheBlankAnswer?: unknown })?.fillInTheBlankAnswer ===
+      "string"
+        ? (n.practice as { fillInTheBlankAnswer: string }).fillInTheBlankAnswer
+        : "",
+  );
+
+  const commonFillInTheBlankScore = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    () => true,
+    (n) => {
+      const v = (n.practice as { fillInTheBlankScore?: unknown })
+        ?.fillInTheBlankScore;
+      return typeof v === "number" ? v : 0;
+    },
+  );
+
+  const commonNumbersOnly = getCommonFiltered(
+    fillInTheBlankPracticeNodes,
+    () => true,
+    (n) => {
+      const v = (n.practice as { numbersOnly?: unknown })?.numbersOnly;
+      return typeof v === "boolean" ? v : false;
+    },
+  );
+
   // Stroke — rect, ellipse
   const hasStrokeNodes = selectedNodes.some(
     (n) =>
@@ -299,6 +368,132 @@ export function RightSidebar() {
             ตั้งค่าเฉลยสำหรับ element นี้
           </p>
         </div>
+        isFillInTheBlankSelection ? (
+          <div className={SIDEBAR_DESIGN.contentDefault}>
+            <PropertySection title="ตั้งค่าเฉลย">
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="numbersOnly"
+                    checked={
+                      isMixed(commonNumbersOnly)
+                        ? false
+                        : (commonNumbersOnly as boolean)
+                    }
+                    onCheckedChange={(checked: boolean) => {
+                      if (fillInTheBlankPracticeNodes.length === 0) return;
+                      const basePractice = fillInTheBlankPracticeNodes[0]
+                        ?.practice;
+                      const isNumbersOnly = checked === true;
+                      editNodes(
+                        fillInTheBlankPracticeNodes.map((n) => n.id),
+                        {
+                          practice: {
+                            ...(basePractice as any),
+                            numbersOnly: isNumbersOnly,
+                            fillInTheBlankAnswer: isNumbersOnly
+                              ? (commonFillInTheBlankAnswer as string)?.replace(
+                                  /[^0-9.]/g,
+                                  "",
+                                )
+                              : (commonFillInTheBlankAnswer as string),
+                          },
+                        } as Partial<Node>,
+                      );
+                    }}
+                  />
+                  <Label
+                    htmlFor="numbersOnly"
+                    className="text-xs text-muted-foreground cursor-pointer"
+                  >
+                    ตำตอบเฉพาะตัวเลข
+                  </Label>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    คำตอบที่ถูกต้อง
+                  </Label>
+                  <Input
+                    className="h-8 text-xs"
+                    type={
+                      !isMixed(commonNumbersOnly) &&
+                      (commonNumbersOnly as boolean)
+                        ? "number"
+                        : "text"
+                    }
+                    value={
+                      commonFillInTheBlankAnswer === undefined ||
+                      isMixed(commonFillInTheBlankAnswer)
+                        ? ""
+                        : (commonFillInTheBlankAnswer as string)
+                    }
+                    placeholder={
+                      commonFillInTheBlankAnswer === undefined ||
+                      isMixed(commonFillInTheBlankAnswer)
+                        ? "Mixed"
+                        : undefined
+                    }
+                    onChange={(e) => {
+                      let answer = e.target.value;
+                      const isNumbersOnly =
+                        !isMixed(commonNumbersOnly) &&
+                        (commonNumbersOnly as boolean);
+                      if (isNumbersOnly) {
+                        answer = answer.replace(/[^0-9.]/g, "");
+                      }
+                      if (fillInTheBlankPracticeNodes.length === 0) return;
+                      const basePractice = fillInTheBlankPracticeNodes[0]
+                        ?.practice;
+                      editNodes(
+                        fillInTheBlankPracticeNodes.map((n) => n.id),
+                        {
+                          practice: {
+                            ...(basePractice as any),
+                            fillInTheBlankAnswer: answer,
+                          },
+                        } as Partial<Node>,
+                      );
+                    }}
+                  />
+                </div>
+
+                <NumberField
+                  label="คะแนน"
+                  value={
+                    isMixed(commonFillInTheBlankScore)
+                      ? undefined
+                      : (commonFillInTheBlankScore as number)
+                  }
+                  placeholder={
+                    isMixed(commonFillInTheBlankScore) ? "Mixed" : undefined
+                  }
+                  onChange={(v) => {
+                    if (fillInTheBlankPracticeNodes.length === 0) return;
+                    const basePractice = fillInTheBlankPracticeNodes[0]
+                      ?.practice;
+                    editNodes(
+                      fillInTheBlankPracticeNodes.map((n) => n.id),
+                      {
+                        practice: {
+                          ...(basePractice as any),
+                          fillInTheBlankScore: v,
+                        },
+                      } as Partial<Node>,
+                    );
+                  }}
+                  min={0}
+                />
+              </div>
+            </PropertySection>
+          </div>
+        ) : (
+          <div className={SIDEBAR_DESIGN.contentDefault}>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              ตั้งค่าเฉลยสำหรับ element นี้
+            </p>
+          </div>
+        )
       ) : (
         <div className={SIDEBAR_DESIGN.contentCompact}>
           {/* Position */}
@@ -442,6 +637,123 @@ export function RightSidebar() {
                 </div>
               </PropertySection>
               <SidebarDivider />
+
+              {/* Fill Color — rect, ellipse, text */}
+              {hasFillNodes && (
+                <>
+                  {isFillInTheBlankSelection ? (
+                    <>
+                      <PropertySection icon={Palette} title="Background Color">
+                        <ColorInput
+                          value={mixedToStr(commonFillInTheBlankBg, "#ffffff")}
+                          mixed={isMixed(commonFillInTheBlankBg)}
+                          onChange={(v) => {
+                            const ids = fillInTheBlankRectNodes.map((n) => n.id);
+                            if (ids.length === 0) return;
+                            editNodes(ids, { fill: v } as Partial<Node>);
+                          }}
+                        />
+                      </PropertySection>
+                      <SidebarDivider />
+
+                      <PropertySection icon={Type} title="Text Color">
+                        <ColorInput
+                          value={mixedToStr(commonFillInTheBlankText, "#9ca3af")}
+                          mixed={isMixed(commonFillInTheBlankText)}
+                          onChange={(v) => {
+                            const ids = fillInTheBlankTextNodes.map((n) => n.id);
+                            if (ids.length === 0) return;
+                            editNodes(ids, { fill: v } as Partial<Node>);
+                          }}
+                        />
+                      </PropertySection>
+                      <SidebarDivider />
+                    </>
+                  ) : (
+                    <>
+                      <PropertySection icon={Palette} title="Fill Color">
+                        <ColorInput
+                          value={mixedToStr(commonFill, "#000000")}
+                          mixed={isMixed(commonFill)}
+                          onChange={(v) =>
+                            apply(
+                              { fill: v },
+                              ["rect", "ellipse", "triangle", "pentagon", "text"],
+                            )
+                          }
+                        />
+                      </PropertySection>
+                      <SidebarDivider />
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Stroke — rect, ellipse */}
+              {hasStrokeNodes && (
+                <>
+                  <PropertySection icon={PenLine} title="Stroke">
+                    <ColorInput
+                      value={mixedToStr(commonStroke, "#000000")}
+                      mixed={isMixed(commonStroke)}
+                      onChange={(v) => apply({ stroke: v }, ["rect", "ellipse", "triangle", "pentagon"])}
+                    />
+                    <div className="space-y-2">
+                      <Slider
+                        min={0}
+                        max={50}
+                        step={1}
+                        value={[
+                          isMixed(commonStrokeWidth)
+                            ? 0
+                            : (commonStrokeWidth as number),
+                        ]}
+                        onValueChange={([v]) =>
+                          apply({ strokeWidth: v }, ["rect", "ellipse"])
+                        }
+                      />
+                      <p className="text-xs text-center text-muted-foreground">
+                        {isMixed(commonStrokeWidth)
+                          ? "Mixed"
+                          : `${commonStrokeWidth as number}px`}
+                      </p>
+                    </div>
+                  </PropertySection>
+                  <SidebarDivider />
+                </>
+              )}
+
+              {/* Corner Radius — rect */}
+              {hasRectNodes && (
+                <>
+                  <PropertySection icon={RectangleHorizontal} title="Corner Radius">
+                    <NumberField
+                      label="Radius"
+                      value={
+                        isMixed(commonCornerRadius)
+                          ? undefined
+                          : (commonCornerRadius as number)
+                      }
+                      placeholder={
+                        isMixed(commonCornerRadius) ? "Mixed" : undefined
+                      }
+                      onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
+                      min={0}
+                      max={100}
+                    />
+                  </PropertySection>
+                  <SidebarDivider />
+                </>
+              )}
+
+              {/* Text Properties */}
+              {hasTextNodes && (
+                <MultiTextProperties
+                  textNodes={textNodes}
+                  allIds={ids}
+                  isSingle={isSingle}
+                />
+              )}
             </>
           )}
 

@@ -292,6 +292,11 @@ export function insertPentagon(
   commitInsert([node]);
 }
 
+/**  */
+export function insertAccordion(x: number, y: number): void {
+  
+}
+
 /**
  * เพิ่มการ์ดแบบฝึกหัดลงใน canvas (เป็นกลุ่ม)
  * - พื้นหลังการ์ด (rect)
@@ -523,7 +528,7 @@ export function insertFillInTheBlank(
   title: string,
   description: string,
 ): void {
-  const cardW = 360;
+  const cardW = 240;
   const cardH = 130;
   const padding = 16;
   const groupId = generateNodeId();
@@ -534,6 +539,8 @@ export function insertFillInTheBlank(
     id: setId,
     title,
     description,
+    fillInTheBlankAnswer: "",
+    fillInTheBlankScore: 1,
   };
 
   const questionY = y - cardH / 2 + padding + 12;
@@ -565,9 +572,9 @@ export function insertFillInTheBlank(
   const inputLabel: TextNode = {
     id: generateNodeId(),
     type: "text",
-    x: x + 8,
+    x,
     y: inputY,
-    width: inputW - 16,
+    width: inputW,
     height: inputH,
     rotation: 0,
     opacity: 1,
@@ -575,8 +582,8 @@ export function insertFillInTheBlank(
     visible: true,
     groupId,
     practice: practiceMeta,
-    text: "",
-    fontSize: 13,
+    text: "คำตอบ",
+    fontSize: 14,
     fontFamily: "Arial",
     fill: "#9ca3af",
     fontStyle: "normal",

@@ -674,6 +674,160 @@ export function snapResizeSize(
   };
 }
 
+// =============================================
+// Resize Edge Snap (Canva-style edge alignment)
+// =============================================
+
+export interface ResizeEdgeSnapResult {
+  snappedLeft: boolean;
+  snappedRight: boolean;
+  snappedTop: boolean;
+  snappedBottom: boolean;
+  /** Snapped world-space left edge (same as input when not snapped) */
+  left: number;
+  /** Snapped world-space right edge (same as input when not snapped) */
+  right: number;
+  /** Snapped world-space top edge (same as input when not snapped) */
+  top: number;
+  /** Snapped world-space bottom edge (same as input when not snapped) */
+  bottom: number;
+  guides: SnapGuideInfo[];
+}
+
+/**
+ * Snap the moving edges of a resize operation to align with
+ * edges and centers of other nodes (Canva-style smart guides during resize).
+ *
+ * @param movingLeft   - world X of left edge if being dragged, else null
+ * @param movingRight  - world X of right edge if being dragged, else null
+ * @param movingTop    - world Y of top edge if being dragged, else null
+ * @param movingBottom - world Y of bottom edge if being dragged, else null
+ * @param nodeBounds   - current world-space bounding box of the node being resized
+ * @param allNodes     - other visible nodes to snap to
+ * @param movingNodeIds - IDs of nodes being resized (excluded from snap targets)
+ * @param canvasWidth  - page width
+ * @param canvasHeight - page height
+ * @param threshold    - snap distance in world pixels
+ */
+export function snapResizeEdges(
+  movingLeft: number | null,
+  movingRight: number | null,
+  movingTop: number | null,
+  movingBottom: number | null,
+  nodeBounds: { left: number; top: number; right: number; bottom: number },
+  allNodes: Node[],
+  movingNodeIds: Set<string>,
+  canvasWidth: number,
+  canvasHeight: number,
+  threshold: number = SNAP_THRESHOLD,
+): ResizeEdgeSnapResult {
+  const xCandidates: Array<{ value: number; refStart: number; refEnd: number }> = [
+    { value: 0, refStart: 0, refEnd: canvasHeight },
+    { value: canvasWidth / 2, refStart: 0, refEnd: canvasHeight },
+    { value: canvasWidth, refStart: 0, refEnd: canvasHeight },
+  ];
+
+  const yCandidates: Array<{ value: number; refStart: number; refEnd: number }> = [
+    { value: 0, refStart: 0, refEnd: canvasWidth },
+    { value: canvasHeight / 2, refStart: 0, refEnd: canvasWidth },
+    { value: canvasHeight, refStart: 0, refEnd: canvasWidth },
+  ];
+
+  for (const other of allNodes) {
+    if (movingNodeIds.has(other.id) || !other.visible) continue;
+    const sp = getSnapPoints(other);
+    xCandidates.push(
+      { value: sp.left, refStart: sp.top, refEnd: sp.bottom },
+      { value: sp.centerX, refStart: sp.top, refEnd: sp.bottom },
+      { value: sp.right, refStart: sp.top, refEnd: sp.bottom },
+    );
+    yCandidates.push(
+      { value: sp.top, refStart: sp.left, refEnd: sp.right },
+      { value: sp.centerY, refStart: sp.left, refEnd: sp.right },
+      { value: sp.bottom, refStart: sp.left, refEnd: sp.right },
+    );
+  }
+
+  const guides: SnapGuideInfo[] = [];
+  let snappedLeft = false;
+  let snappedRight = false;
+  let snappedTop = false;
+  let snappedBottom = false;
+
+  let resultLeft = movingLeft ?? nodeBounds.left;
+  let resultRight = movingRight ?? nodeBounds.right;
+  let resultTop = movingTop ?? nodeBounds.top;
+  let resultBottom = movingBottom ?? nodeBounds.bottom;
+
+  if (movingLeft !== null) {
+    const match = findClosest(movingLeft, xCandidates, threshold);
+    if (match) {
+      resultLeft = match.value;
+      snappedLeft = true;
+      guides.push({
+        type: "vertical",
+        position: match.value,
+        start: Math.min(match.refStart, nodeBounds.top) - 20,
+        end: Math.max(match.refEnd, nodeBounds.bottom) + 20,
+      });
+    }
+  }
+
+  if (movingRight !== null) {
+    const match = findClosest(movingRight, xCandidates, threshold);
+    if (match) {
+      resultRight = match.value;
+      snappedRight = true;
+      guides.push({
+        type: "vertical",
+        position: match.value,
+        start: Math.min(match.refStart, nodeBounds.top) - 20,
+        end: Math.max(match.refEnd, nodeBounds.bottom) + 20,
+      });
+    }
+  }
+
+  if (movingTop !== null) {
+    const match = findClosest(movingTop, yCandidates, threshold);
+    if (match) {
+      resultTop = match.value;
+      snappedTop = true;
+      guides.push({
+        type: "horizontal",
+        position: match.value,
+        start: Math.min(match.refStart, nodeBounds.left) - 20,
+        end: Math.max(match.refEnd, nodeBounds.right) + 20,
+      });
+    }
+  }
+
+  if (movingBottom !== null) {
+    const match = findClosest(movingBottom, yCandidates, threshold);
+    if (match) {
+      resultBottom = match.value;
+      snappedBottom = true;
+      guides.push({
+        type: "horizontal",
+        position: match.value,
+        start: Math.min(match.refStart, nodeBounds.left) - 20,
+        end: Math.max(match.refEnd, nodeBounds.right) + 20,
+      });
+    }
+  }
+
+  return {
+    snappedLeft,
+    snappedRight,
+    snappedTop,
+    snappedBottom,
+    left: resultLeft,
+    right: resultRight,
+    top: resultTop,
+    bottom: resultBottom,
+    guides,
+  };
+}
+
 /**
  * (Legacy) snapNode - เรียก snapNodes ภายใน สำหรับ backward-compat
  */

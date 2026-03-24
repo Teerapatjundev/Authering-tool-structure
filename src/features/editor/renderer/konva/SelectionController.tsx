@@ -46,7 +46,7 @@ import {
   getMultiSelectionBoundsWithRotation,
   getGroupBoundsInRotatedFrame,
 } from "../../core/geometry/bounds";
-import { snapResizeSize, SizeSnapResult } from "../../core/geometry/snap";
+import { snapResizeSize, SizeSnapResult, snapResizeEdges, ResizeEdgeSnapResult } from "../../core/geometry/snap";
 import { useSnapGuidesStore } from "../../stores/snapGuidesStore";
 import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 
@@ -199,6 +199,49 @@ function samePoints(a?: number[], b?: number[]) {
     if (Math.abs(a[i] - b[i]) > 0.0001) return false;
   }
   return true;
+}
+
+/**
+ * วัดความสูงของข้อความเมื่อ word-wrap ที่ความกว้างที่กำหนด
+ * ใช้สำหรับคำนวณ height ของ text node เมื่อ resize ให้แคบลง
+ */
+function measureWrappedTextHeight(
+  text: string,
+  fontSize: number,
+  fontFamily: string,
+  fontStyle: string | undefined,
+  availableWidth: number,
+  padding: number = 0,
+): number {
+  if (typeof document === "undefined") return Math.max(fontSize * 1.4, 24);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return Math.max(fontSize * 1.4, 24);
+  const weight = fontStyle?.includes("bold") ? "bold" : "normal";
+  const italic = fontStyle?.includes("italic") ? "italic" : "normal";
+  ctx.font = `${italic} ${weight} ${fontSize}px ${fontFamily}`.trim();
+  const innerWidth = Math.max(1, availableWidth - 2 * padding);
+  const lineHeight = fontSize * 1.2;
+  let totalLines = 0;
+  for (const paragraph of text.split("\n")) {
+    if (!paragraph) { totalLines++; continue; }
+    const words = paragraph.split(" ");
+    let currentLine = "";
+    for (const word of words) {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (ctx.measureText(candidate).width > innerWidth && currentLine) {
+        totalLines++;
+        currentLine = word;
+      } else {
+        currentLine = candidate;
+      }
+    }
+    totalLines++;
+  }
+  return Math.max(
+    totalLines * lineHeight + 2 * padding + 10,
+    fontSize * 1.5 + 2 * padding,
+  );
 }
 
 /** Apply position/size to a Konva shape. finalize=true resets scale to 1. */
@@ -356,6 +399,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const groupRotRef = useRef(0);
   const prevKeyRef = useRef("");
   const sizeSnapResultRef = useRef<SizeSnapResult | null>(null);
+  const resizeEdgeSnapRef = useRef<ResizeEdgeSnapResult | null>(null);
   const isRotatingTransformRef = useRef(false);
 
   const selectedNodes =
@@ -490,6 +534,17 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       useSnapGuidesStore.getState().setSizeGuides(snapResult.sizeGuides);
     } else {
       useSnapGuidesStore.getState().setSizeGuides([]);
+    }
+
+    // --- Edge snap guides (single resize only) ---
+    const edgeSnap = resizeEdgeSnapRef.current;
+    if (
+      edgeSnap &&
+      (edgeSnap.snappedLeft || edgeSnap.snappedRight || edgeSnap.snappedTop || edgeSnap.snappedBottom)
+    ) {
+      useSnapGuidesStore.getState().setGuides(edgeSnap.guides);
+    } else {
+      useSnapGuidesStore.getState().setGuides([]);
     }
 
     if (!isMulti) return; // Single: Konva Transformer handles visual
@@ -667,6 +722,15 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       fy = Math.max(halfY, Math.min(activePage.height - halfY, fy));
     }
 
+    // For text/textlink nodes: recompute height from word-wrapped content at new width
+    if (!isRotatingTransformRef.current && (node.type === "text" || node.type === "textlink")) {
+      const tn = node as { text: string; fontSize: number; fontFamily: string; fontStyle?: string; practice?: { type?: string } };
+      if (tn.text) {
+        const pad = tn.practice?.type === "fill-in-the-blank" ? 8 : 0;
+        fh = measureWrappedTextHeight(tn.text, tn.fontSize, tn.fontFamily, tn.fontStyle, fw, pad);
+      }
+    }
+
     if (node.type === "video") {
       const parent = shape.parent;
       if (parent && parent !== shape.getLayer()) {
@@ -729,6 +793,28 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       },
       newProps: { x: fx, y: fy, width: fw, height: fh, rotation: fr },
     });
+
+    // Fill-in-the-blank: sync sibling (rect <-> text) to the same bounds
+    if (activePage && node.practice?.type === "fill-in-the-blank" && node.practice?.id) {
+      const practiceId = node.practice.id;
+      const siblingNodes = activePage.nodes.filter(
+        (n) => n.id !== node.id && n.practice?.id === practiceId,
+      );
+      if (siblingNodes.length > 0) {
+        const sibUpdates = siblingNodes.map((sib) => ({
+          id: sib.id,
+          changes: { x: fx, y: fy, width: fw, height: fh } as Partial<Node>,
+        }));
+        updateNodes(sibUpdates);
+        for (const sib of siblingNodes) {
+          historyUpdates.push({
+            id: sib.id,
+            oldProps: { x: sib.x, y: sib.y, width: sib.width, height: sib.height },
+            newProps: { x: fx, y: fy, width: fw, height: fh },
+          });
+        }
+      }
+    }
 
     // Choice parent/child rotation sync:
     // If the selected node is a Choice primary, rotate all children around the parent center.
@@ -971,6 +1057,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const activeAnchor = trRef.current?.getActiveAnchor();
     if (activeAnchor === "rotater") {
       sizeSnapResultRef.current = null;
+      resizeEdgeSnapRef.current = null;
       return newBox;
     }
     if (oldBox.width * newBox.width < 0 || oldBox.height * newBox.height < 0)
@@ -984,6 +1071,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       Math.abs(oldBox.height - newBox.height) < 1;
     if (isRot) {
       sizeSnapResultRef.current = null;
+      resizeEdgeSnapRef.current = null;
       return newBox;
     }
 
@@ -1048,6 +1136,62 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         if (!topFixed) newBox.y = newBox.y + newBox.height - targetH;
         newBox.height = targetH;
       }
+    }
+
+    // --- Edge snap during resize (Canva-style position alignment) ---
+    // Only for non-rotated, non-corner-resize nodes
+    const resizingNode = selectedNodes[0];
+    const resizingNodeRot = resizingNode?.rotation ?? 0;
+    if (!isCornerResizeNode && Math.abs(resizingNodeRot % 360) < 0.01) {
+      const vx = viewport.x;
+      const vy = viewport.y;
+      // Convert newBox (screen space) to world space
+      const worldLeft = (newBox.x - vx) / z;
+      const worldTop = (newBox.y - vy) / z;
+      const worldRight = worldLeft + Math.abs(newBox.width) / z;
+      const worldBottom = worldTop + Math.abs(newBox.height) / z;
+      const anchor = activeAnchor ?? "";
+      // Determine which edges are moving based on the active anchor
+      const movingLeft: number | null = anchor.includes("left") ? worldLeft : null;
+      const movingRight: number | null = anchor.includes("right") ? worldRight : null;
+      const movingTop: number | null = anchor.includes("top") ? worldTop : null;
+      const movingBottom: number | null = anchor.includes("bottom") ? worldBottom : null;
+
+      if (movingLeft !== null || movingRight !== null || movingTop !== null || movingBottom !== null) {
+        const otherNodes = activePage.nodes.filter((n) => !selectedIds.has(n.id) && n.visible);
+        const edgeSnap = snapResizeEdges(
+          movingLeft,
+          movingRight,
+          movingTop,
+          movingBottom,
+          { left: worldLeft, top: worldTop, right: worldRight, bottom: worldBottom },
+          otherNodes,
+          selectedIds,
+          activePage.width,
+          activePage.height,
+        );
+        resizeEdgeSnapRef.current = edgeSnap;
+        if (edgeSnap.snappedLeft) {
+          const snappedScreenLeft = edgeSnap.left * z + vx;
+          newBox.width += newBox.x - snappedScreenLeft;
+          newBox.x = snappedScreenLeft;
+        }
+        if (edgeSnap.snappedRight) {
+          newBox.width = edgeSnap.right * z + vx - newBox.x;
+        }
+        if (edgeSnap.snappedTop) {
+          const snappedScreenTop = edgeSnap.top * z + vy;
+          newBox.height += newBox.y - snappedScreenTop;
+          newBox.y = snappedScreenTop;
+        }
+        if (edgeSnap.snappedBottom) {
+          newBox.height = edgeSnap.bottom * z + vy - newBox.y;
+        }
+      } else {
+        resizeEdgeSnapRef.current = null;
+      }
+    } else {
+      resizeEdgeSnapRef.current = null;
     }
 
     const selected = selectedNodes[0];
@@ -1178,7 +1322,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const handleTransformEnd = () => {
     const lastSizeSnap = sizeSnapResultRef.current;
     useSnapGuidesStore.getState().setSizeGuides([]);
+    useSnapGuidesStore.getState().setGuides([]);
     sizeSnapResultRef.current = null;
+    resizeEdgeSnapRef.current = null;
 
     const stage = stageRef.current;
     if (!stage) return;
