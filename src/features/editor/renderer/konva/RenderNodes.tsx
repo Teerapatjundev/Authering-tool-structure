@@ -49,7 +49,6 @@ import { useTextEditStore } from "../../stores/textEditStore";
 import { useTextLinkEditStore } from "../../stores/textLinkEditStore";
 import { useVideoPlayStore } from "../../stores/videoPlayStore";
 import { useSelectionStore } from "../../stores/selectionStore";
-import { useContainerEditStore } from "../../stores/containerEditStore";
 import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 
 interface RenderNodesProps {
@@ -156,8 +155,6 @@ export function RenderNodes({ nodes }: RenderNodesProps) {
 function RenderNode({ node }: { node: Node }) {
   const { startEditing } = useTextEditStore();
   const { openDialog } = useTextLinkEditStore();
-  const { activeContainerId, setActiveContainer } = useContainerEditStore();
-  const clearSelection = useSelectionStore((s) => s.clearSelection);
 
   // Common props ที่ทุก shape ใช้
   const commonProps = {
@@ -173,61 +170,7 @@ function RenderNode({ node }: { node: Node }) {
 
   switch (node.type) {
     case "rect":
-      {
-        const isChoicePrimary =
-          node.practice?.type === "choice" &&
-          node.practice?.containerRole === "primary";
-        const isConnectionPrimary =
-          node.practice?.type === "connection" &&
-          node.practice?.containerRole === "primary";
-
-        const isContainerPrimary = isChoicePrimary || isConnectionPrimary;
-        const isActiveContainerPrimary = isContainerPrimary && activeContainerId === node.id;
-
-        return (
-          <RenderRect
-            node={node}
-            commonProps={commonProps}
-            isActiveChoicePrimary={isActiveContainerPrimary}
-            onClick={
-              isContainerPrimary
-                ? () => {
-                    // Click-to-toggle, but only after the parent is already selected.
-                    // This keeps normal selection + resize predictable.
-                    if (useContainerEditStore.getState().activeContainerId === node.id) {
-                      setActiveContainer(null);
-                      return;
-                    }
-
-                    const selected = useSelectionStore.getState().selectedIds;
-                    if (selected.has(node.id)) {
-                      clearSelection();
-                      setActiveContainer(node.id);
-                    }
-                  }
-                : undefined
-            }
-            onDoubleClick={
-              node.practice?.type === "choice" || node.practice?.type === "connection"
-                ? node.practice?.containerRole === "primary"
-                  ? () => {
-                      const next = activeContainerId === node.id ? null : node.id;
-                      if (next) clearSelection();
-                      setActiveContainer(next);
-                    }
-                  : node.practice?.containerRole === "sub" && (node as any).parentId
-                    ? () => {
-                        const pid = (node as any).parentId as string;
-                        const next = activeContainerId === pid ? null : pid;
-                        if (next) clearSelection();
-                        setActiveContainer(next);
-                      }
-                    : undefined
-                : undefined
-            }
-          />
-        );
-      }
+      return <RenderRect node={node} commonProps={commonProps} />;
 
     case "ellipse":
       return <RenderEllipse node={node} commonProps={commonProps} />;

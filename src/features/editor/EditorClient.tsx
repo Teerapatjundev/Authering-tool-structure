@@ -53,6 +53,7 @@ import {
   insertPracticeCard,
   insertConnectionPair,
   insertChoiceOptions,
+  insertSequenceOrderingOptions,
   insertFillInTheBlank,
 } from "./core/commands/insert";
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
@@ -86,6 +87,19 @@ export function EditorClient({ docId }: EditorClientProps) {
   const [choiceTotalOptions, setChoiceTotalOptions] = useState(4);
   const [choiceCorrectCount, setChoiceCorrectCount] = useState(2);
   const [pendingChoiceDrop, setPendingChoiceDrop] = useState<
+    | {
+        x: number;
+        y: number;
+        title: string;
+        description: string;
+      }
+    | null
+  >(null);
+
+  // Sequence/Ordering modal state (when dropping practiceType === "sequence-ordering")
+  const [sequenceModalOpen, setSequenceModalOpen] = useState(false);
+  const [sequenceTotalOptions, setSequenceTotalOptions] = useState(4);
+  const [pendingSequenceDrop, setPendingSequenceDrop] = useState<
     | {
         x: number;
         y: number;
@@ -255,6 +269,14 @@ export function EditorClient({ docId }: EditorClientProps) {
           return;
         }
 
+        // Sequence/Ordering: open modal to specify number of children
+        if (practiceType === "sequence-ordering") {
+          setPendingSequenceDrop({ x: dropX, y: dropY, title, description });
+          setSequenceTotalOptions(4);
+          setSequenceModalOpen(true);
+          return;
+        }
+
         if (practiceType === "connection") {
           insertConnectionPair(dropX, dropY, title, description);
         } else if (practiceType === "fill-in-the-blank") {
@@ -390,6 +412,27 @@ export function EditorClient({ docId }: EditorClientProps) {
     setPendingChoiceDrop(null);
     setChoiceStep(1);
     setChoiceMode(null);
+  }, []);
+
+  const confirmSequenceModal = useCallback(() => {
+    if (!pendingSequenceDrop) return;
+
+    const total = Math.max(1, Math.floor(sequenceTotalOptions));
+    insertSequenceOrderingOptions(
+      pendingSequenceDrop.x,
+      pendingSequenceDrop.y,
+      total,
+      pendingSequenceDrop.title,
+      pendingSequenceDrop.description,
+    );
+
+    setSequenceModalOpen(false);
+    setPendingSequenceDrop(null);
+  }, [pendingSequenceDrop, sequenceTotalOptions]);
+
+  const closeSequenceModal = useCallback(() => {
+    setSequenceModalOpen(false);
+    setPendingSequenceDrop(null);
   }, []);
 
   // Helper: โหลดรูปจาก URL
@@ -804,6 +847,57 @@ export function EditorClient({ docId }: EditorClientProps) {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {sequenceModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30">
+            <div className="w-full max-w-md p-4 bg-white border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-gray-800">
+                  ระบุจำนวนตัวเลือก
+                </div>
+                <button
+                  type="button"
+                  onClick={closeSequenceModal}
+                  className="flex items-center justify-center w-5 h-5 text-gray-800 border border-gray-800 rounded-full hover:bg-gray-50"
+                  aria-label="Close"
+                >
+                  <span className="text-sm leading-none">×</span>
+                </button>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                <label className="block">
+                  <div className="text-xs text-gray-600">จำนวนตัวเลือกทั้งหมด</div>
+                  <input
+                    type="number"
+                    min={1}
+                    value={sequenceTotalOptions}
+                    onChange={(e) => setSequenceTotalOptions(Number(e.target.value))}
+                    className="w-full px-3 py-2 mt-1 text-sm border border-gray-200 rounded-md"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={confirmSequenceModal}
+                  disabled={!pendingSequenceDrop}
+                  className="w-full px-4 py-2 text-sm font-medium text-white bg-[#ED1C24] rounded-md disabled:opacity-50"
+                >
+                  ยืนยัน
+                </button>
+                <button
+                  type="button"
+                  onClick={closeSequenceModal}
+                  className="w-full px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-md hover:bg-gray-50"
+                >
+                  ยกเลิก
+                </button>
+              </div>
             </div>
           </div>
         )}

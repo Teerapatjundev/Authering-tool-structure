@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Stage, Layer, Rect, Group } from "react-konva";
 import { Button } from "@/components/ui/button";
 import { useDocStore } from "@/features/editor/stores/docStore";
@@ -13,6 +13,75 @@ import { RenderNodes } from "@/features/editor/renderer/konva/RenderNodes";
 import type { Page } from "@/features/editor/core/doc/types";
 
 const PREVIEW_WIDTH = 232; // 256 (w-64) - 24 (p-3)
+const INSERT_ROW_HEIGHT = 32; // py-1 + inner h-6
+const ROW_GAP = 12; // gap-3
+
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const update = () => {
+      setSize({ width: el.clientWidth, height: el.clientHeight });
+    };
+
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  return { ref, size };
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function previewHeightForPage(page: Page, previewWidth: number) {
+  const safePageWidth = Math.max(1, page.width);
+  const safePageHeight = Math.max(1, page.height);
+  const scale = previewWidth / safePageWidth;
+  const previewHeight = Math.max(1, Math.round(safePageHeight * scale));
+
+  // Rough chrome: borders/rounding wrappers around the Stage.
+  const CHROME_Y = 8;
+  return { scale, previewHeight, itemHeight: previewHeight + CHROME_Y };
+}
+
+function buildOffsets(heights: number[]) {
+  const offsets = new Array<number>(heights.length);
+  let acc = 0;
+  for (let i = 0; i < heights.length; i++) {
+    offsets[i] = acc;
+    acc += heights[i];
+  }
+  return { offsets, total: acc };
+}
+
+function findStartIndex(offsets: number[], heights: number[], scrollTop: number) {
+  // Binary search for the last item whose start <= scrollTop
+  let lo = 0;
+  let hi = offsets.length - 1;
+  let ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const start = offsets[mid];
+    const end = start + heights[mid];
+    if (scrollTop < start) {
+      hi = mid - 1;
+    } else if (scrollTop >= end) {
+      lo = mid + 1;
+      ans = lo;
+    } else {
+      return mid;
+    }
+  }
+  return clamp(ans, 0, Math.max(0, offsets.length - 1));
+}
 
 function DuplicatePageIcon(props: { className?: string }) {
   return (
@@ -74,30 +143,19 @@ function InsertPageButton({ insertIndex }: { insertIndex: number }) {
   );
 }
 
-function PagePreview({ page, index }: { page: Page; index: number }) {
+function PagePreview({
+  page,
+  index,
+  previewWidth,
+}: {
+  page: Page;
+  index: number;
+  previewWidth: number;
+}) {
   const doc = useDocStore((s) => s.doc);
   const setActivePage = useDocStore((s) => s.setActivePage);
   const isActive = !!doc && doc.activePageId === page.id;
   const canDelete = (doc?.pages?.length ?? 0) > 1;
-
-  const previewRef = useRef<HTMLDivElement | null>(null);
-  const [previewWidth, setPreviewWidth] = useState<number>(PREVIEW_WIDTH);
-
-  useEffect(() => {
-    const el = previewRef.current;
-    if (!el) return;
-
-    const update = () => {
-      const next = Math.max(1, el.clientWidth);
-      setPreviewWidth(next);
-    };
-
-    update();
-
-    const ro = new ResizeObserver(() => update());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   const safePageWidth = Math.max(1, page.width);
   const safePageHeight = Math.max(1, page.height);
@@ -107,7 +165,6 @@ function PagePreview({ page, index }: { page: Page; index: number }) {
   return (
     <div className="mx-auto w-60 rounded-lg border border-gray-200 bg-white justify-center flex flex-col items-center">
       <div
-        ref={previewRef}
         role="button"
         tabIndex={0}
         onClick={() => setActivePage(page.id)}
@@ -215,17 +272,103 @@ export function PagePanel() {
 
   const pages = doc.pages || [];
 
+  type ListItem =
+    | { type: "insert"; key: string; insertIndex: number; height: number }
+    | { type: "page"; key: string; page: Page; index: number; height: number; previewWidth: number };
+
+  const items: ListItem[] = useMemo(() => {
+    const previewWidth = PREVIEW_WIDTH;
+    const next: ListItem[] = [];
+
+    // Insert button before first page.
+    next.push({
+      type: "insert",
+      key: "insert-0",
+      insertIndex: 0,
+      height: INSERT_ROW_HEIGHT + ROW_GAP,
+    });
+
+    for (let i = 0; i < pages.length; i++) {
+      const p = pages[i];
+      const { itemHeight } = previewHeightForPage(p, previewWidth);
+      next.push({
+        type: "page",
+        key: `page-${p.id}`,
+        page: p,
+        index: i,
+        previewWidth,
+        height: itemHeight + ROW_GAP,
+      });
+      next.push({
+        type: "insert",
+        key: `insert-${i + 1}`,
+        insertIndex: i + 1,
+        height: INSERT_ROW_HEIGHT + ROW_GAP,
+      });
+    }
+
+    return next;
+  }, [pages]);
+
+  const heights = useMemo(() => items.map((it) => it.height), [items]);
+  const { offsets, total } = useMemo(() => buildOffsets(heights), [heights]);
+
+  const { ref: scrollRef, size: scrollSize } = useElementSize<HTMLDivElement>();
+  const [scrollTop, setScrollTop] = useState(0);
+
+  const startIndex = useMemo(() => {
+    if (items.length === 0) return 0;
+    return findStartIndex(offsets, heights, scrollTop);
+  }, [items.length, offsets, heights, scrollTop]);
+
+  const endIndex = useMemo(() => {
+    if (items.length === 0) return 0;
+    const bottom = scrollTop + scrollSize.height;
+    let idx = findStartIndex(offsets, heights, bottom);
+    // Ensure we include the partially-visible item.
+    if (idx < items.length) idx += 1;
+    return idx;
+  }, [items.length, offsets, heights, scrollTop, scrollSize.height]);
+
+  const overscan = 6;
+  const renderFrom = Math.max(0, startIndex - overscan);
+  const renderTo = Math.min(items.length, endIndex + overscan);
+
   return (
-    <div className="flex-1 p-3 overflow-auto">
-      <div className="flex flex-col gap-3">
-        <InsertPageButton insertIndex={0} />
-        {pages.map((page, i) => {
+    <div
+      ref={scrollRef}
+      className="flex-1 p-3 overflow-auto"
+      onScroll={(e) => {
+        setScrollTop((e.currentTarget as HTMLDivElement).scrollTop);
+      }}
+    >
+      <div className="relative" style={{ height: total }}>
+        {items.slice(renderFrom, renderTo).map((item, localIdx) => {
+          const idx = renderFrom + localIdx;
+          const top = offsets[idx] ?? 0;
+
+          if (item.type === "insert") {
+            return (
+              <div
+                key={item.key}
+                style={{ position: "absolute", top, left: 0, right: 0 }}
+              >
+                <InsertPageButton insertIndex={item.insertIndex} />
+              </div>
+            );
+          }
+
+          const page = item.page;
+          const i = item.index;
           const isDragging = draggingPageId === page.id;
           const isDragOver = dragOver?.pageId === page.id;
           const overPlacement = isDragOver ? dragOver?.placement : null;
 
           return (
-            <div key={page.id} className="flex flex-col gap-3">
+            <div
+              key={item.key}
+              style={{ position: "absolute", top, left: 0, right: 0 }}
+            >
               <div
                 draggable
                 onDragStart={(e) => {
@@ -284,10 +427,8 @@ export function PagePanel() {
                 {isDragOver && overPlacement === "below" && (
                   <div className="absolute left-0 right-0 h-0.5 -bottom-1 bg-blue-400 rounded" />
                 )}
-                <PagePreview page={page} index={i} />
+                <PagePreview page={page} index={i} previewWidth={item.previewWidth} />
               </div>
-
-              <InsertPageButton insertIndex={i + 1} />
             </div>
           );
         })}

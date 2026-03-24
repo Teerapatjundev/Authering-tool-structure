@@ -28,8 +28,6 @@ import { useSelectionStore } from "../stores/selectionStore";
 import { useDocStore } from "../stores/docStore";
 import { editNode, editNodes } from "../core/commands/edit";
 import { Node, TextNode } from "../core/doc/types";
-import { useHistoryStore } from "../core/history/historyStore";
-import type { TransformOp } from "../core/history/ops";
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -149,15 +147,6 @@ export function RightSidebar() {
   );
   const { selectedIds } = useSelectionStore();
   const { doc } = useDocStore();
-  const [choiceTab, setChoiceTab] = React.useState<"properties" | "answers">(
-    "properties",
-  );
-
-  const selectionKey = Array.from(selectedIds).sort().join(",");
-  React.useEffect(() => {
-    // Reset tab whenever selection changes (prevents stale tab state).
-    setChoiceTab("properties");
-  }, [selectionKey]);
 
   const activePage =
     doc?.pages.find((p) => p.id === doc.activePageId) ?? doc?.pages[0] ?? null;
@@ -166,6 +155,8 @@ export function RightSidebar() {
   const selectedNodes =
     activePage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
   const ids = selectedNodes.map((n) => n.id);
+
+  const isPracticeSelection = selectedNodes.some((n) => !!n.practice);
 
   // ถ้าไม่มี selection → แสดง Background Color
   if (selectedNodes.length === 0) {
@@ -194,7 +185,7 @@ export function RightSidebar() {
           </div>
         ) : (
           <div className={SIDEBAR_DESIGN.contentDefault}>
-            <p className="text-sm text-muted-foreground text-center py-8">
+            <p className="py-8 text-sm text-center text-muted-foreground">
               ยังไม่ได้เลือก element
             </p>
           </div>
@@ -206,17 +197,6 @@ export function RightSidebar() {
   const isSingle = selectedNodes.length === 1;
   const node = selectedNodes[0];
   const isMulti = selectedNodes.length > 1;
-  const isPracticeSelection = selectedNodes.some((n) => !!n.practice);
-
-  const isChoicePrimarySelected =
-    isSingle &&
-    node.practice?.type === "choice" &&
-    node.practice?.containerRole === "primary";
-
-  const isConnectionPrimarySelected =
-    isSingle &&
-    node.practice?.type === "connection" &&
-    node.practice?.containerRole === "primary";
 
   // ========== Helper: apply change ==========
   const apply = (changes: Partial<Node>, typeFilter?: string[]) => {
@@ -305,391 +285,194 @@ export function RightSidebar() {
     ? `${selectedNodes.length} elements selected`
     : node.type;
 
-  const choiceSetId = isChoicePrimarySelected ? node.practice?.id : undefined;
-
-  const commitTransformUpdates = (
-    updates: Array<{ id: string; newProps: Partial<Node> }>,
-  ) => {
-    const currentDoc = useDocStore.getState().doc;
-    if (!currentDoc) return;
-    const page =
-      currentDoc.pages.find((p) => p.id === currentDoc.activePageId) ??
-      currentDoc.pages[0];
-    if (!page) return;
-
-    const opUpdates: TransformOp["updates"] = [];
-    for (const u of updates) {
-      const current = page.nodes.find((n) => n.id === u.id);
-      if (!current) continue;
-      const oldProps: Partial<Node> = {};
-      const newProps: Partial<Node> = {};
-      for (const key of Object.keys(u.newProps)) {
-        const k = key as keyof Node;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (oldProps as any)[k] = (current as any)[k];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (newProps as any)[k] = (u.newProps as any)[k];
-      }
-      opUpdates.push({ id: u.id, oldProps, newProps });
-    }
-    if (opUpdates.length === 0) return;
-
-    const op: TransformOp = {
-      type: "transform",
-      timestamp: Date.now(),
-      pageId: currentDoc.activePageId,
-      updates: opUpdates,
-    };
-    useHistoryStore.getState().commit(op);
-  };
-
   return (
     <aside className={SIDEBAR_DESIGN.asideScrollable}>
-      <SidebarTabHeader activeTab={activeTab} onTabChange={setActiveTab} />
+      <SidebarTabHeader
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        subtitle={typeLabel}
+      />
 
       {activeTab === "answer" ? (
         <div className={SIDEBAR_DESIGN.contentDefault}>
-          <p className="text-sm text-muted-foreground text-center py-8">
+          <p className="py-8 text-sm text-center text-muted-foreground">
             ตั้งค่าเฉลยสำหรับ element นี้
           </p>
         </div>
       ) : (
         <div className={SIDEBAR_DESIGN.contentCompact}>
-          {isChoicePrimarySelected && (
+          {/* Position */}
+          <PropertySection icon={Move} title="Position">
+            <div className="grid grid-cols-2 gap-2">
+              <NumberField
+                label="X"
+                value={isMixed(commonX) ? undefined : (commonX as number)}
+                placeholder={isMixed(commonX) ? "Mixed" : undefined}
+                onChange={(v) => apply({ x: v })}
+              />
+              <NumberField
+                label="Y"
+                value={isMixed(commonY) ? undefined : (commonY as number)}
+                placeholder={isMixed(commonY) ? "Mixed" : undefined}
+                onChange={(v) => apply({ y: v })}
+              />
+            </div>
+          </PropertySection>
+
+          <SidebarDivider />
+
+          {/* Size */}
+          <PropertySection icon={Maximize2} title="Size">
+            <div className="grid grid-cols-2 gap-2">
+              <NumberField
+                label="W"
+                value={isMixed(commonW) ? undefined : (commonW as number)}
+                placeholder={isMixed(commonW) ? "Mixed" : undefined}
+                onChange={(v) => apply({ width: v })}
+                min={1}
+              />
+              <NumberField
+                label="H"
+                value={isMixed(commonH) ? undefined : (commonH as number)}
+                placeholder={isMixed(commonH) ? "Mixed" : undefined}
+                onChange={(v) => apply({ height: v })}
+                min={1}
+              />
+            </div>
+          </PropertySection>
+
+          <SidebarDivider />
+
+          {/* Rotation (disabled for practice nodes) */}
+          {!isPracticeSelection && (
             <>
-              <div className="pb-2">
-                <ToggleGroup
-                  type="single"
-                  value={choiceTab}
-                  onValueChange={(v) => {
-                    if (v === "properties" || v === "answers") setChoiceTab(v);
-                  }}
-                  className="justify-start"
-                >
-                  <ToggleGroupItem value="properties" size="sm">
-                    Properties
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="answers" size="sm">
-                    ตั้งค่าเฉลย
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              </div>
+              <PropertySection icon={RotateCw} title="Rotation">
+                <NumberField
+                  label="°"
+                  value={
+                    isMixed(commonRotation)
+                      ? undefined
+                      : (commonRotation as number)
+                  }
+                  placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
+                  onChange={(v) => apply({ rotation: v })}
+                  min={-180}
+                  max={180}
+                />
+              </PropertySection>
               <SidebarDivider />
             </>
           )}
 
-          {isChoicePrimarySelected && choiceTab === "answers" && choiceSetId ? (
+          {/* Opacity */}
+          <PropertySection icon={Eye} title="Opacity">
+            <div className="space-y-2">
+              <Slider
+                min={0}
+                max={100}
+                step={1}
+                value={[isMixed(commonOpacity) ? 50 : (commonOpacity as number)]}
+                onValueChange={([v]) => apply({ opacity: v / 100 })}
+              />
+              <p className="text-xs text-center text-muted-foreground">
+                {isMixed(commonOpacity) ? "Mixed" : `${commonOpacity as number}%`}
+              </p>
+            </div>
+          </PropertySection>
+
+          <SidebarDivider />
+
+          {/* Fill Color — rect, ellipse, text */}
+          {hasFillNodes && (
             <>
-              <PropertySection title="ตั้งค่าเฉลย">
-                {(() => {
-                  const page = activePage;
-                  if (!page) return null;
-
-                  const allChoiceNodes = page.nodes.filter(
-                    (n: any) => n.practice?.type === "choice" && n.practice?.id === choiceSetId,
-                  );
-                  const subNodes = allChoiceNodes.filter(
-                    (n: any) => n.practice?.containerRole === "sub" && typeof n.practice?.optionIndex === "number",
-                  );
-
-                  const mode = node.practice?.mode ?? "multiple";
-
-                  const optionIndexSet = new Set<number>();
-                  for (const n of subNodes as any[]) optionIndexSet.add(n.practice.optionIndex);
-                  const optionIndices = Array.from(optionIndexSet).sort((a, b) => a - b);
-
-                  const currentCorrect = optionIndices.filter((i) =>
-                    subNodes.some(
-                      (n: any) => n.practice.optionIndex === i && !!n.practice.isCorrect,
-                    ),
-                  );
-
-                  const value = mode === "single" ? currentCorrect.slice(0, 1).map(String) : currentCorrect.map(String);
-
-                  const setCorrect = (selectedOptionStrings: string[]) => {
-                    const selectedOptionIndices = selectedOptionStrings
-                      .map((s) => Number(s))
-                      .filter((v) => Number.isFinite(v));
-
-                    const normalized =
-                      mode === "single"
-                        ? selectedOptionIndices.slice(0, 1)
-                        : selectedOptionIndices;
-
-                    const correctCount = normalized.length;
-
-                    const updates: Array<{ id: string; newProps: Partial<Node> }> = [];
-
-                    // Update primary
-                    updates.push({
-                      id: node.id,
-                      newProps: {
-                        practice: {
-                          ...(node.practice as any),
-                          correctCount,
-                        },
-                      },
-                    });
-
-                    // Update all sub nodes
-                    for (const n of subNodes as any[]) {
-                      const idx = n.practice.optionIndex as number;
-                      const isCorrect = normalized.includes(idx);
-                      updates.push({
-                        id: n.id,
-                        newProps: {
-                          practice: {
-                            ...(n.practice as any),
-                            isCorrect,
-                            correctCount,
-                          },
-                        },
-                      });
-                    }
-
-                    commitTransformUpdates(updates);
-                  };
-
-                  return (
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">
-                        โหมด: {mode === "single" ? "เลือกได้ข้อเดียว" : "เลือกได้หลายข้อ"}
-                      </div>
-
-                      {mode === "single" ? (
-                        <ToggleGroup
-                          type="single"
-                          value={value[0] ?? ""}
-                          onValueChange={(val: string) => {
-                            setCorrect(val ? [val] : []);
-                          }}
-                          className="justify-start flex-wrap"
-                        >
-                          {optionIndices.map((i) => (
-                            <ToggleGroupItem key={i} value={String(i)} size="sm">
-                              ตัวเลือก {i + 1}
-                            </ToggleGroupItem>
-                          ))}
-                        </ToggleGroup>
-                      ) : (
-                        <ToggleGroup
-                          type="multiple"
-                          value={value}
-                          onValueChange={(vals: string[]) => {
-                            setCorrect(vals.filter(Boolean));
-                          }}
-                          className="justify-start flex-wrap"
-                        >
-                          {optionIndices.map((i) => (
-                            <ToggleGroupItem key={i} value={String(i)} size="sm">
-                              ตัวเลือก {i + 1}
-                            </ToggleGroupItem>
-                          ))}
-                        </ToggleGroup>
-                      )}
-                    </div>
-                  );
-                })()}
+              <PropertySection icon={Palette} title="Fill Color">
+                <ColorInput
+                  value={mixedToStr(commonFill, "#000000")}
+                  mixed={isMixed(commonFill)}
+                  onChange={(v) =>
+                    apply({ fill: v }, [
+                      "rect",
+                      "ellipse",
+                      "triangle",
+                      "pentagon",
+                      "text",
+                    ])
+                  }
+                />
               </PropertySection>
-
               <SidebarDivider />
-
-              <PropertySection title="วิธีการแสดงเฉลย">
-                <div className="space-y-2">
-                  <div className="text-[11px] text-muted-foreground">รูปแบบ</div>
-                  <Select
-                    value={node.practice?.revealMode ?? "after-item"}
-                    onValueChange={(v) => {
-                      if (v !== "after-item" && v !== "other") return;
-                      commitTransformUpdates([
-                        {
-                          id: node.id,
-                          newProps: {
-                            practice: {
-                              ...(node.practice as any),
-                              revealMode: v,
-                            },
-                          },
-                        },
-                      ]);
-                    }}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="เลือกวิธีการแสดงเฉลย" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="after-item">แสดงเฉลยหลังตอบข้อนั้นๆ</SelectItem>
-                      <SelectItem value="other">อื่นๆ</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </PropertySection>
             </>
-          ) : (
+          )}
+
+          {/* Stroke — rect, ellipse */}
+          {hasStrokeNodes && (
             <>
-              {/* Position */}
-              <PropertySection icon={Move} title="Position">
-                <div className="grid grid-cols-2 gap-2">
-                  <NumberField
-                    label="X"
-                    value={isMixed(commonX) ? undefined : (commonX as number)}
-                    placeholder={isMixed(commonX) ? "Mixed" : undefined}
-                    onChange={(v) => apply({ x: v })}
-                  />
-                  <NumberField
-                    label="Y"
-                    value={isMixed(commonY) ? undefined : (commonY as number)}
-                    placeholder={isMixed(commonY) ? "Mixed" : undefined}
-                    onChange={(v) => apply({ y: v })}
-                  />
-                </div>
-              </PropertySection>
-
-              <SidebarDivider />
-
-              {/* Size */}
-              <PropertySection icon={Maximize2} title="Size">
-                <div className="grid grid-cols-2 gap-2">
-                  <NumberField
-                    label="W"
-                    value={isMixed(commonW) ? undefined : (commonW as number)}
-                    placeholder={isMixed(commonW) ? "Mixed" : undefined}
-                    onChange={(v) => apply({ width: v })}
-                    min={1}
-                  />
-                  <NumberField
-                    label="H"
-                    value={isMixed(commonH) ? undefined : (commonH as number)}
-                    placeholder={isMixed(commonH) ? "Mixed" : undefined}
-                    onChange={(v) => apply({ height: v })}
-                    min={1}
-                  />
-                </div>
-              </PropertySection>
-
-              <SidebarDivider />
-
-              {/* Rotation (disabled for practice nodes) */}
-              {!isPracticeSelection && (
-                <>
-                  <PropertySection icon={RotateCw} title="Rotation">
-                    <NumberField
-                      label="°"
-                      value={
-                        isMixed(commonRotation)
-                          ? undefined
-                          : (commonRotation as number)
-                      }
-                      placeholder={isMixed(commonRotation) ? "Mixed" : undefined}
-                      onChange={(v) => apply({ rotation: v })}
-                      min={-180}
-                      max={180}
-                    />
-                  </PropertySection>
-                  <SidebarDivider />
-                </>
-              )}
-
-              {/* Opacity */}
-              <PropertySection icon={Eye} title="Opacity">
+              <PropertySection icon={PenLine} title="Stroke">
+                <ColorInput
+                  value={mixedToStr(commonStroke, "#000000")}
+                  mixed={isMixed(commonStroke)}
+                  onChange={(v) =>
+                    apply({ stroke: v }, [
+                      "rect",
+                      "ellipse",
+                      "triangle",
+                      "pentagon",
+                    ])
+                  }
+                />
                 <div className="space-y-2">
                   <Slider
                     min={0}
-                    max={100}
+                    max={50}
                     step={1}
-                    value={[isMixed(commonOpacity) ? 50 : (commonOpacity as number)]}
-                    onValueChange={([v]) => apply({ opacity: v / 100 })}
+                    value={[
+                      isMixed(commonStrokeWidth)
+                        ? 0
+                        : (commonStrokeWidth as number),
+                    ]}
+                    onValueChange={([v]) =>
+                      apply({ strokeWidth: v }, ["rect", "ellipse"])
+                    }
                   />
                   <p className="text-xs text-center text-muted-foreground">
-                    {isMixed(commonOpacity) ? "Mixed" : `${commonOpacity as number}%`}
+                    {isMixed(commonStrokeWidth)
+                      ? "Mixed"
+                      : `${commonStrokeWidth as number}px`}
                   </p>
                 </div>
               </PropertySection>
-
               <SidebarDivider />
-
-              {/* Fill Color — rect, ellipse, text */}
-              {hasFillNodes && (
-                <>
-                  <PropertySection icon={Palette} title="Fill Color">
-                    <ColorInput
-                      value={mixedToStr(commonFill, "#000000")}
-                      mixed={isMixed(commonFill)}
-                      onChange={(v) =>
-                        apply({ fill: v }, ["rect", "ellipse", "triangle", "pentagon", "text"])
-                      }
-                    />
-                  </PropertySection>
-                  <SidebarDivider />
-                </>
-              )}
-
-              {/* Stroke — rect, ellipse */}
-              {hasStrokeNodes && (
-                <>
-                  <PropertySection icon={PenLine} title="Stroke">
-                    <ColorInput
-                      value={mixedToStr(commonStroke, "#000000")}
-                      mixed={isMixed(commonStroke)}
-                      onChange={(v) => apply({ stroke: v }, ["rect", "ellipse", "triangle", "pentagon"])}
-                    />
-                    <div className="space-y-2">
-                      <Slider
-                        min={0}
-                        max={50}
-                        step={1}
-                        value={[
-                          isMixed(commonStrokeWidth)
-                            ? 0
-                            : (commonStrokeWidth as number),
-                        ]}
-                        onValueChange={([v]) =>
-                          apply({ strokeWidth: v }, ["rect", "ellipse"])
-                        }
-                      />
-                      <p className="text-xs text-center text-muted-foreground">
-                        {isMixed(commonStrokeWidth)
-                          ? "Mixed"
-                          : `${commonStrokeWidth as number}px`}
-                      </p>
-                    </div>
-                  </PropertySection>
-                  <SidebarDivider />
-                </>
-              )}
-
-              {/* Corner Radius — rect */}
-              {hasRectNodes && (
-                <>
-                  <PropertySection icon={RectangleHorizontal} title="Corner Radius">
-                    <NumberField
-                      label="Radius"
-                      value={
-                        isMixed(commonCornerRadius)
-                          ? undefined
-                          : (commonCornerRadius as number)
-                      }
-                      placeholder={
-                        isMixed(commonCornerRadius) ? "Mixed" : undefined
-                      }
-                      onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
-                      min={0}
-                      max={100}
-                    />
-                  </PropertySection>
-                  <SidebarDivider />
-                </>
-              )}
-
-              {/* Text Properties */}
-              {hasTextNodes && (
-                <MultiTextProperties
-                  textNodes={textNodes}
-                  allIds={ids}
-                  isSingle={isSingle}
-                />
-              )}
             </>
+          )}
+
+          {/* Corner Radius — rect */}
+          {hasRectNodes && (
+            <>
+              <PropertySection icon={RectangleHorizontal} title="Corner Radius">
+                <NumberField
+                  label="Radius"
+                  value={
+                    isMixed(commonCornerRadius)
+                      ? undefined
+                      : (commonCornerRadius as number)
+                  }
+                  placeholder={isMixed(commonCornerRadius) ? "Mixed" : undefined}
+                  onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
+                  min={0}
+                  max={100}
+                />
+              </PropertySection>
+              <SidebarDivider />
+            </>
+          )}
+
+          {/* Text Properties */}
+          {hasTextNodes && (
+            <MultiTextProperties
+              textNodes={textNodes}
+              allIds={ids}
+              isSingle={isSingle}
+            />
           )}
         </div>
       )}
@@ -801,7 +584,7 @@ function NumberField({
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <Label className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+      <Label className="text-xs shrink-0 whitespace-nowrap text-muted-foreground">
         {label}
       </Label>
       <Input
@@ -837,7 +620,7 @@ function ColorInput({
           type="color"
           value={mixed ? "#888888" : value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-8 h-8 rounded-md border cursor-pointer bg-transparent"
+          className="w-8 h-8 bg-transparent border rounded-md cursor-pointer"
         />
       </div>
       <Input
@@ -1057,13 +840,13 @@ function MultiTextProperties({
           className="justify-start"
         >
           <ToggleGroupItem value="left" size="sm" aria-label="Align left">
-            <AlignLeft className="h-4 w-4" />
+            <AlignLeft className="w-4 h-4" />
           </ToggleGroupItem>
           <ToggleGroupItem value="center" size="sm" aria-label="Align center">
-            <AlignCenter className="h-4 w-4" />
+            <AlignCenter className="w-4 h-4" />
           </ToggleGroupItem>
           <ToggleGroupItem value="right" size="sm" aria-label="Align right">
-            <AlignRight className="h-4 w-4" />
+            <AlignRight className="w-4 h-4" />
           </ToggleGroupItem>
         </ToggleGroup>
       </PropertySection>
