@@ -349,25 +349,14 @@ export function RightSidebar() {
   ) as TextNode[];
   const hasTextNodes = textNodes.length > 0;
 
-  // Type label
-  const typeLabel = isMulti
-    ? `${selectedNodes.length} elements selected`
-    : node.type;
-
   return (
     <aside className={SIDEBAR_DESIGN.asideScrollable}>
       <SidebarTabHeader
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        subtitle={typeLabel}
       />
 
       {activeTab === "answer" ? (
-        <div className={SIDEBAR_DESIGN.contentDefault}>
-          <p className="py-8 text-sm text-center text-muted-foreground">
-            ตั้งค่าเฉลยสำหรับ element นี้
-          </p>
-        </div>
         isFillInTheBlankSelection ? (
           <div className={SIDEBAR_DESIGN.contentDefault}>
             <PropertySection title="ตั้งค่าเฉลย">
