@@ -156,11 +156,23 @@ export function RightSidebar() {
     activePage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
   const ids = selectedNodes.map((n) => n.id);
 
+  const isPracticeSelection = selectedNodes.some((n) => !!n.practice);
+
+  React.useEffect(() => {
+    if (!isPracticeSelection && activeTab === "answer") {
+      setActiveTab("properties");
+    }
+  }, [isPracticeSelection, activeTab]);
+
   // ถ้าไม่มี selection → แสดง Background Color
   if (selectedNodes.length === 0) {
     return (
       <aside className={SIDEBAR_DESIGN.aside}>
-        <SidebarTabHeader activeTab={activeTab} onTabChange={setActiveTab} />
+        <SidebarTabHeader
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          showAnswerTab={false}
+        />
         {activeTab === "properties" ? (
           <div className={SIDEBAR_DESIGN.contentDefault}>
             <PropertySection icon={Palette} title="Colors">
@@ -195,7 +207,6 @@ export function RightSidebar() {
   const isSingle = selectedNodes.length === 1;
   const node = selectedNodes[0];
   const isMulti = selectedNodes.length > 1;
-  const isPracticeSelection = selectedNodes.some((n) => !!n.practice);
 
   // ========== Helper: apply change ==========
   const apply = (changes: Partial<Node>, typeFilter?: string[]) => {
@@ -286,7 +297,12 @@ export function RightSidebar() {
 
   return (
     <aside className={SIDEBAR_DESIGN.asideScrollable}>
-      <SidebarTabHeader activeTab={activeTab} onTabChange={setActiveTab} />
+      <SidebarTabHeader
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        subtitle={typeLabel}
+        showAnswerTab={isPracticeSelection}
+      />
 
       {activeTab === "answer" ? (
         <div className={SIDEBAR_DESIGN.contentDefault}>
@@ -484,10 +500,12 @@ function SidebarTabHeader({
   activeTab,
   onTabChange,
   subtitle,
+  showAnswerTab = true,
 }: {
   activeTab: "properties" | "answer";
   onTabChange: (tab: "properties" | "answer") => void;
   subtitle?: string;
+  showAnswerTab?: boolean;
 }) {
   return (
     <div className={SIDEBAR_DESIGN.header}>
@@ -503,17 +521,19 @@ function SidebarTabHeader({
         >
           Properties
         </Button>
-        <Button
-          onClick={() => onTabChange("answer")}
-          className={cn(
-            "shadow-none flex-1 text-sm font-semibold tracking-tight py-1.5 px-2 rounded-md transition-colors bg-white border-none",
-            activeTab === "answer"
-              ? "bg-[#FFE5E6] text-[#ED1C24] hover:bg-[#FFE5E6] hover:text-[#ED1C24]"
-              : "text-muted-foreground hover:bg-white hover:text-muted-foreground",
-          )}
-        >
-          ตั้งค่าเฉลย
-        </Button>
+        {showAnswerTab && (
+          <Button
+            onClick={() => onTabChange("answer")}
+            className={cn(
+              "shadow-none flex-1 text-sm font-semibold tracking-tight py-1.5 px-2 rounded-md transition-colors bg-white border-none",
+              activeTab === "answer"
+                ? "bg-[#FFE5E6] text-[#ED1C24] hover:bg-[#FFE5E6] hover:text-[#ED1C24]"
+                : "text-muted-foreground hover:bg-white hover:text-muted-foreground",
+            )}
+          >
+            ตั้งค่าเฉลย
+          </Button>
+        )}
       </div>
       {subtitle && <p className={SIDEBAR_DESIGN.headerSubtitle}>{subtitle}</p>}
     </div>
