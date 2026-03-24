@@ -1053,7 +1053,8 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const selected = selectedNodes[0];
     const isContainerPrimary =
       (selected?.practice?.type === "choice" ||
-        selected?.practice?.type === "connection") &&
+        selected?.practice?.type === "connection" ||
+        selected?.practice?.type === "sequence-ordering") &&
       selected?.practice?.containerRole === "primary";
 
     const containerParent =
@@ -1063,12 +1064,13 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const isContainerChild =
       !!containerParent &&
       (containerParent.practice?.type === "choice" ||
-        containerParent.practice?.type === "connection") &&
+        containerParent.practice?.type === "connection" ||
+        containerParent.practice?.type === "sequence-ordering") &&
       containerParent.practice?.containerRole === "primary";
 
     const nodeRot = selected?.rotation ?? 0;
     // For most nodes, skip edge clamping when rotated.
-    // For container primary (Choice/Connection), we still enforce parent/child boundary even when rotated.
+    // For container primary (Choice/Connection/Sequence), we still enforce parent/child boundary even when rotated.
     if (!isContainerPrimary && !isContainerChild && Math.abs(nodeRot % 360) > 0.01)
       return newBox;
 

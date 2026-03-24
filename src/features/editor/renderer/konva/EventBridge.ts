@@ -38,7 +38,6 @@ import { useSnapGuidesStore } from "../../stores/snapGuidesStore";
 import { useMarqueeStore } from "../../stores/marqueeStore";
 import { useVideoPlayStore } from "../../stores/videoPlayStore";
 import { useContextMenuStore } from "../../stores/contextMenuStore";
-import { useContainerEditStore } from "../../stores/containerEditStore";
 import { findTopNodeAt } from "../../core/geometry/hitTest";
 import {
   boundsIntersect,
@@ -153,47 +152,6 @@ function expandDescendants(
   }
 
   return Array.from(result);
-}
-
-function findChoicePrimaryAncestor(
-  node: any,
-  allNodes: Array<any>,
-): any {
-  let current = node;
-  for (let i = 0; i < 50 && current; i++) {
-    if (
-      (current.practice?.type === "choice" ||
-        current.practice?.type === "connection") &&
-      current.practice?.containerRole === "primary"
-    ) {
-      return current;
-    }
-    if (!current.parentId) return null;
-    const parent = allNodes.find((n) => n.id === current.parentId);
-    if (!parent) return null;
-    current = parent;
-  }
-  return null;
-}
-
-function resolveHitNodeForChoiceContainer(
-  rawHitNode: any,
-  allNodes: any[],
-  activeContainerId: string | null,
-): any {
-  if (!rawHitNode) return null;
-  const primary = findChoicePrimaryAncestor(rawHitNode, allNodes);
-  if (!primary) return rawHitNode;
-  if (activeContainerId && primary.id === activeContainerId) return rawHitNode;
-  return primary;
-}
-
-function isChoicePrimaryNode(node: any): boolean {
-  return (
-    !!node &&
-    (node.practice?.type === "choice" || node.practice?.type === "connection") &&
-    node.practice?.containerRole === "primary"
-  );
 }
 
 /** ตรวจสอบว่าเป็น macOS หรือไม่ */
@@ -690,11 +648,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       if (!page) return;
 
       const rawHitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
-      const hitNode = resolveHitNodeForChoiceContainer(
-        rawHitNode,
-        page.nodes,
-        useContainerEditStore.getState().activeContainerId,
-      );
+      const hitNode = rawHitNode;
       if (hitNode) {
         const { selectedIds, selectMultiple } = useSelectionStore.getState();
         if (!selectedIds.has(hitNode.id)) {
@@ -785,12 +739,6 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
       altKey: boolean,
     ): boolean {
       if (selectedNodes.length === 0) return false;
-
-      // While editing children in a Choice container, do not allow dragging the primary container.
-      const activeContainerId = useContainerEditStore.getState().activeContainerId;
-      if (activeContainerId && currentSelectedIds.includes(activeContainerId)) {
-        return true;
-      }
 
       const selectionBounds = getMultiSelectionBounds(selectedNodes);
       if (!selectionBounds) return false;
@@ -980,17 +928,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
       // หา node ที่คลิกโดนก่อน เพื่อให้คลิกเลือก node ใหม่ได้แม้อยู่ใน selection bounds เดิม
       const rawHitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
-      const activeContainerId = useContainerEditStore.getState().activeContainerId;
-      const rawPrimary = findChoicePrimaryAncestor(rawHitNode, page.nodes);
-      if (activeContainerId && (!rawPrimary || rawPrimary.id !== activeContainerId)) {
-        useContainerEditStore.getState().setActiveContainer(null);
-      }
-
-      const hitNode = resolveHitNodeForChoiceContainer(
-        rawHitNode,
-        page.nodes,
-        useContainerEditStore.getState().activeContainerId,
-      );
+      const hitNode = rawHitNode;
       const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, page.nodes) : [];
       const hitOnUnselectedNode =
         !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
@@ -1038,14 +976,6 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
         // node ถูกล็อค → เลือกได้แต่ไม่ให้ลาก
         if (hitNode.locked) return;
 
-        // In edit-children mode, primary container is selectable but not draggable.
-        if (
-          isChoicePrimaryNode(hitNode) &&
-          useContainerEditStore.getState().activeContainerId === hitNode.id
-        ) {
-          return;
-        }
-
         // เริ่มลาก
         initDrag(
           worldPos,
@@ -1053,9 +983,6 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
           page.nodes,
         );
       } else {
-        if (useContainerEditStore.getState().activeContainerId) {
-          useContainerEditStore.getState().setActiveContainer(null);
-        }
         // คลิกที่ว่าง → marquee selection
         if (!shiftKey) {
           useSelectionStore.getState().clearSelection();
@@ -1195,17 +1122,7 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
       // หา node ที่ touch โดนก่อน เพื่อให้เปลี่ยน selection ได้แม้อยู่ใน bounds เดิม
       const rawHitNode = findTopNodeAt(page.nodes, worldPos.x, worldPos.y);
-      const activeContainerId = useContainerEditStore.getState().activeContainerId;
-      const rawPrimary = findChoicePrimaryAncestor(rawHitNode, page.nodes);
-      if (activeContainerId && (!rawPrimary || rawPrimary.id !== activeContainerId)) {
-        useContainerEditStore.getState().setActiveContainer(null);
-      }
-
-      const hitNode = resolveHitNodeForChoiceContainer(
-        rawHitNode,
-        page.nodes,
-        useContainerEditStore.getState().activeContainerId,
-      );
+      const hitNode = rawHitNode;
       const hitGroupIds = hitNode ? expandGroupIds(hitNode.id, page.nodes) : [];
       const hitOnUnselectedNode =
         !!hitNode && !hitGroupIds.every((id) => selectedIds.has(id));
@@ -1234,22 +1151,12 @@ export function EventBridge({ stageRef }: EventBridgeProps) {
 
         if (hitNode.locked) return;
 
-        if (
-          isChoicePrimaryNode(hitNode) &&
-          useContainerEditStore.getState().activeContainerId === hitNode.id
-        ) {
-          return;
-        }
-
         initDrag(
           worldPos,
           useSelectionStore.getState().getSelectedIds(),
           page.nodes,
         );
       } else {
-        if (useContainerEditStore.getState().activeContainerId) {
-          useContainerEditStore.getState().setActiveContainer(null);
-        }
         useSelectionStore.getState().clearSelection();
       }
     }

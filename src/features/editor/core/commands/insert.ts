@@ -770,6 +770,202 @@ export function insertChoiceOptions(
   commitInsert(nodes);
 }
 
+/**
+ * เพิ่มแบบฝึกหัด Sequence/Ordering เป็นชุดของ option nodes (คล้าย Choice แต่ไม่มีตั้งค่าเฉลย)
+ * - สร้าง primary container + child cards ตามจำนวนที่ระบุ
+ * - แสดงเลขลำดับบน card เพื่อแยกออกว่าเป็น Sequence/Ordering
+ */
+export function insertSequenceOrderingOptions(
+  x: number,
+  y: number,
+  totalOptions: number,
+  title?: string,
+  description?: string,
+): void {
+  // Keep visuals consistent with Choice option cards.
+  const cardW = 110;
+  const cardH = 120;
+  const gapX = 12;
+
+  const optionPadding = 7;
+  const squareW = cardW - optionPadding * 2;
+
+  const n = Math.max(1, Math.floor(totalOptions));
+
+  const setId = generateNodeId();
+  const primaryId = generateNodeId();
+
+  // Primary container uses drop point as top-left.
+  const containerPadding = 14;
+  const optionsWidth = n * cardW + Math.max(0, n - 1) * gapX;
+  const containerW = optionsWidth + containerPadding * 2;
+  const containerH = cardH + containerPadding * 2;
+  const containerCx = x + containerW / 2;
+  const containerCy = y + containerH / 2;
+
+  const practiceMetaPrimary = {
+    type: "sequence-ordering" as const,
+    id: setId,
+    totalOptions: n,
+    title,
+    description,
+    containerRole: "primary" as const,
+  };
+
+  const primary: RectNode = {
+    id: primaryId,
+    type: "rect",
+    x: containerCx,
+    y: containerCy,
+    width: containerW,
+    height: containerH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    practice: practiceMetaPrimary,
+    fill: "#ffffff",
+    stroke: "#C7C8D1",
+    strokeWidth: 2,
+    cornerRadius: 12,
+  };
+
+  const startX = x + containerPadding + cardW / 2;
+  const baseY = y + containerPadding + cardH / 2;
+
+  const nodes: (RectNode | TextNode)[] = [primary];
+
+  for (let i = 0; i < n; i++) {
+    const cardX = startX + i * (cardW + gapX);
+    const cardY = baseY;
+    const squareY = cardY - cardH / 2 + optionPadding + squareW / 2;
+    const titleY = squareY + squareW / 2 + 8;
+    const descY = titleY + 16;
+
+    const optionGroupId = generateNodeId();
+
+    const practiceMeta = {
+      type: "sequence-ordering" as const,
+      id: setId,
+      totalOptions: n,
+      optionIndex: i,
+      title,
+      description,
+      containerRole: "sub" as const,
+    };
+
+    const card: RectNode = {
+      id: generateNodeId(),
+      type: "rect",
+      x: cardX,
+      y: cardY,
+      width: cardW,
+      height: cardH,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      parentId: primaryId,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      fill: "#ffffff",
+      stroke: "#C7C8D1",
+      strokeWidth: 2,
+      cornerRadius: 10,
+    };
+
+    const square: RectNode = {
+      id: generateNodeId(),
+      type: "rect",
+      x: cardX,
+      y: squareY,
+      width: squareW,
+      height: squareW,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      parentId: primaryId,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      fill: "#e5e7eb",
+      stroke: "#C7C8D1",
+      strokeWidth: 1,
+      cornerRadius: 4,
+    };
+
+    const orderNode: TextNode = {
+      id: generateNodeId(),
+      type: "text",
+      x: cardX,
+      y: squareY,
+      width: squareW,
+      height: squareW,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      parentId: primaryId,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      text: String(i + 1),
+      fontSize: 28,
+      fontFamily: "Arial",
+      fill: "#111827",
+      fontStyle: "bold",
+      align: "center",
+    };
+
+    const titleNode: TextNode = {
+      id: generateNodeId(),
+      type: "text",
+      x: cardX,
+      y: titleY,
+      width: cardW - optionPadding * 2,
+      height: 24,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      parentId: primaryId,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      text: `ลำดับ ${i + 1}`,
+      fontSize: 12,
+      fontFamily: "Arial",
+      fill: "#111827",
+      fontStyle: "bold",
+      align: "center",
+    };
+
+    const descNode: TextNode = {
+      id: generateNodeId(),
+      type: "text",
+      x: cardX,
+      y: descY,
+      width: cardW - optionPadding * 2,
+      height: 24,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      visible: true,
+      parentId: primaryId,
+      groupId: optionGroupId,
+      practice: practiceMeta,
+      text: "",
+      fontSize: 10,
+      fontFamily: "Arial",
+      fill: "#6b7280",
+      fontStyle: "normal",
+      align: "center",
+    };
+
+    nodes.push(card, square, orderNode, titleNode, descNode);
+  }
+
+  commitInsert(nodes);
+}
+
 // ===============================================
 // HELPER FUNCTION
 // ===============================================
