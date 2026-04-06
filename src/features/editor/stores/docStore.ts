@@ -6,7 +6,7 @@
  * State หลักที่เก็บ document และ nodes ทั้งหมด
  *
  * Actions:
- * - loadDoc: โหลด document จาก localStorage
+ * - loadDoc: โหลด document จาก IndexedDB
  * - addNode: เพิ่ม node ใหม่
  * - removeNodes: ลบ nodes
  * - updateNode: อัพเดท node เดียว
@@ -277,11 +277,11 @@ export const useDocStore = create<DocState>()(
     loadDoc: async (docId: string) => {
       set({ isLoading: true });
 
-      let doc = docsService.getDoc(docId);
+      let doc = await docsService.getDoc(docId);
       if (!doc) {
         // สร้าง document ใหม่
         doc = createEmptyDocument(docId, "Untitled");
-        docsService.saveDoc(doc);
+        await docsService.saveDoc(doc);
       }
 
       const migrated = migrateToPagedDocument(doc as any, docId);
@@ -552,22 +552,27 @@ export const useDocStore = create<DocState>()(
     },
 
     /**
-     * บันทึก document ลง localStorage
+     * บันทึก document ลง IndexedDB
      */
-    saveDoc: () => {
+    saveDoc: async () => {
       const state = get();
       if (!state.doc) return;
 
       set({ isSaving: true });
-      docsService.saveDoc({
-        id: state.doc.id,
-        title: state.doc.title,
-        version: state.doc.version,
-        updatedAt: state.doc.updatedAt,
-        pages: state.doc.pages,
-        activePageId: state.doc.activePageId,
-      });
-      set({ isSaving: false });
+      try {
+        await docsService.saveDoc({
+          id: state.doc.id,
+          title: state.doc.title,
+          version: state.doc.version,
+          updatedAt: state.doc.updatedAt,
+          pages: state.doc.pages,
+          activePageId: state.doc.activePageId,
+        });
+      } catch (error) {
+        console.error("Error saving document:", error);
+      } finally {
+        set({ isSaving: false });
+      }
     },
 
     /**

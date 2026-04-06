@@ -24,7 +24,8 @@ export type NodeType =
   | "image"
   | "video"
   | "audio"
-  | "path";
+  | "path"
+  | "accordion";
 
 // ===============================================
 // PRACTICE METADATA (สำหรับ viewer ในอนาคต)
@@ -186,6 +187,17 @@ export interface PathNode extends BaseNode {
   mode: "pen" | "highlighter";
 }
 
+// Accordion (กล่องที่สามารถเปิด-ปิดได้)
+export interface AccordionNode extends BaseNode {
+  type: "accordion";
+  title: string; // ชื่อหัวข้อ
+  fill: string; // สีพื้น
+  stroke?: string; // สีขอบ
+  strokeWidth?: number; // ความหนาขอบ
+  cornerRadius?: number; // ความโค้งมุม
+  accordionItems?: { id: string; title: string }[]; // รายการ accordion ข้างใน
+}
+
 // รวม Node ทุกประเภท
 export type Node =
   | RectNode
@@ -197,7 +209,8 @@ export type Node =
   | ImageNode
   | VideoNode
   | AudioNode
-  | PathNode;
+  | PathNode
+  | AccordionNode;
 
 // ===============================================
 // PAGE - หน้าของเอกสาร (canvas แยกอิสระ)

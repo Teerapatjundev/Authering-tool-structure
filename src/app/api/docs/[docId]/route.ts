@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // This is a placeholder API route for future server-side persistence
-// Currently, the app uses localStorage via docsService
+// Currently, the app uses IndexedDB via docsService
 
 export async function GET(
   request: NextRequest,
@@ -9,7 +9,7 @@ export async function GET(
 ) {
   return NextResponse.json({
     message:
-      "Currently using localStorage. Implement server-side persistence here.",
+      "Currently using IndexedDB. Implement server-side persistence here.",
     docId: params.docId,
   });
 }

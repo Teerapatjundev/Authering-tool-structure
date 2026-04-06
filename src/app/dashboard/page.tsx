@@ -14,10 +14,16 @@ interface DocMeta {
 export default function DashboardPage() {
   const router = useRouter();
   const [docs, setDocs] = useState<DocMeta[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const docList = docsService.listDocs();
-    setDocs(docList);
+    const loadDocs = async () => {
+      setIsLoading(true);
+      const docList = await docsService.listDocs();
+      setDocs(docList);
+      setIsLoading(false);
+    };
+    loadDocs();
   }, []);
 
   const handleCreateNew = () => {
@@ -29,10 +35,10 @@ export default function DashboardPage() {
     router.push(`/editor/${id}`);
   };
 
-  const handleDeleteDoc = (id: string, e: React.MouseEvent) => {
+  const handleDeleteDoc = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Delete this document?")) {
-      docsService.deleteDoc(id);
+      await docsService.deleteDoc(id);
       setDocs(docs.filter((d) => d.id !== id));
     }
   };
@@ -50,7 +56,11 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {docs.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-20">
+            <p className="text-gray-500 text-lg">Loading...</p>
+          </div>
+        ) : docs.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-gray-500 text-lg mb-4">No documents yet</p>
             <button

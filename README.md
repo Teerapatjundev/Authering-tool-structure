@@ -14,7 +14,7 @@ Canvas Editor พื้นฐานสำหรับการเรียนร
 - ✅ **Undo/Redo** - ย้อนกลับ/ทำซ้ำ
 - ✅ **Pan & Zoom** - เลื่อน & ซูม canvas
 - ✅ **Snap** - จัดตำแหน่งอัตโนมัติ
-- ✅ **Auto-save** - บันทึกลง localStorage อัตโนมัติ
+- ✅ **Auto-save** - บันทึกลง IndexedDB อัตโนมัติ
 
 ## โครงสร้างโปรเจค
 

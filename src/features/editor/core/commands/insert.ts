@@ -25,6 +25,7 @@ import {
   ImageNode,
   VideoNode,
   AudioNode,
+  AccordionNode,
 } from "../doc/types";
 import { generateNodeId } from "@/shared/utils/id";
 import { useHistoryStore } from "../history/historyStore";
@@ -292,9 +293,39 @@ export function insertPentagon(
   commitInsert([node]);
 }
 
-/**  */
-export function insertAccordion(x: number, y: number): void {
-  
+/**
+ * เพิ่ม Accordion ลงใน canvas
+ * @param x - ตำแหน่ง X (กึ่งกลาง)
+ * @param y - ตำแหน่ง Y (กึ่งกลาง)
+ * @param title - ชื่อหัวข้อ Accordion
+ */
+export function insertAccordion(
+  x: number,
+  y: number,
+  title = "Accordion",
+  width = 300,
+  height = 60,
+): void {
+  const node: AccordionNode = {
+    id: generateNodeId(),
+    type: "accordion",
+    x,
+    y,
+    width,
+    height,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    title,
+    fill: "#ffffff",
+    stroke: "#d1d5db",
+    strokeWidth: 2,
+    cornerRadius: 8,
+    accordionItems: [], // เริ่มต้นไม่มีรายการ
+  };
+
+  commitInsert([node]);
 }
 
 /**

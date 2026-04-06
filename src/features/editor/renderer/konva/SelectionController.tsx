@@ -46,7 +46,12 @@ import {
   getMultiSelectionBoundsWithRotation,
   getGroupBoundsInRotatedFrame,
 } from "../../core/geometry/bounds";
-import { snapResizeSize, SizeSnapResult, snapResizeEdges, ResizeEdgeSnapResult } from "../../core/geometry/snap";
+import {
+  snapResizeSize,
+  SizeSnapResult,
+  snapResizeEdges,
+  ResizeEdgeSnapResult,
+} from "../../core/geometry/snap";
 import { useSnapGuidesStore } from "../../stores/snapGuidesStore";
 import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 
@@ -224,7 +229,10 @@ function measureWrappedTextHeight(
   const lineHeight = fontSize * 1.2;
   let totalLines = 0;
   for (const paragraph of text.split("\n")) {
-    if (!paragraph) { totalLines++; continue; }
+    if (!paragraph) {
+      totalLines++;
+      continue;
+    }
     const words = paragraph.split(" ");
     let currentLine = "";
     for (const word of words) {
@@ -261,7 +269,7 @@ function setKonvaShape(
   const shape = stage.findOne(`#shape_${id}`);
   if (!shape) return;
 
-  if (type === "video") {
+  if (type === "video" || type === "accordion") {
     const p = shape.parent;
     if (!p || p === shape.getLayer()) return;
     p.x(x);
@@ -465,7 +473,7 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       const shape = stage.findOne(`#shape_${selected.id}`);
       if (shape) {
         if (
-          selected.type === "video" &&
+          (selected.type === "video" || selected.type === "accordion") &&
           shape.parent &&
           shape.parent !== shape.getLayer()
         ) {
@@ -481,13 +489,16 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   /* ---- Transform handlers ---- */
 
   const handleTransformStart = () => {
-    isRotatingTransformRef.current = trRef.current?.getActiveAnchor() === "rotater";
+    isRotatingTransformRef.current =
+      trRef.current?.getActiveAnchor() === "rotater";
 
     const stage = stageRef.current;
     origStatesRef.current = selectedNodes.map((n) => {
       const shape = stage?.findOne(`#shape_${n.id}`) as Konva.Node | null;
       const target =
-        n.type === "video" && shape?.parent && shape.parent !== shape.getLayer()
+        (n.type === "video" || n.type === "accordion") &&
+        shape?.parent &&
+        shape.parent !== shape.getLayer()
           ? shape.parent
           : shape;
       return {
@@ -540,7 +551,10 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const edgeSnap = resizeEdgeSnapRef.current;
     if (
       edgeSnap &&
-      (edgeSnap.snappedLeft || edgeSnap.snappedRight || edgeSnap.snappedTop || edgeSnap.snappedBottom)
+      (edgeSnap.snappedLeft ||
+        edgeSnap.snappedRight ||
+        edgeSnap.snappedTop ||
+        edgeSnap.snappedBottom)
     ) {
       useSnapGuidesStore.getState().setGuides(edgeSnap.guides);
     } else {
@@ -580,7 +594,13 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     stage.batchDraw();
   };
 
-  const hasHistoryDiff = (updates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>) =>
+  const hasHistoryDiff = (
+    updates: Array<{
+      id: string;
+      oldProps: Partial<Node>;
+      newProps: Partial<Node>;
+    }>,
+  ) =>
     updates.some(
       (u) =>
         u.oldProps.x !== u.newProps.x ||
@@ -595,7 +615,11 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     );
 
   const commitTransformHistory = (
-    updates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>,
+    updates: Array<{
+      id: string;
+      oldProps: Partial<Node>;
+      newProps: Partial<Node>;
+    }>,
   ) => {
     if (updates.length === 0 || !hasHistoryDiff(updates)) return;
 
@@ -616,7 +640,11 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   const finalizeSingleTransform = (
     stage: Konva.Stage,
     lastSizeSnap: SizeSnapResult | null,
-    historyUpdates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>,
+    historyUpdates: Array<{
+      id: string;
+      oldProps: Partial<Node>;
+      newProps: Partial<Node>;
+    }>,
   ) => {
     const node = selectedNodes[0];
     const shape = stage.findOne(`#shape_${node.id}`);
@@ -682,7 +710,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     }
 
     const target =
-      node.type === "video" && shape.parent && shape.parent !== shape.getLayer()
+      (node.type === "video" || node.type === "accordion") &&
+      shape.parent &&
+      shape.parent !== shape.getLayer()
         ? shape.parent
         : shape;
 
@@ -723,15 +753,31 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     }
 
     // For text/textlink nodes: recompute height from word-wrapped content at new width
-    if (!isRotatingTransformRef.current && (node.type === "text" || node.type === "textlink")) {
-      const tn = node as { text: string; fontSize: number; fontFamily: string; fontStyle?: string; practice?: { type?: string } };
+    if (
+      !isRotatingTransformRef.current &&
+      (node.type === "text" || node.type === "textlink")
+    ) {
+      const tn = node as {
+        text: string;
+        fontSize: number;
+        fontFamily: string;
+        fontStyle?: string;
+        practice?: { type?: string };
+      };
       if (tn.text) {
         const pad = tn.practice?.type === "fill-in-the-blank" ? 8 : 0;
-        fh = measureWrappedTextHeight(tn.text, tn.fontSize, tn.fontFamily, tn.fontStyle, fw, pad);
+        fh = measureWrappedTextHeight(
+          tn.text,
+          tn.fontSize,
+          tn.fontFamily,
+          tn.fontStyle,
+          fw,
+          pad,
+        );
       }
     }
 
-    if (node.type === "video") {
+    if (node.type === "video" || node.type === "accordion") {
       const parent = shape.parent;
       if (parent && parent !== shape.getLayer()) {
         parent.x(fx);
@@ -795,7 +841,11 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     });
 
     // Fill-in-the-blank: sync sibling (rect <-> text) to the same bounds
-    if (activePage && node.practice?.type === "fill-in-the-blank" && node.practice?.id) {
+    if (
+      activePage &&
+      node.practice?.type === "fill-in-the-blank" &&
+      node.practice?.id
+    ) {
       const practiceId = node.practice.id;
       const siblingNodes = activePage.nodes.filter(
         (n) => n.id !== node.id && n.practice?.id === practiceId,
@@ -809,7 +859,12 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         for (const sib of siblingNodes) {
           historyUpdates.push({
             id: sib.id,
-            oldProps: { x: sib.x, y: sib.y, width: sib.width, height: sib.height },
+            oldProps: {
+              x: sib.x,
+              y: sib.y,
+              width: sib.width,
+              height: sib.height,
+            },
             newProps: { x: fx, y: fy, width: fw, height: fh },
           });
         }
@@ -839,7 +894,8 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         );
 
         if (children.length > 0) {
-          const childUpdates: Array<{ id: string; changes: Partial<Node> }> = [];
+          const childUpdates: Array<{ id: string; changes: Partial<Node> }> =
+            [];
 
           for (const child of children) {
             const relX = child.x - oldCx;
@@ -870,7 +926,11 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
 
   const finalizeMultiTransform = (
     stage: Konva.Stage,
-    historyUpdates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }>,
+    historyUpdates: Array<{
+      id: string;
+      oldProps: Partial<Node>;
+      newProps: Partial<Node>;
+    }>,
   ) => {
     const pr = proxyRef.current;
     if (!pr || !origBoundsRef.current) return;
@@ -927,8 +987,10 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       let pathPoints: number[] | undefined;
       if (selectedNode?.type === "path") {
         const pathNode = selectedNode as PathNode;
-        const sx = (Math.sign(rawScaleX) || 1) * (fw / Math.max(1, p.origWidth));
-        const sy = (Math.sign(rawScaleY) || 1) * (fh / Math.max(1, p.origHeight));
+        const sx =
+          (Math.sign(rawScaleX) || 1) * (fw / Math.max(1, p.origWidth));
+        const sy =
+          (Math.sign(rawScaleY) || 1) * (fh / Math.max(1, p.origHeight));
         const baked = bakePathGeometry(pathNode, fx, fy, p.rotation, sx, sy);
         fx = baked.x;
         fy = baked.y;
@@ -1010,8 +1072,12 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       currentDoc?.pages.find((p) => p.id === currentDoc.activePageId) ??
       currentDoc?.pages[0] ??
       null;
-    const freshNodes = currentPage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
-    const newBounds = getGroupBoundsInRotatedFrame(freshNodes, groupRotRef.current);
+    const freshNodes =
+      currentPage?.nodes.filter((n) => selectedIds.has(n.id)) || [];
+    const newBounds = getGroupBoundsInRotatedFrame(
+      freshNodes,
+      groupRotRef.current,
+    );
     if (newBounds) {
       pr.x(newBounds.centerX);
       pr.y(newBounds.centerY);
@@ -1024,8 +1090,20 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   };
 
   const multiBoundBoxFunc = (
-    oldBox: { x: number; y: number; width: number; height: number; rotation: number },
-    newBox: { x: number; y: number; width: number; height: number; rotation: number },
+    oldBox: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+    },
+    newBox: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+    },
   ) => {
     const activeAnchor = trRef.current?.getActiveAnchor();
     if (activeAnchor === "rotater") return newBox;
@@ -1051,8 +1129,20 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
   };
 
   const singleBoundBoxFunc = (
-    oldBox: { x: number; y: number; width: number; height: number; rotation: number },
-    newBox: { x: number; y: number; width: number; height: number; rotation: number },
+    oldBox: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+    },
+    newBox: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+    },
   ) => {
     const activeAnchor = trRef.current?.getActiveAnchor();
     if (activeAnchor === "rotater") {
@@ -1078,10 +1168,14 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const z = viewport.zoom;
     const worldW = Math.abs(newBox.width) / z;
     const worldH = Math.abs(newBox.height) / z;
-    const widthChanged = Math.abs(Math.abs(newBox.width) - Math.abs(oldBox.width)) > 0.5;
-    const heightChanged = Math.abs(Math.abs(newBox.height) - Math.abs(oldBox.height)) > 0.5;
+    const widthChanged =
+      Math.abs(Math.abs(newBox.width) - Math.abs(oldBox.width)) > 0.5;
+    const heightChanged =
+      Math.abs(Math.abs(newBox.height) - Math.abs(oldBox.height)) > 0.5;
 
-    const otherNodes = activePage.nodes.filter((n) => !selectedIds.has(n.id) && n.visible);
+    const otherNodes = activePage.nodes.filter(
+      (n) => !selectedIds.has(n.id) && n.visible,
+    );
     const sizeSnap = snapResizeSize(worldW, worldH, selectedIds, otherNodes);
     sizeSnapResultRef.current = sizeSnap;
 
@@ -1099,10 +1193,12 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
         const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
 
-        if (!leftFixed) newBox.x = newBox.x + newBox.width - signW * snappedScreenW;
+        if (!leftFixed)
+          newBox.x = newBox.x + newBox.width - signW * snappedScreenW;
         newBox.width = signW * snappedScreenW;
 
-        if (!topFixed) newBox.y = newBox.y + newBox.height - signH * snappedScreenH;
+        if (!topFixed)
+          newBox.y = newBox.y + newBox.height - signH * snappedScreenH;
         newBox.height = signH * snappedScreenH;
       } else if (sizeSnap.snappedHeight && heightChanged) {
         const snappedScreenH = sizeSnap.height * z;
@@ -1112,10 +1208,12 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
         const leftFixed = Math.abs(oldBox.x - newBox.x) < 2;
         const topFixed = Math.abs(oldBox.y - newBox.y) < 2;
 
-        if (!leftFixed) newBox.x = newBox.x + newBox.width - signW * snappedScreenW;
+        if (!leftFixed)
+          newBox.x = newBox.x + newBox.width - signW * snappedScreenW;
         newBox.width = signW * snappedScreenW;
 
-        if (!topFixed) newBox.y = newBox.y + newBox.height - signH * snappedScreenH;
+        if (!topFixed)
+          newBox.y = newBox.y + newBox.height - signH * snappedScreenH;
         newBox.height = signH * snappedScreenH;
       }
     } else {
@@ -1152,19 +1250,37 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       const worldBottom = worldTop + Math.abs(newBox.height) / z;
       const anchor = activeAnchor ?? "";
       // Determine which edges are moving based on the active anchor
-      const movingLeft: number | null = anchor.includes("left") ? worldLeft : null;
-      const movingRight: number | null = anchor.includes("right") ? worldRight : null;
+      const movingLeft: number | null = anchor.includes("left")
+        ? worldLeft
+        : null;
+      const movingRight: number | null = anchor.includes("right")
+        ? worldRight
+        : null;
       const movingTop: number | null = anchor.includes("top") ? worldTop : null;
-      const movingBottom: number | null = anchor.includes("bottom") ? worldBottom : null;
+      const movingBottom: number | null = anchor.includes("bottom")
+        ? worldBottom
+        : null;
 
-      if (movingLeft !== null || movingRight !== null || movingTop !== null || movingBottom !== null) {
-        const otherNodes = activePage.nodes.filter((n) => !selectedIds.has(n.id) && n.visible);
+      if (
+        movingLeft !== null ||
+        movingRight !== null ||
+        movingTop !== null ||
+        movingBottom !== null
+      ) {
+        const otherNodes = activePage.nodes.filter(
+          (n) => !selectedIds.has(n.id) && n.visible,
+        );
         const edgeSnap = snapResizeEdges(
           movingLeft,
           movingRight,
           movingTop,
           movingBottom,
-          { left: worldLeft, top: worldTop, right: worldRight, bottom: worldBottom },
+          {
+            left: worldLeft,
+            top: worldTop,
+            right: worldRight,
+            bottom: worldBottom,
+          },
           otherNodes,
           selectedIds,
           activePage.width,
@@ -1215,7 +1331,11 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const nodeRot = selected?.rotation ?? 0;
     // For most nodes, skip edge clamping when rotated.
     // For container primary (Choice/Connection/Sequence), we still enforce parent/child boundary even when rotated.
-    if (!isContainerPrimary && !isContainerChild && Math.abs(nodeRot % 360) > 0.01)
+    if (
+      !isContainerPrimary &&
+      !isContainerChild &&
+      Math.abs(nodeRot % 360) > 0.01
+    )
       return newBox;
 
     // Container parent/child boundary:
@@ -1329,7 +1449,11 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
     const stage = stageRef.current;
     if (!stage) return;
 
-    const historyUpdates: Array<{ id: string; oldProps: Partial<Node>; newProps: Partial<Node> }> = [];
+    const historyUpdates: Array<{
+      id: string;
+      oldProps: Partial<Node>;
+      newProps: Partial<Node>;
+    }> = [];
 
     if (!isMulti && selectedNodes.length === 1) {
       finalizeSingleTransform(stage, lastSizeSnap, historyUpdates);
@@ -1410,7 +1534,9 @@ export function SelectionController({ stageRef }: SelectionControllerProps) {
       rotationSnapTolerance={5}
       rotateEnabled={!isPracticeSelection}
       keepRatio={isCornerResizeNode}
-      enabledAnchors={isCornerResizeNode ? [...CORNER_ANCHORS] : [...ALL_ANCHORS]}
+      enabledAnchors={
+        isCornerResizeNode ? [...CORNER_ANCHORS] : [...ALL_ANCHORS]
+      }
       boundBoxFunc={singleBoundBoxFunc}
     />
   );

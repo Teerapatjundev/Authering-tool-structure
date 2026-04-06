@@ -44,10 +44,12 @@ import {
   VideoNode,
   AudioNode,
   PathNode,
+  AccordionNode,
 } from "../../core/doc/types";
 import { useTextEditStore } from "../../stores/textEditStore";
 import { useTextLinkEditStore } from "../../stores/textLinkEditStore";
 import { useVideoPlayStore } from "../../stores/videoPlayStore";
+import { useAccordionEditStore } from "../../stores/accordionEditStore";
 import { useSelectionStore } from "../../stores/selectionStore";
 import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 
@@ -155,6 +157,7 @@ export function RenderNodes({ nodes }: RenderNodesProps) {
 function RenderNode({ node }: { node: Node }) {
   const { startEditing } = useTextEditStore();
   const { openDialog } = useTextLinkEditStore();
+  const { startEditing: startEditingAccordion } = useAccordionEditStore();
 
   // Common props ที่ทุก shape ใช้
   const commonProps = {
@@ -210,6 +213,21 @@ function RenderNode({ node }: { node: Node }) {
 
     case "path":
       return <RenderPath node={node} commonProps={commonProps} />;
+
+    case "accordion":
+      return (
+        <RenderAccordion
+          node={node}
+          commonProps={commonProps}
+          onDoubleClick={() =>
+            startEditingAccordion(
+              node.id,
+              node.title,
+              node.accordionItems || []
+            )
+          }
+        />
+      );
 
     default:
       return null;
@@ -657,6 +675,71 @@ function RenderPath({
       tension={tension}
       globalCompositeOperation="source-over"
     />
+  );
+}
+
+function RenderAccordion({
+  node,
+  onDoubleClick,
+}: {
+  node: AccordionNode;
+  commonProps: Record<string, unknown>;
+  onDoubleClick?: () => void;
+}) {
+  const iconSize = 20;
+  const padding = 16;
+  
+  return (
+    <Group
+      x={node.x}
+      y={node.y}
+      rotation={node.rotation}
+      opacity={node.opacity}
+      offsetX={node.width / 2}
+      offsetY={node.height / 2}
+      onDblClick={onDoubleClick}
+      onDblTap={onDoubleClick}
+    >
+      {/* Background */}
+      <Rect
+        id={`shape_${node.id}`}
+        x={0}
+        y={0}
+        width={node.width}
+        height={node.height}
+        fill={node.fill}
+        stroke={node.stroke}
+        strokeWidth={node.strokeWidth || 0}
+        cornerRadius={node.cornerRadius || 0}
+      />
+      
+      {/* Title Text */}
+      <Text
+        x={padding}
+        y={0}
+        width={node.width - padding * 2 - iconSize - 8}
+        height={node.height}
+        text={node.title}
+        fontSize={16}
+        fontFamily="Arial"
+        fill="#111827"
+        fontStyle="normal"
+        align="left"
+        verticalAlign="middle"
+      />
+      
+      {/* Chevron Down Icon (ทางขวา) */}
+      <Group x={node.width - padding - iconSize / 2} y={node.height / 2}>
+        <KonvaPath
+          data="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"
+          fill="#6b7280"
+          scaleX={iconSize / 24}
+          scaleY={iconSize / 24}
+          offsetX={12}
+          offsetY={12}
+        />
+      </Group>
+    </Group>
   );
 }
 

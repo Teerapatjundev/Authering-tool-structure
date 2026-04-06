@@ -4,10 +4,12 @@
  * ===============================================
  *
  * บริการสำหรับ CRUD operations ของ documents
- * ใช้ localStorage สำหรับ persistence
+ * ใช้ IndexedDB สำหรับ persistence
  *
  * หมายเหตุ: ในโปรดักชันควรเปลี่ยนเป็น API calls
  */
+
+import { indexedDBService } from "./indexeddb";
 
 const STORAGE_KEY_PREFIX = "canvas_doc_";
 
@@ -30,58 +32,69 @@ export interface DocData {
 
 class DocsService {
   /**
-   * ดึง document จาก localStorage
+   * ดึง document จาก IndexedDB
    * @param docId - รหัส document
    * @returns DocData หรือ null ถ้าไม่พบ
    */
-  getDoc(docId: string): DocData | null {
+  async getDoc(docId: string): Promise<DocData | null> {
     if (typeof window === "undefined") return null;
 
-    const stored = localStorage.getItem(`${STORAGE_KEY_PREFIX}${docId}`);
-    if (!stored) return null;
-
-    return JSON.parse(stored);
+    try {
+      const doc = await indexedDBService.getItem<DocData>(
+        `${STORAGE_KEY_PREFIX}${docId}`
+      );
+      return doc;
+    } catch (error) {
+      console.error("Error getting document:", error);
+      return null;
+    }
   }
 
   /**
-   * บันทึก document ลง localStorage
+   * บันทึก document ลง IndexedDB
    * @param doc - Document ที่ต้องการบันทึก
    */
-  saveDoc(doc: DocData): void {
+  async saveDoc(doc: DocData): Promise<void> {
     if (typeof window === "undefined") return;
 
-    localStorage.setItem(`${STORAGE_KEY_PREFIX}${doc.id}`, JSON.stringify(doc));
+    try {
+      await indexedDBService.setItem(`${STORAGE_KEY_PREFIX}${doc.id}`, doc);
+    } catch (error) {
+      console.error("Error saving document:", error);
+      throw error;
+    }
   }
 
   /**
    * ลบ document
    * @param docId - รหัส document ที่ต้องการลบ
    */
-  deleteDoc(docId: string): void {
+  async deleteDoc(docId: string): Promise<void> {
     if (typeof window === "undefined") return;
 
-    localStorage.removeItem(`${STORAGE_KEY_PREFIX}${docId}`);
+    try {
+      await indexedDBService.removeItem(`${STORAGE_KEY_PREFIX}${docId}`);
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      throw error;
+    }
   }
 
   /**
    * ดึงรายการ documents ทั้งหมด
    */
-  listDocs(): DocData[] {
+  async listDocs(): Promise<DocData[]> {
     if (typeof window === "undefined") return [];
 
-    const docs: DocData[] = [];
-
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith(STORAGE_KEY_PREFIX)) {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-          docs.push(JSON.parse(stored));
-        }
-      }
+    try {
+      const docs = await indexedDBService.getItemsByPrefix<DocData>(
+        STORAGE_KEY_PREFIX
+      );
+      return docs.sort((a, b) => b.updatedAt - a.updatedAt);
+    } catch (error) {
+      console.error("Error listing documents:", error);
+      return [];
     }
-
-    return docs.sort((a, b) => b.updatedAt - a.updatedAt);
   }
 }
 

@@ -566,28 +566,6 @@ export function RightSidebar() {
 
           <SidebarDivider />
 
-          {/* Fill Color — rect, ellipse, text */}
-          {hasFillNodes && (
-            <>
-              <PropertySection icon={Palette} title="Fill Color">
-                <ColorInput
-                  value={mixedToStr(commonFill, "#000000")}
-                  mixed={isMixed(commonFill)}
-                  onChange={(v) =>
-                    apply({ fill: v }, [
-                      "rect",
-                      "ellipse",
-                      "triangle",
-                      "pentagon",
-                      "text",
-                    ])
-                  }
-                />
-              </PropertySection>
-              <SidebarDivider />
-            </>
-          )}
-
           {/* Stroke — rect, ellipse */}
           {hasStrokeNodes && (
             <>
@@ -678,40 +656,6 @@ export function RightSidebar() {
                 </>
               )}
 
-              {/* Stroke — rect, ellipse */}
-              {hasStrokeNodes && (
-                <>
-                  <PropertySection icon={PenLine} title="Stroke">
-                    <ColorInput
-                      value={mixedToStr(commonStroke, "#000000")}
-                      mixed={isMixed(commonStroke)}
-                      onChange={(v) => apply({ stroke: v }, ["rect", "ellipse", "triangle", "pentagon"])}
-                    />
-                    <div className="space-y-2">
-                      <Slider
-                        min={0}
-                        max={50}
-                        step={1}
-                        value={[
-                          isMixed(commonStrokeWidth)
-                            ? 0
-                            : (commonStrokeWidth as number),
-                        ]}
-                        onValueChange={([v]) =>
-                          apply({ strokeWidth: v }, ["rect", "ellipse"])
-                        }
-                      />
-                      <p className="text-xs text-center text-muted-foreground">
-                        {isMixed(commonStrokeWidth)
-                          ? "Mixed"
-                          : `${commonStrokeWidth as number}px`}
-                      </p>
-                    </div>
-                  </PropertySection>
-                  <SidebarDivider />
-                </>
-              )}
-
               {/* Corner Radius — rect */}
               {hasRectNodes && (
                 <>
@@ -744,36 +688,6 @@ export function RightSidebar() {
                 />
               )}
             </>
-          )}
-
-          {/* Corner Radius — rect */}
-          {hasRectNodes && (
-            <>
-              <PropertySection icon={RectangleHorizontal} title="Corner Radius">
-                <NumberField
-                  label="Radius"
-                  value={
-                    isMixed(commonCornerRadius)
-                      ? undefined
-                      : (commonCornerRadius as number)
-                  }
-                  placeholder={isMixed(commonCornerRadius) ? "Mixed" : undefined}
-                  onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
-                  min={0}
-                  max={100}
-                />
-              </PropertySection>
-              <SidebarDivider />
-            </>
-          )}
-
-          {/* Text Properties */}
-          {hasTextNodes && (
-            <MultiTextProperties
-              textNodes={textNodes}
-              allIds={ids}
-              isSingle={isSingle}
-            />
           )}
         </div>
       )}
