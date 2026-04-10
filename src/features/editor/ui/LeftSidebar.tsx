@@ -31,12 +31,12 @@ import {
   Layers2,
 } from "lucide-react";
 import { ToolPanel } from "./leftSidebar/ToolPanel";
-import { useToolStore } from "../stores/toolStore";
 import { ElementsPanel } from "./leftSidebar/ElementsPanel";
-import { useDocStore } from "../stores/docStore";
 import { VideoPanel } from "./leftSidebar/VideoPanel";
 import { ImagePanel } from "./leftSidebar/ImagePanel";
 import { LayoutPanel } from "./leftSidebar/LayoutPanel";
+import { useDocStore } from "../stores/docStore";
+import { useToolStore } from "../stores/toolStore";
 
 type LeftSidebarPageId =
   | "elements"
@@ -141,9 +141,9 @@ export function LeftSidebar() {
           id: "layout" as const,
           label: "Layout",
           title: "Layout",
-          subtitle: "Layout panel",
+          // subtitle: "Layout panel",
           icon: Layers2,
-          render: () => <LayoutPanel/>,
+          render: () => <LayoutPanel />,
         },
         {
           id: "tool" as const,
@@ -204,9 +204,8 @@ export function LeftSidebar() {
       {openPage && (
         <div className="relative h-full">
           <div className="flex flex-col h-full overflow-hidden bg-white border-r border-gray-200 w-72">
-            <div className="px-4 py-3 border-b border-gray-100">
+            <div className="px-4 py-3 border-gray-100">
               <h2 className="font-semibold text-gray-800">{openPage.title}</h2>
-              <p className="mt-1 text-xs text-gray-500">{openPage.subtitle}</p>
             </div>
 
             <div className="flex flex-col flex-1 overflow-hidden">

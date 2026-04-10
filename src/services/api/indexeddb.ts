@@ -164,7 +164,7 @@ class IndexedDBService {
     return new Promise((resolve, reject) => {
       const request = store.getAll();
 
-      request.onsuccess = () => {
+      request.onsuccess = () => { 
         const results = request.result as IDBDocument[];
         const filtered = results
           .filter((doc) => doc.id.startsWith(prefix))

@@ -173,6 +173,8 @@ interface DocState {
   removeNodesFromPage: (pageId: string, nodeIds: string[]) => void;
   updateNodeOnPage: (pageId: string, nodeId: string, updates: Partial<Node>) => void;
   updateNodesOnPage: (pageId: string, updates: Array<{ id: string; changes: Partial<Node> }>) => void;
+  /** เรียงลำดับ nodes ของหน้าที่ active ใหม่ — `orderedIds` เป็นลำดับเดียวกับ `page.nodes` (ชิ้นหลังอยู่ล่างสุด, ชิ้นท้ายอยู่บนสุด) */
+  reorderActivePageNodes: (orderedIds: string[]) => void;
   updateBackgroundColor: (color: string) => void;
   saveDoc: () => void;
   autoSave: () => void;
@@ -535,6 +537,19 @@ export const useDocStore = create<DocState>()(
             Object.assign(node, changes);
           }
         }
+        state.doc.updatedAt = Date.now();
+      });
+    },
+
+    reorderActivePageNodes: (orderedIds: string[]) => {
+      set((state) => {
+        if (!state.doc) return;
+        const page = ensureActivePage(state.doc);
+        if (orderedIds.length !== page.nodes.length) return;
+        const idSet = new Set(page.nodes.map((n) => n.id));
+        if (orderedIds.some((id) => !idSet.has(id))) return;
+        const map = new Map(page.nodes.map((n) => [n.id, n] as const));
+        page.nodes = orderedIds.map((id) => map.get(id)!).filter(Boolean) as Node[];
         state.doc.updatedAt = Date.now();
       });
     },
