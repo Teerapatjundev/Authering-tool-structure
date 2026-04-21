@@ -64,6 +64,9 @@ export interface PracticeMeta {
   fillInTheBlankScore?: number;
   // === Connection (โยงเส้นจับคู่) ===
   connectionPairs?: Array<{ leftItemId: string; rightItemId: string }>;
+
+  // === Next button behavior ===
+  nextButtonAction?: "next-page" | "previous-page" | "selected-page";
 }
 
 // ===============================================
