@@ -298,6 +298,68 @@ export function insertAccordion(x: number, y: number): void {
 }
 
 /**
+ * เพิ่มปุ่ม Next button ลงใน canvas
+ * - ปุ่มพื้นหลังสีแดง
+ * - ข้อความ "ถัดไป" สีขาว
+ */
+export function insertNextButton(x: number, y: number): void {
+  const buttonW = 220;
+  const buttonH = 64;
+  const groupId = generateNodeId();
+  const practiceId = generateNodeId();
+
+  const practiceMeta = {
+    type: "next-button",
+    id: practiceId,
+    title: "Next button",
+    description: "ปุ่มถัดไป",
+    nextButtonAction: "next-page" as const,
+  };
+
+  const buttonShape: RectNode = {
+    id: generateNodeId(),
+    type: "rect",
+    x,
+    y,
+    width: buttonW,
+    height: buttonH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    groupId,
+    practice: practiceMeta,
+    fill: "#F41221",
+    stroke: "#F41221",
+    strokeWidth: 0,
+    cornerRadius: 14,
+  };
+
+  const buttonLabel: TextNode = {
+    id: generateNodeId(),
+    type: "text",
+    x,
+    y,
+    width: buttonW,
+    height: buttonH,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    visible: true,
+    groupId,
+    practice: practiceMeta,
+    text: "ถัดไป",
+    fontSize: 30,
+    fontFamily: "Arial",
+    fill: "#FFFFFF",
+    fontStyle: "bold",
+    align: "center",
+  };
+
+  commitInsert([buttonShape, buttonLabel]);
+}
+
+/**
  * เพิ่มการ์ดแบบฝึกหัดลงใน canvas (เป็นกลุ่ม)
  * - พื้นหลังการ์ด (rect)
  * - กล่องสี่เหลี่ยมด้านบน (rect)
