@@ -715,27 +715,6 @@ export function RightSidebar() {
             </>
           )}
 
-          {/* Corner Radius — rect */}
-          {hasRectNodes && (
-            <>
-              <PropertySection icon={RectangleHorizontal} title="Corner Radius">
-                <NumberField
-                  label="Radius"
-                  value={
-                    isMixed(commonCornerRadius)
-                      ? undefined
-                      : (commonCornerRadius as number)
-                  }
-                  placeholder={isMixed(commonCornerRadius) ? "Mixed" : undefined}
-                  onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
-                  min={0}
-                  max={100}
-                />
-              </PropertySection>
-              <SidebarDivider />
-            </>
-          )}
-
           {/* Text Properties */}
           {hasTextNodes && (
             <MultiTextProperties
