@@ -56,6 +56,8 @@ import {
   insertSequenceOrderingOptions,
   insertFillInTheBlank,
   insertNextButton,
+  insertSubmitButton,
+  insertRestartButton,
 } from "./core/commands/insert";
 import { groupNodes, ungroupNodes } from "./core/commands/contextMenu";
 import { KonvaCanvas } from "./renderer/konva/KonvaCanvas";
@@ -284,6 +286,10 @@ export function EditorClient({ docId }: EditorClientProps) {
           insertFillInTheBlank(dropX, dropY, title, description);
         } else if (practiceType === "next-button") {
           insertNextButton(dropX, dropY);
+        } else if (practiceType === "submit-button") {
+          insertSubmitButton(dropX, dropY);
+        } else if (practiceType === "restart-button") {
+          insertRestartButton(dropX, dropY);
         } else {
           insertPracticeCard(dropX, dropY, practiceType, title, description);
         }

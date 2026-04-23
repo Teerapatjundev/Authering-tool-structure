@@ -381,10 +381,13 @@ function RenderText({
   onDoubleClick?: () => void;
 }) {
   const isFillInBlank = node.practice?.type === "fill-in-the-blank";
-  const isNextButton = node.practice?.type === "next-button";
+  const isExerciseControlButton =
+    node.practice?.type === "next-button" ||
+    node.practice?.type === "submit-button" ||
+    node.practice?.type === "restart-button";
   const verticalAlign =
     node.verticalAlign ??
-    (isFillInBlank || isNextButton ? "middle" : undefined);
+    (isFillInBlank || isExerciseControlButton ? "middle" : undefined);
   return (
     <Text
       {...commonProps}

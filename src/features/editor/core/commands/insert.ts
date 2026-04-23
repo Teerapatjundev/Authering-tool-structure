@@ -297,23 +297,37 @@ export function insertAccordion(x: number, y: number): void {
   
 }
 
+type ExerciseControlButtonPracticeType =
+  | "next-button"
+  | "submit-button"
+  | "restart-button";
+
 /**
- * เพิ่มปุ่ม Next button ลงใน canvas
- * - ปุ่มพื้นหลังสีแดง
- * - ข้อความ "ถัดไป" สีขาว
+ * ปุ่มควบคุมแบบฝึกหัด: กล่องสีแดง + ข้อความกลาง แกน Y (รูปแบเดียวกับ Next button)
  */
-export function insertNextButton(x: number, y: number): void {
+function insertExerciseControlButton(
+  x: number,
+  y: number,
+  spec: {
+    practiceType: ExerciseControlButtonPracticeType;
+    text: string;
+    title: string;
+    description: string;
+  },
+): void {
   const buttonW = 220;
   const buttonH = 64;
   const groupId = generateNodeId();
   const practiceId = generateNodeId();
 
   const practiceMeta = {
-    type: "next-button",
+    type: spec.practiceType,
     id: practiceId,
-    title: "Next button",
-    description: "ปุ่มถัดไป",
-    nextButtonAction: "next-page" as const,
+    title: spec.title,
+    description: spec.description,
+    ...(spec.practiceType === "next-button"
+      ? { nextButtonAction: "next-page" as const }
+      : {}),
   };
 
   const buttonShape: RectNode = {
@@ -348,7 +362,7 @@ export function insertNextButton(x: number, y: number): void {
     visible: true,
     groupId,
     practice: practiceMeta,
-    text: "ถัดไป",
+    text: spec.text,
     fontSize: 30,
     fontFamily: "Arial",
     fill: "#FFFFFF",
@@ -358,6 +372,33 @@ export function insertNextButton(x: number, y: number): void {
   };
 
   commitInsert([buttonShape, buttonLabel]);
+}
+
+export function insertNextButton(x: number, y: number): void {
+  insertExerciseControlButton(x, y, {
+    practiceType: "next-button",
+    text: "ถัดไป",
+    title: "Next button",
+    description: "ปุ่มถัดไป",
+  });
+}
+
+export function insertSubmitButton(x: number, y: number): void {
+  insertExerciseControlButton(x, y, {
+    practiceType: "submit-button",
+    text: "ตรวจคำตอบ",
+    title: "Submit button",
+    description: "ปุ่มส่งคำตอบ",
+  });
+}
+
+export function insertRestartButton(x: number, y: number): void {
+  insertExerciseControlButton(x, y, {
+    practiceType: "restart-button",
+    text: "เริ่มใหม่",
+    title: "Restart button",
+    description: "ปุ่มเริ่มใหม่",
+  });
 }
 
 /**
