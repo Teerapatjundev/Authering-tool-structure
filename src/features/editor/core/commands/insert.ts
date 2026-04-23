@@ -354,6 +354,7 @@ export function insertNextButton(x: number, y: number): void {
     fill: "#FFFFFF",
     fontStyle: "bold",
     align: "center",
+    verticalAlign: "middle",
   };
 
   commitInsert([buttonShape, buttonLabel]);

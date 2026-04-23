@@ -381,6 +381,10 @@ function RenderText({
   onDoubleClick?: () => void;
 }) {
   const isFillInBlank = node.practice?.type === "fill-in-the-blank";
+  const isNextButton = node.practice?.type === "next-button";
+  const verticalAlign =
+    node.verticalAlign ??
+    (isFillInBlank || isNextButton ? "middle" : undefined);
   return (
     <Text
       {...commonProps}
@@ -394,7 +398,7 @@ function RenderText({
       width={node.width}
       height={node.height}
       padding={isFillInBlank ? 8 : undefined}
-      verticalAlign={isFillInBlank ? "middle" : undefined}
+      verticalAlign={verticalAlign}
       onDblClick={onDoubleClick}
       onDblTap={onDoubleClick} // สำหรับ touch devices
     />
