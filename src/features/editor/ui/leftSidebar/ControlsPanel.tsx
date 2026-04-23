@@ -43,6 +43,77 @@ export function ControlsPanel() {
               );
               e.dataTransfer.effectAllowed = "copy";
 
+              // Exercise control buttons should follow the cursor with the same look as on canvas.
+              if (
+                item.id === "submit-button" ||
+                item.id === "next-button" ||
+                item.id === "restart-button"
+              ) {
+                const labelByControlId: Record<string, string> = {
+                  "submit-button": "ตรวจคำตอบ",
+                  "next-button": "ถัดไป",
+                  "restart-button": "เริ่มใหม่",
+                };
+                const ghost = document.createElement("canvas");
+                const dpr = window.devicePixelRatio || 1;
+                const ghostWidth = 220;
+                const ghostHeight = 64;
+                const radius = 14;
+
+                ghost.width = ghostWidth * dpr;
+                ghost.height = ghostHeight * dpr;
+                ghost.style.width = `${ghostWidth}px`;
+                ghost.style.height = `${ghostHeight}px`;
+
+                const ctx = ghost.getContext("2d");
+                if (ctx) {
+                  ctx.scale(dpr, dpr);
+                  ctx.globalAlpha = 0.88;
+                  ctx.fillStyle = "#F41221";
+
+                  ctx.beginPath();
+                  ctx.moveTo(radius, 0);
+                  ctx.lineTo(ghostWidth - radius, 0);
+                  ctx.quadraticCurveTo(ghostWidth, 0, ghostWidth, radius);
+                  ctx.lineTo(ghostWidth, ghostHeight - radius);
+                  ctx.quadraticCurveTo(
+                    ghostWidth,
+                    ghostHeight,
+                    ghostWidth - radius,
+                    ghostHeight,
+                  );
+                  ctx.lineTo(radius, ghostHeight);
+                  ctx.quadraticCurveTo(0, ghostHeight, 0, ghostHeight - radius);
+                  ctx.lineTo(0, radius);
+                  ctx.quadraticCurveTo(0, 0, radius, 0);
+                  ctx.closePath();
+                  ctx.fill();
+
+                  ctx.fillStyle = "#FFFFFF";
+                  ctx.font = "bold 30px Arial";
+                  ctx.textAlign = "center";
+                  ctx.textBaseline = "middle";
+                  ctx.fillText(
+                    labelByControlId[item.id] ?? item.title,
+                    ghostWidth / 2,
+                    ghostHeight / 2,
+                  );
+                }
+
+                ghost.style.position = "absolute";
+                ghost.style.top = "-9999px";
+                document.body.appendChild(ghost);
+                e.dataTransfer.setDragImage(
+                  ghost,
+                  ghostWidth / 2,
+                  ghostHeight / 2,
+                );
+                requestAnimationFrame(() => {
+                  document.body.removeChild(ghost);
+                });
+                return;
+              }
+
               const ghostElement = e.currentTarget.cloneNode(true) as HTMLElement;
               ghostElement.style.opacity = "0.5";
               ghostElement.style.position = "absolute";
