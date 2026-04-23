@@ -17,6 +17,11 @@ export function ControlsPanel() {
       title: "Timer",
       description: "ตัวจับเวลา",
     },
+    {
+      id: "next-button",
+      title: "Next button",
+      description: "ปุ่มถัดไป",
+    },
   ];
 
   return (

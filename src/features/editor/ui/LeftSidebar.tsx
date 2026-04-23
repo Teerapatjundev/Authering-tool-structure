@@ -85,6 +85,9 @@ export function LeftSidebar() {
   const { setTool } = useToolStore();
   const { doc } = useDocStore();
   const pageCount = doc?.pages.length ?? 0;
+  const activePageIndex =
+    doc?.pages.findIndex((p) => p.id === doc.activePageId) ?? -1;
+  const activePageNumber = activePageIndex >= 0 ? activePageIndex + 1 : 1;
 
   const pages = useMemo(
     () =>
@@ -133,7 +136,7 @@ export function LeftSidebar() {
           id: "controls" as const,
           label: "Controls",
           title: "Exercise Controls",
-          subtitle: "Submit button, restart button, timer",
+          subtitle: "Submit button, restart button, timer, next button",
           icon: Icon,
           render: () => <ControlsPanel />,
         },
@@ -154,7 +157,7 @@ export function LeftSidebar() {
           render: () => <ToolPanel />,
         },
       ] as const,
-    [pageCount],
+    [pageCount, activePageNumber],
   );
 
   // Default: no panel selected/open when entering the editor.

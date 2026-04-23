@@ -158,6 +158,9 @@ export function RightSidebar() {
   const ids = selectedNodes.map((n) => n.id);
 
   const isPracticeSelection = selectedNodes.some((n) => !!n.practice);
+  const isNextButtonSelection = selectedNodes.some(
+    (n) => n.practice?.type === "next-button",
+  );
 
   // ถ้าไม่มี selection → แสดง Background Color
   if (selectedNodes.length === 0) {
@@ -306,6 +309,28 @@ export function RightSidebar() {
       const v = (n.practice as { numbersOnly?: unknown })?.numbersOnly;
       return typeof v === "boolean" ? v : false;
     },
+  );
+
+  const nextButtonPracticeIds = new Set(
+    selectedNodes
+      .filter((n) => n.practice?.type === "next-button")
+      .map((n) => n.practice?.id)
+      .filter((id): id is string => typeof id === "string"),
+  );
+
+  const nextButtonPracticeNodes = isNextButtonSelection
+    ? (activePage?.nodes.filter(
+        (n) =>
+          n.practice?.type === "next-button" &&
+          typeof n.practice?.id === "string" &&
+          nextButtonPracticeIds.has(n.practice.id),
+      ) ?? [])
+    : [];
+
+  const commonNextButtonAction = getCommonFiltered(
+    nextButtonPracticeNodes,
+    () => true,
+    (n) => n.practice?.nextButtonAction || "next-page",
   );
 
   // Stroke — rect, ellipse
@@ -687,6 +712,82 @@ export function RightSidebar() {
                   isSingle={isSingle}
                 />
               )}
+            </>
+          )}
+
+          {/* Corner Radius — rect */}
+          {hasRectNodes && (
+            <>
+              <PropertySection icon={RectangleHorizontal} title="Corner Radius">
+                <NumberField
+                  label="Radius"
+                  value={
+                    isMixed(commonCornerRadius)
+                      ? undefined
+                      : (commonCornerRadius as number)
+                  }
+                  placeholder={isMixed(commonCornerRadius) ? "Mixed" : undefined}
+                  onChange={(v) => apply({ cornerRadius: v }, ["rect"])}
+                  min={0}
+                  max={100}
+                />
+              </PropertySection>
+              <SidebarDivider />
+            </>
+          )}
+
+          {/* Text Properties */}
+          {hasTextNodes && (
+            <MultiTextProperties
+              textNodes={textNodes}
+              allIds={ids}
+              isSingle={isSingle}
+            />
+          )}
+
+          {isNextButtonSelection && (
+            <>
+              <SidebarDivider />
+              <PropertySection title="ตั้งค่าการทำงานของปุ่ม">
+                <Select
+                  value={
+                    isMixed(commonNextButtonAction)
+                      ? undefined
+                      : (commonNextButtonAction as string)
+                  }
+                  onValueChange={(value) => {
+                    if (nextButtonPracticeNodes.length === 0) return;
+                    const updates = nextButtonPracticeNodes.map((n) => ({
+                      id: n.id,
+                      changes: {
+                        practice: {
+                          ...(n.practice || {}),
+                          nextButtonAction: value as
+                            | "next-page"
+                            | "previous-page"
+                            | "selected-page",
+                        },
+                      } as Partial<Node>,
+                    }));
+                    useDocStore.getState().updateNodes(updates);
+                  }}
+                >
+                  <SelectTrigger className="h-10 text-sm bg-white border-[#AEB3C5]">
+                    <SelectValue
+                      placeholder={
+                        isMixed(commonNextButtonAction)
+                          ? "Mixed"
+                          : "เลือกการทำงานของปุ่ม"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="next-page">พาไปหน้าถัดไป</SelectItem>
+                    <SelectItem value="previous-page">พาไปหน้าก่อนหน้า</SelectItem>
+                    <SelectItem value="selected-page">พาไปหน้าที่เลือก</SelectItem>
+                  </SelectContent>
+                </Select>
+              </PropertySection>
             </>
           )}
         </div>

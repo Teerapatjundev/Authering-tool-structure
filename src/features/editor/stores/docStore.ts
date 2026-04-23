@@ -164,6 +164,7 @@ interface DocState {
   deletePage: (pageId: string) => void;
   setPagesSnapshot: (pages: Page[], activePageId: string) => void;
   movePageToIndex: (pageId: string, toIndex: number) => void;
+  reorderActivePageNodes: (orderedNodeIds: string[]) => void;
   addNode: (node: Node) => void;
   removeNodes: (nodeIds: string[]) => void;
   updateNode: (nodeId: string, updates: Partial<Node>) => void;
@@ -432,6 +433,28 @@ export const useDocStore = create<DocState>()(
         });
 
         doc.updatedAt = Date.now();
+      });
+    },
+
+    reorderActivePageNodes: (orderedNodeIds: string[]) => {
+      set((state) => {
+        if (!state.doc) return;
+        const page = ensureActivePage(state.doc);
+        if (!Array.isArray(page.nodes) || page.nodes.length <= 1) return;
+
+        // Update z-order by replacing nodes array using the requested id sequence.
+        const nodeById = new Map(page.nodes.map((node) => [node.id, node]));
+        if (orderedNodeIds.length !== page.nodes.length) return;
+
+        const reorderedNodes: Node[] = [];
+        for (const id of orderedNodeIds) {
+          const node = nodeById.get(id);
+          if (!node) return;
+          reorderedNodes.push(node);
+        }
+
+        page.nodes = reorderedNodes;
+        state.doc.updatedAt = Date.now();
       });
     },
 
