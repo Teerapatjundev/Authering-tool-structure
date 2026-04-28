@@ -399,6 +399,13 @@ function RenderText({
   onDoubleClick?: () => void;
 }) {
   const isFillInBlank = node.practice?.type === "fill-in-the-blank";
+  const isExerciseControlButton =
+    node.practice?.type === "next-button" ||
+    node.practice?.type === "submit-button" ||
+    node.practice?.type === "restart-button";
+  const verticalAlign =
+    node.verticalAlign ??
+    (isFillInBlank || isExerciseControlButton ? "middle" : undefined);
   return (
     <Text
       {...commonProps}
@@ -412,7 +419,7 @@ function RenderText({
       width={node.width}
       height={node.height}
       padding={isFillInBlank ? 8 : undefined}
-      verticalAlign={isFillInBlank ? "middle" : undefined}
+      verticalAlign={verticalAlign}
       onDblClick={onDoubleClick}
       onDblTap={onDoubleClick} // สำหรับ touch devices
     />

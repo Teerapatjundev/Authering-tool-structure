@@ -147,6 +147,8 @@ export interface TextNode extends BaseNode {
   fontStyle?: "normal" | "bold" | "italic" | "bold italic";
   underline?: boolean;
   align?: "left" | "center" | "right";
+  /** จัดแนวตั้งในกรอบ width/height (Konva Text) — ใช้กับ Next button ให้กึ่งกลางแกน Y เสมอ */
+  verticalAlign?: "top" | "middle" | "bottom";
 }
 
 // ลิงก์ข้อความ
