@@ -1,0 +1,28 @@
+---
+description: project-react — Axios / HTTP (instance, interceptors, services)
+globs:
+  - src/libs/**/*.ts
+  - src/services/**/*.ts
+alwaysApply: false
+---
+
+# Axios / HTTP
+
+## Do
+
+- Use the single shared **`apiClient`** from **`src/libs/axios/instance.ts`** for application traffic.
+- Put **auth headers**, **token refresh**, **global error mapping**, and **dev-only logging** in **`src/libs/axios/interceptors/**`**.
+- Implement API access as **typed async functions** in **`src/services/**`** returning **`Promise<DomainType>`**.
+- Read base URL from **`import.meta.env.VITE_API_URL`** (documented in **`.env.example`**).
+
+## Don't
+
+- Do not create a **second `axios.create()`** for normal app requests.
+- Do not import **`axios` directly in components** — use query hooks → services → **`apiClient`**.
+- Do not **hardcode** environment-specific base URLs inside service functions.
+- Do not **swallow errors** silently in services — propagate or normalize intentionally.
+
+## Security focus
+
+- Follow global security baseline in **`000-core.mdc`**.
+- Do not log full requests/responses from interceptors or services (headers/bodies may contain sensitive data).

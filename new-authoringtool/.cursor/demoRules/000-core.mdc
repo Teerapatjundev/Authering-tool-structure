@@ -1,0 +1,29 @@
+---
+description: project-react — Core stack, guardrails, and working agreement
+alwaysApply: true
+---
+
+# project-react — core
+
+Applies to **`project-react/`** (Vite + React SPA workspace root).
+
+## Stack baseline
+
+- Use **React 19**, **React Router 7**, **TanStack Query v5**, **Axios**, **TypeScript strict**.
+- Keep global styles under **`src/styles/`** and follow rule files in **`.cursor/rules/`**.
+
+## Rule ownership
+
+- Keep this file **high-level only** (principles, guardrails, and baseline quality/security expectations).
+- Put concrete structure/import/path/env conventions in **`060-file-structure.mdc`** to avoid duplicate rules.
+
+## Working rules
+
+- Read neighbor files before edits, match existing patterns, and keep changes scoped.
+- Treat every code change, file creation, or generated output as **production-bound by default**: prioritize correctness, security, maintainability, and operational safety.
+
+## Always / Never
+
+- **Always:** preserve strict TypeScript, explicit error handling, and consistent query invalidation/cache updates.
+- **Never:** use `eval`/`new Function`, unchecked `dangerouslySetInnerHTML`, hardcoded secrets, or swallowed errors without a handled path.
+- **Exception:** class components are disallowed by default, except when required by React patterns such as Error Boundaries.

@@ -1,0 +1,27 @@
+---
+description: project-react — React components (JSX, exports, boundaries)
+globs: src/**/*.tsx
+alwaysApply: false
+---
+
+# Component
+
+## Do
+
+- Use **functional components by default**; one main component per file when practical; **PascalCase** file names.
+- Prefer **named exports** for feature and layout components.
+- Prefer **`interface`** for object-like props; use **`type`** when unions/utilities fit better.
+- Keep components focused on **rendering and local UI state**; extract repeated JSX into small children.
+
+## Don't
+
+- Do not put **business rules, API calls, or heavy data shaping** directly in JSX — use hooks + services.
+- Do not use **`dangerouslySetInnerHTML`** on untrusted or API-sourced strings; if unavoidable, sanitize (e.g. DOMPurify) and document why.
+- Do not use **`useEffect` + manual HTTP** for initial server reads — use **TanStack Query** hooks under `src/hooks/query/**`.
+- Do not use class components except where React requires them (e.g. Error Boundary patterns).
+- Do not grow a single file far beyond **~150 lines** without splitting.
+
+## Security focus
+
+- Follow global security baseline in **`000-core.mdc`**; this file adds component-specific constraints only.
+- Do not render **raw HTML from APIs** without sanitization.

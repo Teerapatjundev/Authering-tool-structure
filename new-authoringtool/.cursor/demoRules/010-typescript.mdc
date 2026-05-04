@@ -1,0 +1,27 @@
+---
+description: project-react — TypeScript (strict, types, API boundaries)
+globs: src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# TypeScript
+
+## Do
+
+- Keep **`strict: true`** and project compiler flags (`tsconfig.app.json`) passing with no new errors.
+- Use **`interface`** for object shapes; **`type`** for unions / intersections / utilities.
+- Prefer **`unknown`** at boundaries, then narrow with type guards.
+- Explicit **return types** on exported functions and hooks.
+- **Validate external data** at the API boundary — prefer **Zod** schemas when the dependency is available; otherwise use **type guards** and parsing before use.
+
+## Don't
+
+- Do not use **`any`** without a one-line comment explaining why.
+- Do not use **`as SomeType`** on untrusted API payloads without validation + justification.
+- Do not suppress TS with `@ts-ignore` / `@ts-expect-error` without a short justification beside it.
+- Do not duplicate domain model declarations in many files; reuse canonical types from the project's shared typings.
+
+## Security
+
+- Follow global security baseline in **`000-core.mdc`**.
+- Never trust raw **`response` / JSON** as correctly shaped without parsing or validation.

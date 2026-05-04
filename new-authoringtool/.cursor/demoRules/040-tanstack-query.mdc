@@ -1,0 +1,25 @@
+---
+description: project-react — TanStack Query (keys, reads/writes, cache)
+globs: src/hooks/query/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# TanStack Query
+
+## Do
+
+- Use **`useQuery`** for reads and **`useMutation`** for writes (POST/PUT/PATCH/DELETE).
+- Define **`queryKey`s via constants / factories** in colocated **`*.keys.ts`** files (e.g. `user.keys.ts`) — no duplicated magic string arrays.
+- After mutations, **`invalidateQueries`** and/or **optimistic updates** consistent with sibling hooks in this repo.
+- Set **`staleTime` / `gcTime`** explicitly when data is sensitive or fast-changing; handle **`isPending` / `isLoading`**, **`isError`**, and empty UI states.
+
+## Don't
+
+- Do not use **`useEffect` + `axios.get`** (or `apiClient`) for routine data loading — use **`useQuery`**.
+- Do not define **inline one-off `queryKey`s** without using the shared key factory for that domain.
+- Do not ignore **`error`** from queries/mutations in user-facing flows.
+
+## Security focus
+
+- Follow global security baseline in **`000-core.mdc`**.
+- Query cache is user-visible state; avoid storing secrets in query results.
