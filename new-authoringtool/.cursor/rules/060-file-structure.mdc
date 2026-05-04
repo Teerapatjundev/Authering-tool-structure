@@ -1,0 +1,44 @@
+---
+description: new-authoringtool — Paths, layers, imports for this Vite app
+globs:
+  - src/**/*.{ts,tsx}
+  - vite.config.ts
+  - tsconfig*.json
+  - package.json
+alwaysApply: false
+---
+
+# File structure
+
+## Layers (authoring app)
+
+| Area | Role |
+|------|------|
+| **`src/pages/`** | Route screens: dashboard, editor shell, not-found |
+| **`src/router/`** | React Router **createBrowserRouter** + route modules |
+| **`src/components/`** | Shared UI (`ui/`), layout/providers, ErrorBoundary |
+| **`src/features/editor/`** | **Canvas editor**: Konva, commands, history, overlays, editor UI |
+| **`src/services/api/`** | **docsService** + **IndexedDB** persistence |
+| **`src/shared/`** | Shared styles/utils used across app |
+| **`src/lib/`** | **`cn()`** / small helpers (e.g. shadcn utils) |
+| **`src/hooks/`** | App-level hooks; **`hooks/query/`** for TanStack Query when added |
+| **`src/libs/axios/`** | HTTP client + interceptors |
+
+## Do
+
+- Keep **`@/`** alias aligned between **`vite.config.ts`** and **`tsconfig.app.json`**.
+- Route constants live in **`src/constants/paths.ts`** (`/dashboard`, `/editor/:docId`).
+- Editor mutations go through **`features/editor/core/commands/**`** and **`stores/docStore`** — don’t bypass without a strong reason.
+
+## Don't
+
+- Don’t move editor core types/commands into **`src/pages`** or **`src/components`** root — keep them under **`features/editor`**.
+- Don’t commit **`.env`** secrets; placeholders only in samples.
+
+## Barrel files
+
+- Use **`index.ts`** at stable boundaries (`constants`, `hooks/query`, `services`) sparingly; prefer explicit imports for large editor modules when it aids tree-shaking and clarity.
+
+## Scope
+
+Rules target **`new-authoringtool/`** (not the Next.js app at repo root unless explicitly requested).

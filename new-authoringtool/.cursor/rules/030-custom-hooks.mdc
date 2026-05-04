@@ -1,0 +1,26 @@
+---
+description: new-authoringtool — Hooks under src/hooks (Query wrappers)
+globs: src/hooks/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# Custom hooks (`src/hooks`)
+
+## Do
+
+- Prefix custom hooks with **`use`**.
+- Keep **TanStack Query** orchestration under **`src/hooks/query/**`** when adding server-backed features; colocate **`*.keys.ts`** factories next to domain hooks.
+- Delegate HTTP to **`src/services/**`** and the shared Axios instance **`src/libs/axios/instance.ts`** (export **`api`**).
+
+## Editor-specific note
+
+- Most interactive editor logic lives in **`src/features/editor/stores/**`** and **`src/features/editor/core/commands/**`**, not in `src/hooks`. Add hooks here when introducing **new API/Query** surfaces; don’t duplicate editor state that already belongs in `docStore` / tool stores.
+
+## Don't
+
+- Don’t violate **Rules of Hooks** (conditional hooks, hooks in loops).
+- Don’t duplicate the same **`useQuery`/`useMutation`** options everywhere — wrap in a dedicated hook.
+
+## Security
+
+- Follow **`000-core.mdc`**. Hooks that handle auth must not return secrets to unrelated UI.

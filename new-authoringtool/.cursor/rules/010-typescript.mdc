@@ -1,0 +1,25 @@
+---
+description: new-authoringtool — TypeScript conventions and boundaries
+globs: src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# TypeScript
+
+## Do
+
+- Keep **`tsc -b`** passing; align new code with settings in **`tsconfig.app.json`**.
+- Use **`interface`** for object shapes; **`type`** for unions, intersections, and utilities.
+- Prefer **`unknown`** at external boundaries, then narrow with type guards.
+- Add explicit **return types** on exported hooks and public service functions when it improves clarity.
+- Editor domain types: prefer **`src/features/editor/core/doc/types.ts`** and related modules as the source of truth for nodes/pages — avoid duplicate “shadow” models.
+
+## Don't
+
+- Avoid **`any`**; if unavoidable, add a one-line comment why.
+- Avoid **`as` casts** on IndexedDB/API payloads without validation or a documented invariant.
+- Avoid `@ts-ignore` / `@ts-expect-error` without a short justification.
+
+## Security
+
+- Follow **`000-core.mdc`**. Never assume JSON/IDB blobs match types without migration/normalization (see **`migrate.ts`** patterns in editor).
