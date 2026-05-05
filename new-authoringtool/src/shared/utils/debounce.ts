@@ -12,7 +12,6 @@
  * @param func - ฟังก์ชันที่ต้องการ debounce
  * @param wait - เวลารอ (ms) ก่อนเรียกจริง
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number,
