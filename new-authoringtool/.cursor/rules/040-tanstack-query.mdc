@@ -1,0 +1,27 @@
+---
+description: new-authoringtool — TanStack Query (when adding remote API features)
+globs: src/hooks/query/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# TanStack Query
+
+## Context
+
+- Today, **document persistence** is primarily **IndexedDB** via **`docsService`**, not Query.
+- Use this rule when adding **remote APIs** (lists, auth, sync) alongside the editor.
+
+## Do
+
+- **`useQuery`** for reads; **`useMutation`** for writes.
+- Centralize **`queryKey`s** in **`*.keys.ts`** per domain; avoid magic string arrays scattered in components.
+- Handle **`isPending`/`isError`**, empty states, and intentional **`invalidateQueries`** after mutations.
+
+## Don't
+
+- Don’t use **`useEffect` + axios** for routine remote reads — prefer **`useQuery`**.
+- Don’t store **secrets** in query cache data.
+
+## Security
+
+- Follow **`000-core.mdc`**. Validate external JSON before treating it as domain types.

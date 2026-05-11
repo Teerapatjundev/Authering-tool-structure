@@ -1,0 +1,28 @@
+---
+description: new-authoringtool — React UI (app shell, shadcn, editor surfaces)
+globs: src/**/*.tsx
+alwaysApply: false
+---
+
+# Components
+
+## App shell vs editor
+
+- **`src/pages/**`**, **`src/router/**`**, **`src/components/ui/**`**: dashboard, routing, shared primitives (shadcn-style).
+- **`src/features/editor/**`**: editor layout, sidebars, Konva canvas, overlays — keep concerns separated.
+
+## Do
+
+- Prefer **functional components**; **PascalCase** file names; match existing export style in each folder.
+- Use **`interface`** for props objects when helpful; keep props small and explicit.
+- **Konva / react-konva**: keep stage/layer concerns in renderer modules; avoid stuffing document mutations inline in huge JSX blocks — use commands/stores already in the feature.
+
+## Don't
+
+- Don’t embed **document mutation rules** only in JSX — use existing **commands** / **stores** (`docStore`, history) patterns.
+- Don’t use **`dangerouslySetInnerHTML`** for API/user HTML without sanitization and review.
+- Don’t bypass the editor’s **selection/history** conventions when adding tools or shortcuts.
+
+## Security
+
+- Follow **`000-core.mdc`**. Treat overlay text inputs and drag/drop payloads as untrusted unless validated.

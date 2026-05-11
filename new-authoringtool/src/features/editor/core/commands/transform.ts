@@ -116,9 +116,7 @@ export function commitTransform(
 
       for (const key of Object.keys(u.changes)) {
         const k = key as keyof Node;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (oldProps as any)[k] = (node as any)[k];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (newProps as any)[k] = (u.changes as any)[k];
       }
 

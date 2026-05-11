@@ -35,9 +35,7 @@ export function editNode(nodeId: string, changes: Partial<Node>): void {
 
   for (const key of Object.keys(changes)) {
     const k = key as keyof Node;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (oldProps as any)[k] = (node as any)[k];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (newProps as any)[k] = (changes as any)[k];
   }
 
@@ -86,9 +84,7 @@ export function editNodes(
 
     for (const key of Object.keys(changes)) {
       const k = key as keyof Node;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (oldProps as any)[k] = (node as any)[k];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (newProps as any)[k] = (changes as any)[k];
     }
 

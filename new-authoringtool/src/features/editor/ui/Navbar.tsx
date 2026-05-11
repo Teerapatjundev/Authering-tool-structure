@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { paths } from "@/constants";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import {
@@ -48,7 +49,7 @@ function MobileIcon({ className }: { className?: string }) {
 
 export function Navbar() {
   const handleBack = () => {
-    window.location.href = "/dashboard";
+    window.location.href = paths.dashboard;
   };
 
   const { doc, saveDoc } = useDocStore();

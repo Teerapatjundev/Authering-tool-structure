@@ -1,0 +1,34 @@
+---
+description: new-authoringtool — Zustand editor stores vs TanStack Query vs local state
+globs: src/**/*.{ts,tsx}
+alwaysApply: false
+---
+
+# State management
+
+## Roles
+
+| Kind | Where / tool |
+|------|----------------|
+| **Document + canvas model** (pages, nodes, undo-related coordination) | **`src/features/editor/stores/docStore.ts`** (+ Immer), **history** in **`core/history/**` |
+| **Tool / UI modes** (selection, pan, marquee, overlays) | **`src/features/editor/stores/**`** (e.g. `toolStore`, `selectionStore`, …) |
+| **Future remote/server lists** | **TanStack Query** under **`src/hooks/query/**`** |
+| **Local-only UI** | **`useState` / `useReducer`** in the smallest subtree |
+
+## Zustand (editor) — Do
+
+- Keep stores **typed** and **small actions**; use **`getState()`** only outside React when the codebase already does (e.g. shortcuts, bridges).
+- Select minimal slices in components to avoid useless re-renders.
+
+## Zustand — Don’t
+
+- Don’t duplicate **full document/server payloads** in new global stores — **`doc`** stays authoritative in **`docStore`** + persistence via **`docsService`**.
+- Don’t persist **tokens/passwords** in Zustand.
+
+## TanStack Query
+
+- When backend APIs arrive: **server lists/details** live in Query; editor canvas state stays in editor stores unless you’re explicitly syncing.
+
+## Security
+
+- Follow **`000-core.mdc`**. DevTools can inspect client stores — no secrets in plain fields.

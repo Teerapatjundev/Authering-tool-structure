@@ -1,0 +1,66 @@
+---
+description: project-react — File structure, env, and repo workflow
+globs:
+  - src/**/*.{ts,tsx}
+  - vite.config.ts
+  - tsconfig*.json
+  - package.json
+  - .env.example
+  - .gitignore
+alwaysApply: false
+---
+
+# File structure
+
+## Do
+
+- Follow the actual app architecture: **router/pages/components** (UI) → **`src/hooks/query/**`** (query orchestration) → **`src/services/**`** (typed API functions) → **`src/libs/axios/**`** (`apiClient`, interceptors).
+- Treat this project as **hybrid structure**: layer-first at app level, with domain grouping inside query hooks (e.g. `hooks/query/auth`, `hooks/query/user`).
+- Keep domain models in **`src/typings/**`** and avoid redefining the same API/domain shape in multiple places.
+- Keep route constants in **`src/constants/paths.ts`** for app links/navigation and shared route values; inline router-only nested segments are allowed when they stay local to route modules.
+- Keep alias config aligned between **`tsconfig.app.json`** and **`vite.config.ts`**; use one style consistently in new code (prefer `@/` paths for clarity).
+- Keep env samples in **`.env.example`** with placeholders only; keep **`.env`** and **`.env.local`** gitignored.
+- Keep mock toggle documented and non-secret (`VITE_ENABLE_MOCKS` is a public client env flag).
+
+## Don't
+
+- Do not dump unrelated domains into one giant flat folder without a clear pattern — follow or extend existing layout.
+- Do not let components/pages call **`apiClient`** directly; data access must go through **query hooks + services**.
+- Do not copy server entities/lists into client store as source of truth; server state stays in TanStack Query.
+- Do not mix alias styles randomly (`@/...` and `@query/...`) within the same domain/module.
+- Do not commit **real credentials** or private URLs in any tracked file.
+
+## Security
+
+- Follow global security baseline in **`000-core.mdc`**.
+- Never add real secrets to **`.env.example`** or source — placeholders only.
+- Before large refactors: **short plan + exact file list**; read neighbouring files first and match existing style.
+
+## Relationship with core rule
+
+- **`000-core.mdc`** defines baseline principles and safety expectations.
+- This file owns the concrete structure/import/path/env conventions and should be the source of truth for those details.
+
+## Barrel exports policy
+
+- Use `index.ts` only at **clear API boundaries** (domain/layer entry points consumed by many files).
+- Keep/maintain barrels at:
+  - **`src/hooks/query/auth/index.ts`**
+  - **`src/hooks/query/user/index.ts`**
+  - **`src/hooks/query/index.ts`**
+  - **`src/services/index.ts`**
+  - **`src/constants/index.ts`**
+- Prefer **explicit named re-exports** in boundary barrels (avoid broad `export *` when API surface should stay stable).
+- Inside the same domain folder, prefer **relative imports** over importing back through that folder's own barrel.
+- Avoid creating top-level barrels for folders that are not stable public APIs yet (extra indirection without clear reuse value).
+
+## Import boundaries (practical)
+
+- UI (`pages`, `components`, `router`) should import data behavior from **`src/hooks/query/**`** and shared constants/utils, not from axios internals.
+- Query hooks may call **`src/services/**`** and key factories in their domain; services may call **`src/libs/axios/**`**.
+- `src/libs/axios/**` stays infrastructure-only; do not couple it to UI modules.
+- `src/stores/**` is for shared client UI/session state; avoid storing duplicated server query payloads there.
+
+## Scope
+
+Rules target **`project-react/`**.

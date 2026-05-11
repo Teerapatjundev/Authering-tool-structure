@@ -1,0 +1,31 @@
+---
+description: new-authoringtool — Core stack, canvas editor guardrails
+alwaysApply: true
+---
+
+# new-authoringtool — core
+
+Applies to **`new-authoringtool/`** (Vite + React SPA for the **canvas authoring tool**).
+
+## Stack baseline
+
+- **React 19**, **React Router 7**, **TanStack Query v5**, **Axios**, **TypeScript** (match `tsconfig.app.json`; prefer stricter types for new code).
+- **Canvas editor**: Konva / react-konva, Immer, Zustand stores under **`src/features/editor/stores/**`**.
+- **Persistence today**: **`src/services/api/docs.service.ts`** + **`indexeddb.ts`** (local documents); not a generic REST CRUD demo app.
+- Global styles: **`src/shared/styles/globals.css`** (Tailwind + design tokens).
+
+## Working rules
+
+- Read neighboring files before edits; match naming, imports (`@/`), and patterns in **`src/features/editor/**`**.
+- Scope changes to the request; do not refactor unrelated editor commands, Konva layers, or stores.
+- Treat changes as **production-bound**: correctness, maintainability, no leaked secrets in client logs or env samples.
+
+## Always / Never
+
+- **Always:** preserve document load/save paths (`docsService`, IndexedDB keys), router entries (`/dashboard`, `/editor/:docId`), and editor undo/history behavior unless explicitly changing them.
+- **Never:** `eval` / `new Function`, unchecked `dangerouslySetInnerHTML` on untrusted strings, hardcoded API keys, swallowing errors without a handled path.
+- **Exception:** class components only where React requires them (e.g. **Error Boundaries**).
+
+## Relationship to other rules
+
+- **`060-file-structure.mdc`** owns concrete paths, layers, and import boundaries for this repo.
