@@ -60,7 +60,7 @@ import { TRI_BASE_SIZE, PENT_BASE_SIZE } from "./polygonGeometry";
 /* ------------------------------------------------------------------ */
 
 interface SelectionControllerProps {
-  stageRef: React.RefObject<Konva.Stage>;
+  stageRef: React.RefObject<Konva.Stage | null>;
 }
 
 interface OrigNodeState {

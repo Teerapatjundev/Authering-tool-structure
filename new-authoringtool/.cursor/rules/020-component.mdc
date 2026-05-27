@@ -8,13 +8,15 @@ alwaysApply: false
 
 ## App shell vs editor
 
-- **`src/pages/**`**, **`src/router/**`**, **`src/components/ui/**`**: dashboard, routing, shared primitives (shadcn-style).
+- **`src/app/**`**, **`src/components/ui/**`**: App Router pages, layout, providers, shared primitives (shadcn-style).
 - **`src/features/editor/**`**: editor layout, sidebars, Konva canvas, overlays — keep concerns separated.
 
 ## Do
 
 - Prefer **functional components**; **PascalCase** file names; match existing export style in each folder.
 - Use **`interface`** for props objects when helpful; keep props small and explicit.
+- Add **`"use client"`** at the top of interactive components (hooks, events, Konva, Zustand, browser APIs).
+- Keep **route pages** thin: pass `docId` / data into **`EditorClient`** or feature components; avoid heavy editor logic in `page.tsx` alone.
 - **Konva / react-konva**: keep stage/layer concerns in renderer modules; avoid stuffing document mutations inline in huge JSX blocks — use commands/stores already in the feature.
 
 ## Don't
@@ -22,6 +24,7 @@ alwaysApply: false
 - Don’t embed **document mutation rules** only in JSX — use existing **commands** / **stores** (`docStore`, history) patterns.
 - Don’t use **`dangerouslySetInnerHTML`** for API/user HTML without sanitization and review.
 - Don’t bypass the editor’s **selection/history** conventions when adding tools or shortcuts.
+- Don’t import Konva or editor stores into **Server Components** without a client boundary.
 
 ## Security
 

@@ -1,9 +1,9 @@
 ---
-description: new-authoringtool — Paths, layers, imports for this Vite app
+description: new-authoringtool — Paths, layers, imports for this Next.js app
 globs:
   - src/**/*.{ts,tsx}
-  - vite.config.ts
-  - tsconfig*.json
+  - next.config.js
+  - tsconfig.json
   - package.json
 alwaysApply: false
 ---
@@ -14,26 +14,28 @@ alwaysApply: false
 
 | Area | Role |
 |------|------|
-| **`src/pages/`** | Route screens: dashboard, editor shell, not-found |
-| **`src/router/`** | React Router **createBrowserRouter** + route modules |
-| **`src/components/`** | Shared UI (`ui/`), layout/providers, ErrorBoundary |
+| **`src/app/`** | **App Router**: `layout.tsx`, `providers.tsx`, route pages (`dashboard`, `editor/[docId]`, `not-found`) |
+| **`src/components/`** | Shared UI (`ui/`), ErrorBoundary |
 | **`src/features/editor/`** | **Canvas editor**: Konva, commands, history, overlays, editor UI |
 | **`src/services/api/`** | **docsService** + **IndexedDB** persistence |
 | **`src/shared/`** | Shared styles/utils used across app |
 | **`src/lib/`** | **`cn()`** / small helpers (e.g. shadcn utils) |
 | **`src/hooks/`** | App-level hooks; **`hooks/query/`** for TanStack Query when added |
 | **`src/libs/axios/`** | HTTP client + interceptors |
+| **`src/constants/`** | Route paths (`paths.dashboard`, `paths.editor`) |
 
 ## Do
 
-- Keep **`@/`** alias aligned between **`vite.config.ts`** and **`tsconfig.app.json`**.
-- Route constants live in **`src/constants/paths.ts`** (`/dashboard`, `/editor/:docId`).
+- Keep **`@/`** alias aligned in **`tsconfig.json`** (`paths`: `@/*` → `./src/*`).
+- Route constants live in **`src/constants/paths.ts`** (`/dashboard`, `/editor/:docId`); use **`next/navigation`** (`useRouter`, `redirect`) for navigation.
+- Global providers (**QueryClient**) in **`src/app/providers.tsx`**, wrapped from **`src/app/layout.tsx`**.
 - Editor mutations go through **`features/editor/core/commands/**`** and **`stores/docStore`** — don’t bypass without a strong reason.
 
 ## Don't
 
-- Don’t move editor core types/commands into **`src/pages`** or **`src/components`** root — keep them under **`features/editor`**.
-- Don’t commit **`.env`** secrets; placeholders only in samples.
+- Don’t move editor core types/commands into **`src/app`** or **`src/components`** root — keep them under **`features/editor`**.
+- Don’t commit **`.env`** secrets; placeholders only in samples (use **`NEXT_PUBLIC_*`** for client-exposed vars).
+- Don’t reintroduce **`src/router/**`**, **`src/pages/**`**, or Vite entry files — routing is App Router only.
 
 ## Barrel files
 
@@ -41,4 +43,4 @@ alwaysApply: false
 
 ## Scope
 
-Rules target **`new-authoringtool/`** (not the Next.js app at repo root unless explicitly requested).
+Rules target **`new-authoringtool/`** (Next.js authoring app in this folder).

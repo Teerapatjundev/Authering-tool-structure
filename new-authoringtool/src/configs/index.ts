@@ -1,4 +1,4 @@
 export const config = {
-  apiBaseUrl: import.meta.env['VITE_API_BASE_URL'] ?? '',
+  apiBaseUrl: process.env['NEXT_PUBLIC_API_BASE_URL'] ?? '',
 } as const
 

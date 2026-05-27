@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { paths } from "@/constants";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -48,8 +49,10 @@ function MobileIcon({ className }: { className?: string }) {
 }
 
 export function Navbar() {
+  const router = useRouter();
+
   const handleBack = () => {
-    window.location.href = paths.dashboard;
+    router.push(paths.dashboard);
   };
 
   const { doc, saveDoc } = useDocStore();
