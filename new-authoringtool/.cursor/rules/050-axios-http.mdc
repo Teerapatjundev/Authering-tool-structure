@@ -13,12 +13,12 @@ alwaysApply: false
 - Use the shared Axios instance exported as **`api`** from **`src/libs/axios/instance.ts`** for app HTTP traffic.
 - Keep **auth**, **global errors**, and **dev-only logging** in **`src/libs/axios/interceptors/**`**.
 - Implement remote endpoints as **small typed functions** in **`src/services/**`** (e.g. future REST beside IndexedDB docs).
-- Base URL: **`import.meta.env['VITE_API_BASE_URL']`** (optional when backend exists); document placeholders in **`.env.example`** when you add one.
+- Base URL: **`process.env['NEXT_PUBLIC_API_BASE_URL']`** (optional when backend exists); document placeholders in **`.env.example`** when you add one.
 
 ## Don't
 
 - Don’t create a **second `axios.create()`** for normal app calls.
-- Don’t call **`axios` directly from `src/pages/**`** — go through services (+ Query hooks when applicable).
+- Don’t call **`axios` directly from `src/app/**` page files** — go through services (+ Query hooks when applicable).
 - Don’t log full request/response bodies in interceptors (tokens / PII).
 
 ## Local docs note

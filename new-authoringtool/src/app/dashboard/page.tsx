@@ -1,5 +1,7 @@
+'use client'
+
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useRouter } from 'next/navigation'
 
 import { docsService } from '@/services/api/docs.service'
 import { generateId } from '@/shared/utils/id'
@@ -11,7 +13,7 @@ interface DocMeta {
 }
 
 export default function DashboardPage() {
-  const navigate = useNavigate()
+  const router = useRouter()
   const [docs, setDocs] = useState<DocMeta[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -27,11 +29,11 @@ export default function DashboardPage() {
 
   const handleCreateNew = () => {
     const newId = generateId()
-    navigate(`/editor/${newId}`)
+    router.push(`/editor/${newId}`)
   }
 
   const handleOpenDoc = (id: string) => {
-    navigate(`/editor/${id}`)
+    router.push(`/editor/${id}`)
   }
 
   const handleDeleteDoc = async (id: string, e: React.MouseEvent) => {

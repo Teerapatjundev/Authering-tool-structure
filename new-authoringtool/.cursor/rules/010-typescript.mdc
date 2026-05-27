@@ -8,11 +8,12 @@ alwaysApply: false
 
 ## Do
 
-- Keep **`tsc -b`** passing; align new code with settings in **`tsconfig.app.json`**.
+- Keep **`next build`** (TypeScript check) passing; align new code with settings in **`tsconfig.json`**.
 - Use **`interface`** for object shapes; **`type`** for unions, intersections, and utilities.
 - Prefer **`unknown`** at external boundaries, then narrow with type guards.
 - Add explicit **return types** on exported hooks and public service functions when it improves clarity.
 - Editor domain types: prefer **`src/features/editor/core/doc/types.ts`** and related modules as the source of truth for nodes/pages — avoid duplicate “shadow” models.
+- Next **dynamic route params**: use `params: Promise<{ docId: string }>` and `await params` in App Router page components when needed.
 
 ## Don't
 

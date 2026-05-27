@@ -97,7 +97,7 @@ const TRANSFORMER_ANCHORS = [
 // ===============================================
 
 interface EventBridgeProps {
-  stageRef: React.RefObject<Konva.Stage>;
+  stageRef: React.RefObject<Konva.Stage | null>;
   width: number;
   height: number;
 }

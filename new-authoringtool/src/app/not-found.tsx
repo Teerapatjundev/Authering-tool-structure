@@ -1,16 +1,14 @@
-import { Link } from 'react-router-dom'
-
+import Link from 'next/link'
 import { paths } from '@/constants'
 
-export default function NotFoundPage() {
+export default function NotFound() {
   return (
     <main>
       <h1>404</h1>
       <p>Page not found.</p>
       <p>
-        <Link to={paths.home}>Go home</Link>
+        <Link href={paths.home}>Go home</Link>
       </p>
     </main>
   )
 }
-
